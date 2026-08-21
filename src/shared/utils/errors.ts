@@ -1,4 +1,4 @@
-import { AppError } from '@shared/middlewares/error-handler.middleware';
+import { AppError } from "@shared/middlewares/error-handler.middleware";
 
 export class BadRequestError extends AppError {
   constructor(message: string) {
@@ -7,25 +7,25 @@ export class BadRequestError extends AppError {
 }
 
 export class UnauthorizedError extends AppError {
-  constructor(message: string = 'Unauthorized') {
+  constructor(message: string = "Unauthorized") {
     super(message, 401);
   }
 }
 
 export class ForbiddenError extends AppError {
-  constructor(message: string = 'Forbidden') {
+  constructor(message: string = "Forbidden") {
     super(message, 403);
   }
 }
 
 export class NotFoundError extends AppError {
-  constructor(message: string = 'Not found') {
+  constructor(message: string = "Not found") {
     super(message, 404);
   }
 }
 
 export class ConflictError extends AppError {
-  constructor(message: string = 'Conflict') {
+  constructor(message: string = "Conflict") {
     super(message, 409);
   }
 }

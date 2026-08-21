@@ -1,6 +1,6 @@
-import prisma from '@core/database/prisma';
-import { Prisma } from '@prisma/client';
-import { NotFoundError } from '@shared/utils/errors';
+import prisma from "@core/database/prisma";
+import { Prisma } from "@prisma/client";
+import { NotFoundError } from "@shared/utils/errors";
 
 export class ProductsService {
   async findAll(params: {
@@ -11,9 +11,18 @@ export class ProductsService {
     maxPrice?: number;
     keyword?: string;
     sortBy?: string;
-    sortOrder?: 'asc' | 'desc';
+    sortOrder?: "asc" | "desc";
   }) {
-    const { page = 1, limit = 12, category, minPrice, maxPrice, keyword, sortBy = 'createdAt', sortOrder = 'desc' } = params;
+    const {
+      page = 1,
+      limit = 12,
+      category,
+      minPrice,
+      maxPrice,
+      keyword,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = params;
 
     const skip = (page - 1) * limit;
 
@@ -24,8 +33,8 @@ export class ProductsService {
       ...(maxPrice !== undefined && { price: { lte: maxPrice } }),
       ...(keyword && {
         OR: [
-          { name: { contains: keyword, mode: 'insensitive' } },
-          { description: { contains: keyword, mode: 'insensitive' } },
+          { name: { contains: keyword, mode: "insensitive" } },
+          { description: { contains: keyword, mode: "insensitive" } },
         ],
       }),
     };
@@ -85,18 +94,19 @@ export class ProductsService {
               },
             },
           },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
         },
       },
     });
 
     if (!product) {
-      throw new NotFoundError('Product not found');
+      throw new NotFoundError("Product not found");
     }
 
     const avgRating =
       product.reviews.length > 0
-        ? product.reviews.reduce((sum, r) => sum + r.rating, 0) / product.reviews.length
+        ? product.reviews.reduce((sum, r) => sum + r.rating, 0) /
+          product.reviews.length
         : 0;
 
     return {
@@ -120,18 +130,19 @@ export class ProductsService {
               },
             },
           },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
         },
       },
     });
 
     if (!product) {
-      throw new NotFoundError('Product not found');
+      throw new NotFoundError("Product not found");
     }
 
     const avgRating =
       product.reviews.length > 0
-        ? product.reviews.reduce((sum, r) => sum + r.rating, 0) / product.reviews.length
+        ? product.reviews.reduce((sum, r) => sum + r.rating, 0) /
+          product.reviews.length
         : 0;
 
     return {
@@ -143,7 +154,7 @@ export class ProductsService {
 
   async getCategories() {
     const categories = await prisma.product.groupBy({
-      by: ['category'],
+      by: ["category"],
       where: { isActive: true },
       _count: { category: true },
     });

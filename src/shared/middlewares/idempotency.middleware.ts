@@ -1,16 +1,18 @@
-import { Request, Response, NextFunction } from 'express';
-import redis from '@core/redis/client';
-import { BadRequestError } from '@shared/utils/errors';
+import { Request, Response, NextFunction } from "express";
+import redis from "@core/redis/client";
+import { BadRequestError } from "@shared/utils/errors";
 
-export const idempotencyMiddleware = (keyHeader: string = 'Idempotency-Key') => {
+export const idempotencyMiddleware = (
+  keyHeader: string = "Idempotency-Key",
+) => {
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    if (!["POST", "PUT", "PATCH"].includes(req.method)) {
       return next();
     }
 
     const idempotencyKey = req.headers[keyHeader.toLowerCase()] as string;
     if (!idempotencyKey) {
-      return next(new BadRequestError('Idempotency-Key header required'));
+      return next(new BadRequestError("Idempotency-Key header required"));
     }
 
     req.body.idempotencyKey = idempotencyKey;
@@ -20,8 +22,7 @@ export const idempotencyMiddleware = (keyHeader: string = 'Idempotency-Key') => 
       try {
         const cachedResponse = JSON.parse(cached);
         return res.status(cachedResponse.status).json(cachedResponse.data);
-      } catch {
-      }
+      } catch {}
     }
 
     const originalJson = res.json.bind(res);
@@ -31,9 +32,10 @@ export const idempotencyMiddleware = (keyHeader: string = 'Idempotency-Key') => 
           status: res.statusCode,
           data: body,
         };
-        const ttl = parseInt(process.env.IDEMPOTENCY_TTL || '86400', 10);
-        redis.setex(`idempotent:${idempotencyKey}`, ttl, JSON.stringify(cacheData)).catch(() => {
-        });
+        const ttl = parseInt(process.env.IDEMPOTENCY_TTL || "86400", 10);
+        redis
+          .setex(`idempotent:${idempotencyKey}`, ttl, JSON.stringify(cacheData))
+          .catch(() => {});
       }
       return originalJson(body);
     };

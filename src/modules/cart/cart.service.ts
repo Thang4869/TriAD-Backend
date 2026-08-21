@@ -1,5 +1,5 @@
-import prisma from '@core/database/prisma';
-import { NotFoundError, BadRequestError } from '@shared/utils/errors';
+import prisma from "@core/database/prisma";
+import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 
 export class CartService {
   async getCart(userId: string) {
@@ -49,7 +49,7 @@ export class CartService {
 
   async addItem(userId: string, productId: string, quantity: number) {
     if (quantity <= 0) {
-      throw new BadRequestError('Quantity must be greater than 0');
+      throw new BadRequestError("Quantity must be greater than 0");
     }
 
     const product = await prisma.product.findUnique({
@@ -58,11 +58,13 @@ export class CartService {
     });
 
     if (!product) {
-      throw new NotFoundError('Product not found');
+      throw new NotFoundError("Product not found");
     }
 
     if (product.stock < quantity) {
-      throw new BadRequestError(`Not enough stock. Available: ${product.stock}`);
+      throw new BadRequestError(
+        `Not enough stock. Available: ${product.stock}`,
+      );
     }
 
     let cart = await prisma.cart.findUnique({
@@ -87,7 +89,9 @@ export class CartService {
     if (existingItem) {
       const newQuantity = existingItem.quantity + quantity;
       if (newQuantity > product.stock) {
-        throw new BadRequestError(`Cannot add more than ${product.stock} items`);
+        throw new BadRequestError(
+          `Cannot add more than ${product.stock} items`,
+        );
       }
 
       return prisma.cartItem.update({
@@ -109,7 +113,7 @@ export class CartService {
 
   async updateItem(userId: string, productId: string, quantity: number) {
     if (quantity < 0) {
-      throw new BadRequestError('Quantity cannot be negative');
+      throw new BadRequestError("Quantity cannot be negative");
     }
 
     const cart = await prisma.cart.findUnique({
@@ -118,12 +122,12 @@ export class CartService {
     });
 
     if (!cart) {
-      throw new NotFoundError('Cart not found');
+      throw new NotFoundError("Cart not found");
     }
 
     const item = cart.items.find((i) => i.productId === productId);
     if (!item) {
-      throw new NotFoundError('Item not in cart');
+      throw new NotFoundError("Item not in cart");
     }
 
     if (quantity === 0) {
@@ -156,12 +160,12 @@ export class CartService {
     });
 
     if (!cart) {
-      throw new NotFoundError('Cart not found');
+      throw new NotFoundError("Cart not found");
     }
 
     const item = cart.items.find((i) => i.productId === productId);
     if (!item) {
-      throw new NotFoundError('Item not in cart');
+      throw new NotFoundError("Item not in cart");
     }
 
     return prisma.cartItem.delete({
@@ -175,7 +179,7 @@ export class CartService {
     });
 
     if (!cart) {
-      throw new NotFoundError('Cart not found');
+      throw new NotFoundError("Cart not found");
     }
 
     return prisma.cartItem.deleteMany({

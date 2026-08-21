@@ -1,7 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
-import { AuthService } from './auth.service';
-import { logger } from '@core/logger/winston';
-import { BadRequestError } from '@shared/utils/errors';
+import { Request, Response, NextFunction } from "express";
+import { AuthService } from "./auth.service";
+import { logger } from "@core/logger/winston";
+import { BadRequestError } from "@shared/utils/errors";
 
 const authService = new AuthService();
 
@@ -35,7 +35,7 @@ export class AuthController {
     try {
       const { refreshToken } = req.body;
       if (!refreshToken) {
-        throw new BadRequestError('Refresh token required');
+        throw new BadRequestError("Refresh token required");
       }
       const result = await authService.refreshToken(refreshToken);
       res.json({
@@ -52,7 +52,7 @@ export class AuthController {
       const userId = req.user!.id;
       const refreshToken = req.body.refreshToken;
       await authService.logout(userId, refreshToken);
-      res.json({ success: true, message: 'Logged out' });
+      res.json({ success: true, message: "Logged out" });
     } catch (error) {
       next(error);
     }
@@ -79,3 +79,36 @@ export class AuthController {
     }
   }
 }
+
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *               - firstName
+ *               - lastName
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ */

@@ -1,183 +1,17 @@
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL") 
+  url      = env("DATABASE_URL")
 }
 
-model User {
-  id               String   @id @default(uuid())
-  email            String   @unique
-  password         String?
-  firstName        String
-  lastName         String
-  phone            String?
-  role             Role     @default(USER)
-  isVerified       Boolean  @default(false)
-  is2FAEnabled     Boolean  @default(false)
-  totpSecret       String?
-  totpBackupCodes  String[]
-  refreshTokens    RefreshToken[]
-  avatar           String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  // Relations
-  cart             Cart?
-  orders           Order[]
-  reviews          Review[]
-  notifications    Notification[]
-
-  @@index([email])
-  @@index([role])
-}
-
-model RefreshToken {
-  id         String   @id @default(uuid())
-  token      String   @unique
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-
-  @@index([userId])
-  @@index([token])
-}
-
-model Product {
-  id          String   @id @default(uuid())
-  name        String
-  slug        String   @unique
-  description String?
-  price       Float    @default(0)
-  stock       Int      @default(0)
-  category    String
-  color       String?
-  images      String[]
-  filter      String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  cartItems   CartItem[]
-  orderItems  OrderItem[]
-  reviews     Review[]
-
-  @@index([slug])
-  @@index([category])
-  @@index([price])
-  @@index([isActive])
-}
-
-model Cart {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items     CartItem[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model CartItem {
-  id        String   @id @default(uuid())
-  cartId    String
-  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product  @relation(fields: [productId], references: [id])
-  quantity  Int      @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([cartId, productId])
-  @@index([cartId])
-  @@index([productId])
-}
-
-model Order {
-  id               String      @id @default(uuid())
-  orderNumber      String      @unique
-  userId           String
-  user             User        @relation(fields: [userId], references: [id])
-  items            OrderItem[]
-  status           OrderStatus @default(PENDING)
-  paymentMethod    PaymentMethod
-  paymentStatus    PaymentStatus @default(PENDING)
-  subtotal         Float
-  tax              Float
-  shippingFee      Float
-  total            Float
-  discountCode     String?
-  discountAmount   Float?
-  customerName     String
-  customerEmail    String
-  customerPhone    String
-  customerAddress  String
-  notes            String?
-  idempotencyKey   String?     @unique
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([orderNumber])
-  @@index([status])
-  @@index([createdAt])
-  @@index([idempotencyKey])
-}
-
-model OrderItem {
-  id        String   @id @default(uuid())
-  orderId   String
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product  @relation(fields: [productId], references: [id])
-  quantity  Int
-  price     Float    // Snapshot price at time of order
-  total     Float
-  createdAt DateTime @default(now())
-
-  @@index([orderId])
-  @@index([productId])
-}
-
-model Review {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  productId String
-  product   Product  @relation(fields: [productId], references: [id])
-  rating    Int
-  title     String?
-  content   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, productId])
-  @@index([productId])
-  @@index([rating])
-}
-
-model Notification {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      NotificationType
-  title     String
-  message   String
-  read      Boolean  @default(false)
-  data      Json?
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([read])
-}
-
+// ============ ENUMS ============
 enum Role {
-  ADMIN
   USER
-  GUEST
+  ADMIN
 }
 
 enum OrderStatus {
@@ -202,11 +36,163 @@ enum PaymentStatus {
   REFUNDED
 }
 
-enum NotificationType {
-  ORDER_CONFIRMATION
-  ORDER_SHIPPED
-  ORDER_DELIVERED
-  PAYMENT_SUCCESS
-  PROMOTION
-  SYSTEM
+// ============ MODELS ============
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  password      String?        // null nếu đăng nhập OAuth
+  firstName     String
+  lastName      String
+  phone         String?
+  role          Role           @default(USER)
+  isVerified    Boolean        @default(false)
+  is2FAEnabled  Boolean        @default(false)
+  totpSecret    String?        // base32 secret cho 2FA
+
+  // Relations
+  cart          Cart?
+  orders        Order[]
+  reviews       Review[]
+  notifications Notification[]
+  refreshTokens RefreshToken[]
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("users")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float    @default(0)
+  stock       Int      @default(0)
+  category    String?  // e.g., "glass", "thermo"
+  images      String[] // URLs
+  slug        String   @unique
+  isActive    Boolean  @default(true)
+
+  // Relations
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  reviews     Review[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("products")
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int      @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, productId])
+  @@map("cart_items")
+}
+
+model Order {
+  id              String         @id @default(cuid())
+  orderNumber     String         @unique
+  userId          String
+  user            User           @relation(fields: [userId], references: [id])
+  status          OrderStatus    @default(PENDING)
+  paymentMethod   PaymentMethod
+  paymentStatus   PaymentStatus  @default(PENDING)
+  subtotal        Float
+  tax             Float          @default(0)
+  shippingFee     Float          @default(0)
+  total           Float
+  discountAmount  Float          @default(0)
+  discountCode    String?
+  customerName    String
+  customerEmail   String
+  customerPhone   String
+  customerAddress String
+  notes           String?
+  idempotencyKey  String?        @unique // để tránh đơn hàng trùng
+
+  items           OrderItem[]
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float    // giá tại thời điểm đặt hàng
+  total     Float    // quantity * price
+
+  @@map("order_items")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  rating    Int      // 1-5
+  comment   String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@map("reviews")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   // info, success, warning, promotion, order
+  read      Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notifications")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
 }

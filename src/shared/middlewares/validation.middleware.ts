@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
-import { ZodSchema, ZodError } from 'zod';
-import { BadRequestError } from '@shared/utils/errors';
+import { Request, Response, NextFunction } from "express";
+import { ZodSchema, ZodError } from "zod";
+import { BadRequestError } from "@shared/utils/errors";
 
 export const validate = (schema: ZodSchema<any>) => {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -16,7 +16,9 @@ export const validate = (schema: ZodSchema<any>) => {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        throw new BadRequestError(error.errors.map(e => e.message).join(', '));
+        throw new BadRequestError(
+          error.errors.map((e) => e.message).join(", "),
+        );
       }
       next(error);
     }

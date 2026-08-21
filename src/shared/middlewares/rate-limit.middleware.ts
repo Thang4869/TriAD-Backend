@@ -1,6 +1,6 @@
-import rateLimit from 'express-rate-limit';
-import { RedisStore } from 'rate-limit-redis';
-import redis from '@core/redis/client';
+import rateLimit from "express-rate-limit";
+import { RedisStore } from "rate-limit-redis";
+import redis from "@core/redis/client";
 
 export const rateLimiter = (options?: {
   windowMs?: number;
@@ -8,30 +8,33 @@ export const rateLimiter = (options?: {
   keyGenerator?: (req: any) => string;
 }) => {
   const {
-    windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),
-    max = parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
+    windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || "60000", 10),
+    max = parseInt(process.env.RATE_LIMIT_MAX || "100", 10),
     keyGenerator,
   } = options || {};
 
   return rateLimit({
     store: new RedisStore({
-      sendCommand: (...args: string[]) => redis.call(args[0], ...args.slice(1)) as Promise<any>,
+      sendCommand: (...args: string[]) =>
+        redis.call(args[0], ...args.slice(1)) as Promise<any>,
     }),
     windowMs,
     max,
-    keyGenerator: keyGenerator || ((req) => {
-      const ip = req.ip || req.headers['x-forwarded-for'];
-      if (Array.isArray(ip)) return ip[0] || 'unknown';
-      return ip || 'unknown';
-    }),
+    keyGenerator:
+      keyGenerator ||
+      ((req) => {
+        const ip = req.ip || req.headers["x-forwarded-for"];
+        if (Array.isArray(ip)) return ip[0] || "unknown";
+        return ip || "unknown";
+      }),
     standardHeaders: true,
     legacyHeaders: false,
     message: {
       success: false,
-      error: 'Too many requests, please try again later.',
+      error: "Too many requests, please try again later.",
     },
     skip: (req) => {
-      return req.path === '/health' || req.user?.role === 'ADMIN';
+      return req.path === "/health" || req.user?.role === "ADMIN";
     },
   });
 };

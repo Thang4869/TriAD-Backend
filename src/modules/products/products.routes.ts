@@ -1,9 +1,9 @@
-import { Router } from 'express';
+import { Router } from "express";
 
 const router = Router();
 
-router.get('/', (req, res) => {
-  res.json({ message: 'Products route working' });
+router.get("/", (req, res) => {
+  res.json({ message: "Products route working" });
 });
 
 export { router as productRoutes };

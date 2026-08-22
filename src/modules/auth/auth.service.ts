@@ -123,8 +123,6 @@ export class AuthService {
         where: { userId },
       });
     }
-
-    await redis.sadd("jwt:blacklist", userId);
   }
 
   async enable2FA(userId: string) {
@@ -206,13 +204,9 @@ export class AuthService {
     return true;
   }
 
-  private generateTokens(user: any) {
+  public async generateTokens(user: any) {
     const accessSecret = process.env.JWT_ACCESS_SECRET!;
     const refreshSecret = process.env.JWT_REFRESH_SECRET!;
-
-    if (!accessSecret || !refreshSecret) {
-      throw new Error("JWT secrets are not defined");
-    }
 
     const accessToken = jwt.sign(
       { sub: user.id, email: user.email, role: user.role },
@@ -226,15 +220,14 @@ export class AuthService {
       { expiresIn: AuthService.REFRESH_EXPIRY } as jwt.SignOptions,
     );
 
-    prisma.refreshToken
-      .create({
-        data: {
-          token: refreshToken,
-          userId: user.id,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        },
-      })
-      .catch((err) => logger.error("Failed to store refresh token", err));
+    // Lưu refresh token vào DB (đồng bộ)
+    await prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
 
     return {
       accessToken,

@@ -3,6 +3,7 @@ import { AuthController } from "./auth.controller";
 import { validate } from "@shared/middlewares/validation.middleware";
 import { registerSchema, loginSchema, refreshSchema } from "./dto";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
+import passport from "./strategies/oauth2.strategy";
 
 const router = Router();
 const controller = new AuthController();
@@ -32,6 +33,36 @@ router.post(
 );
 
 export { router as authRoutes };
+
+// OAuth routes
+router.get(
+  "/google",
+  passport.authenticate("google", { scope: ["profile", "email"] })
+);
+router.get(
+  "/google/callback",
+  passport.authenticate("google", { session: false, failureRedirect: "/login" }),
+  (req, res) => {
+    // req.user chứa { user, tokens }
+    const { user, tokens } = req.user as any;
+    // Trả về tokens cho client (có thể redirect kèm token)
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`);
+  }
+);
+
+// Tương tự Facebook
+router.get(
+  "/facebook",
+  passport.authenticate("facebook", { scope: ["email"] })
+);
+router.get(
+  "/facebook/callback",
+  passport.authenticate("facebook", { session: false, failureRedirect: "/login" }),
+  (req, res) => {
+    const { user, tokens } = req.user as any;
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`);
+  }
+);
 
 /**
  * @swagger

@@ -3,6 +3,7 @@ DNEK-output.txt
 
 # Dependencies
 node_modules/
+package-lock.json
 
 # Build & TypeScript
 dist/

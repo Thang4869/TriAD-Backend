@@ -78,6 +78,17 @@ export class AuthController {
       next(error);
     }
   }
+
+    // OAuth endpoints (sẽ được gọi từ routes)
+  async googleLogin(req: Request, res: Response) {
+    // Chuyển hướng đến Google
+    // Sử dụng passport.authenticate
+  }
+
+  async googleCallback(req: Request, res: Response, next: NextFunction) {
+    // Xử lý callback từ Google
+  }
+  // Tương tự cho Facebook
 }
 
 /**

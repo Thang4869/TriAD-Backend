@@ -22,3 +22,14 @@ export const refreshSchema = z.object({
     refreshToken: z.string().min(1, "Refresh token is required"),
   }),
 });
+
+export const verify2FASchema = z.object({
+  body: z.object({
+    userId: z.string().uuid("Invalid userId"),
+    token: z.string().length(6, "Token must be 6 digits"),
+  }),
+});
+
+export const enable2FASchema = z.object({
+  body: z.object({}),
+});

@@ -101,26 +101,36 @@ export class CheckoutService {
     const order = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
         for (const item of cartItems) {
-          const product = await tx.product.findUnique({
-            where: { id: item.productId },
-            select: { stock: true },
-          });
-          if (!product) {
-            throw new NotFoundError(`Product ${item.productId} not found`);
-          }
-          const updateResult = await tx.product.updateMany({
-            where: {
-              id: item.productId,
-              stock: { gte: item.quantity },
-            },
-            data: {
-              stock: { decrement: item.quantity },
-            },
-          });
-          if (updateResult.count === 0) {
-            throw new ConflictError(
-              `Stock conflict for product ${item.productId}. Please retry.`,
-            );
+          for (const item of cartItems) {
+            const product = await tx.product.findUnique({
+              where: { id: item.productId },
+              select: { id: true, stock: true, version: true, name: true, price: true },
+            });
+            if (!product) {
+              throw new NotFoundError(`Product ${item.productId} not found`);
+            }
+            if (product.stock < item.quantity) {
+              throw new BadRequestError(
+                `Not enough stock for ${product.name}. Available: ${product.stock}`
+              );
+            }
+
+            const updateResult = await tx.product.updateMany({
+              where: {
+                id: item.productId,
+                version: product.version,
+              },
+              data: {
+                stock: { decrement: item.quantity },
+                version: { increment: 1 },
+              },
+            });
+
+            if (updateResult.count === 0) {
+              throw new ConflictError(
+                `Stock conflict for product ${item.productId}. Please retry.`
+              );
+            }
           }
         }
 

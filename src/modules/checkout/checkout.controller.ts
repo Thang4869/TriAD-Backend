@@ -8,29 +8,8 @@ export class CheckoutController {
   async checkout(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
-      const { paymentMethod, address, phone, notes, discountCode } = req.body;
-      const idempotencyKey =
-        req.body.idempotencyKey || (req.headers["idempotency-key"] as string);
-
-      if (!paymentMethod || !address || !phone) {
-        throw new BadRequestError(
-          "paymentMethod, address and phone are required",
-        );
-      }
-
-      const result = await checkoutService.checkout(userId, {
-        idempotencyKey,
-        paymentMethod,
-        address,
-        phone,
-        notes,
-        discountCode,
-      });
-
-      res.status(201).json({
-        success: true,
-        data: result,
-      });
+      const result = await checkoutService.checkout(userId, req.body);
+      res.status(201).json({ success: true, data: result });
     } catch (error) {
       next(error);
     }

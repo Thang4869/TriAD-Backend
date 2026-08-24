@@ -1,0 +1,73 @@
+import { describe, it, expect, beforeAll, afterAll } from "@jest/globals";
+import { prisma } from "../../src/core/database/prisma";
+import { CheckoutService } from "../../src/modules/checkout/checkout.service";
+
+describe("Checkout Concurrency", () => {
+  const checkoutService = new CheckoutService();
+
+  beforeAll(async () => {
+    await prisma.product.create({
+      data: {
+        id: "test-product-concurrency",
+        name: "Test Product",
+        price: 100000,
+        stock: 1,
+        version: 0,
+        slug: "test-product-concurrency",
+        category: "test",
+        images: [],
+      },
+    });
+    await prisma.user.createMany({
+      data: [
+        { id: "user-a", email: "a@test.com", password: "hash", firstName: "A", lastName: "Test" },
+        { id: "user-b", email: "b@test.com", password: "hash", firstName: "B", lastName: "Test" },
+      ],
+    });
+    await prisma.cart.createMany({
+      data: [{ userId: "user-a" }, { userId: "user-b" }],
+    });
+    await prisma.cartItem.createMany({
+      data: [
+        { cartId: (await prisma.cart.findUnique({ where: { userId: "user-a" } }))!.id, productId: "test-product-concurrency", quantity: 1 },
+        { cartId: (await prisma.cart.findUnique({ where: { userId: "user-b" } }))!.id, productId: "test-product-concurrency", quantity: 1 },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.product.deleteMany({ where: { id: "test-product-concurrency" } });
+    await prisma.user.deleteMany({ where: { id: { in: ["user-a", "user-b"] } } });
+  });
+
+  it("should prevent overselling with concurrent requests", async () => {
+    const requests = [
+      checkoutService.checkout("user-a", {
+        idempotencyKey: "idem-a",
+        paymentMethod: "COD",
+        address: "Address A",
+        phone: "0123456789",
+      }),
+      checkoutService.checkout("user-b", {
+        idempotencyKey: "idem-b",
+        paymentMethod: "COD",
+        address: "Address B",
+        phone: "0987654321",
+      }),
+    ];
+
+    const results = await Promise.allSettled(requests);
+
+    const successCount = results.filter((r) => r.status === "fulfilled").length;
+    const failCount = results.filter((r) => r.status === "rejected").length;
+
+    expect(successCount).toBe(1);
+    expect(failCount).toBe(1);
+
+    const product = await prisma.product.findUnique({
+      where: { id: "test-product-concurrency" },
+      select: { stock: true },
+    });
+    expect(product?.stock).toBe(0);
+  });
+});

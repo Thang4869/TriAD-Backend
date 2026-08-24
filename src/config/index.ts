@@ -1,0 +1,55 @@
+import { z } from "zod";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const configSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PORT: z.string().default("5000").transform(Number),
+  API_URL: z.string().url().optional(),
+
+  DATABASE_URL: z.string().url().min(1, "DATABASE_URL is required"),
+
+  REDIS_URL: z.string().url().default("redis://localhost:6379"),
+
+  JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 chars"),
+  JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 chars"),
+  JWT_ACCESS_EXPIRY: z.string().default("15m"),
+  JWT_REFRESH_EXPIRY: z.string().default("7d"),
+
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CALLBACK_URL: z.string().url().optional(),
+  FACEBOOK_APP_ID: z.string().optional(),
+  FACEBOOK_APP_SECRET: z.string().optional(),
+  FACEBOOK_CALLBACK_URL: z.string().url().optional(),
+
+  FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+
+  CORS_ORIGIN: z.string().optional().transform((v) => v?.split(",") || []),
+
+  RATE_LIMIT_WINDOW_MS: z.string().default("60000").transform(Number),
+  RATE_LIMIT_MAX: z.string().default("100").transform(Number),
+
+  TOTP_ISSUER: z.string().default("TriAD"),
+
+  IDEMPOTENCY_TTL: z.string().default("86400").transform(Number),
+
+  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  LOG_FILE_PATH: z.string().default("./logs"),
+});
+
+export type Config = z.infer<typeof configSchema>;
+
+const parseResult = configSchema.safeParse(process.env);
+
+if (!parseResult.success) {
+  console.error("Invalid environment configuration:");
+  parseResult.error.errors.forEach((err) => {
+    console.error(`  - ${err.path.join(".")}: ${err.message}`);
+  });
+  process.exit(1);
+}
+
+export const config = parseResult.data;
+export default config;

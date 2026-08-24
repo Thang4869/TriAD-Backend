@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { AuthController } from "./auth.controller";
 import { validate } from "@shared/middlewares/validation.middleware";
+import { config } from "@config/index";
+
 import {
   registerSchema,
   loginSchema,
@@ -12,6 +14,13 @@ import passport from "./strategies/oauth2.strategy";
 
 const router = Router();
 const controller = new AuthController();
+
+const cookieOptions = {
+  httpOnly: true,
+  secure: config.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+};
 
 /**
  * @swagger
@@ -448,11 +457,8 @@ router.get(
  */
 router.get(
   "/google/callback",
-  passport.authenticate("google", {
-    session: false,
-    failureRedirect: "/login",
-  }),
-  controller.googleCallback.bind(controller),
+  passport.authenticate("google", { session: false, failureRedirect: "/login" }),
+  controller.googleCallback.bind(controller) // đã sửa
 );
 
 /**
@@ -482,11 +488,8 @@ router.get(
  */
 router.get(
   "/facebook/callback",
-  passport.authenticate("facebook", {
-    session: false,
-    failureRedirect: "/login",
-  }),
-  controller.facebookCallback.bind(controller),
+  passport.authenticate("facebook", { session: false, failureRedirect: "/login" }),
+  controller.facebookCallback.bind(controller)
 );
 
 export { router as authRoutes };

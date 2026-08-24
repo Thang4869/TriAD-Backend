@@ -2,8 +2,16 @@ import { Request, Response, NextFunction } from "express";
 import { AuthService } from "./auth.service";
 import { logger } from "@core/logger/winston";
 import { BadRequestError } from "@shared/utils/errors";
+import { config } from "@config";
 
 const authService = new AuthService();
+
+const cookieOptions = {
+  httpOnly: true,
+  secure: config.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+};
 
 export class AuthController {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -98,15 +106,29 @@ export class AuthController {
 
   async googleCallback(req: Request, res: Response) {
     const { user, tokens } = req.user as any;
-    res.redirect(
-      `${process.env.FRONTEND_URL}/oauth-callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`,
-    );
+
+    res.cookie("accessToken", tokens.accessToken, {
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000,
+    });
+    res.cookie("refreshToken", tokens.refreshToken, {
+      ...cookieOptions,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.redirect(config.FRONTEND_URL);
   }
 
   async facebookCallback(req: Request, res: Response) {
     const { user, tokens } = req.user as any;
-    res.redirect(
-      `${process.env.FRONTEND_URL}/oauth-callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`,
-    );
+    res.cookie("accessToken", tokens.accessToken, {
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000,
+    });
+    res.cookie("refreshToken", tokens.refreshToken, {
+      ...cookieOptions,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    res.redirect(config.FRONTEND_URL);
   }
 }

@@ -24,7 +24,9 @@ export class ProductsService {
       sortOrder = "desc",
     } = params;
 
-    const skip = (page - 1) * limit;
+    const MAX_LIMIT = 50;
+    const safeLimit = Math.min(limit, MAX_LIMIT);
+    const skip = (page - 1) * safeLimit;
 
     const where: Prisma.ProductWhereInput = {
       isActive: true,

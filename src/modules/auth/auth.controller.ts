@@ -50,9 +50,10 @@ export class AuthController {
   async logout(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
+      const accessToken = req.headers.authorization?.split(" ")[1];
       const refreshToken = req.body.refreshToken;
-      await authService.logout(userId, refreshToken);
-      res.json({ success: true, message: "Logged out" });
+      await authService.logout(userId, accessToken, refreshToken);
+      res.json({ success: true, message: "Logged out successfully" });
     } catch (error) {
       next(error);
     }
@@ -72,6 +73,9 @@ export class AuthController {
     try {
       const userId = req.user!.id;
       const { token } = req.body;
+      if (!token) {
+        throw new BadRequestError("Token is required");
+      }
       const result = await authService.verify2FA(userId, token);
       res.json({ success: true, data: result });
     } catch (error) {
@@ -79,47 +83,30 @@ export class AuthController {
     }
   }
 
-    // OAuth endpoints (sẽ được gọi từ routes)
-  async googleLogin(req: Request, res: Response) {
-    // Chuyển hướng đến Google
-    // Sử dụng passport.authenticate
+  async verifyTOTP(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId, token } = req.body;
+      if (!userId || !token) {
+        throw new BadRequestError("userId and token are required");
+      }
+      const result = await authService.verifyTOTP(userId, token);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
   }
 
-  async googleCallback(req: Request, res: Response, next: NextFunction) {
-    // Xử lý callback từ Google
+  async googleCallback(req: Request, res: Response) {
+    const { user, tokens } = req.user as any;
+    res.redirect(
+      `${process.env.FRONTEND_URL}/oauth-callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`,
+    );
   }
-  // Tương tự cho Facebook
+
+  async facebookCallback(req: Request, res: Response) {
+    const { user, tokens } = req.user as any;
+    res.redirect(
+      `${process.env.FRONTEND_URL}/oauth-callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`,
+    );
+  }
 }
-
-/**
- * @swagger
- * /api/auth/register:
- *   post:
- *     summary: Register a new user
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - password
- *               - firstName
- *               - lastName
- *             properties:
- *               email:
- *                 type: string
- *               password:
- *                 type: string
- *               firstName:
- *                 type: string
- *               lastName:
- *                 type: string
- *               phone:
- *                 type: string
- *     responses:
- *       201:
- *         description: User registered successfully
- */

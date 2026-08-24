@@ -48,6 +48,7 @@ export class AuthService {
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone,
+        isVerified: false,
       },
     });
 
@@ -83,6 +84,14 @@ export class AuthService {
       throw new UnauthorizedError("Please verify your email");
     }
 
+    if (user.is2FAEnabled) {
+      return {
+        requires2FA: true,
+        userId: user.id,
+        message: "2FA required",
+      };
+    }
+
     return this.generateTokens(user);
   }
 
@@ -113,7 +122,17 @@ export class AuthService {
     }
   }
 
-  async logout(userId: string, refreshToken?: string) {
+  async logout(userId: string, accessToken?: string, refreshToken?: string) {
+    if (accessToken) {
+      try {
+        const decoded = jwt.decode(accessToken) as { exp: number };
+        if (decoded && decoded.exp) {
+          const ttl = Math.max(0, decoded.exp - Math.floor(Date.now() / 1000));
+          await redis.setex(`jwt:blacklist:${accessToken}`, ttl, "1");
+        }
+      } catch {}
+    }
+
     if (refreshToken) {
       await prisma.refreshToken.deleteMany({
         where: { token: refreshToken },
@@ -201,26 +220,22 @@ export class AuthService {
       throw new BadRequestError("Invalid TOTP token");
     }
 
-    return true;
+    return this.generateTokens(user);
   }
 
   public async generateTokens(user: any) {
-    const accessSecret = process.env.JWT_ACCESS_SECRET!;
-    const refreshSecret = process.env.JWT_REFRESH_SECRET!;
-
     const accessToken = jwt.sign(
       { sub: user.id, email: user.email, role: user.role },
-      Buffer.from(accessSecret, "utf-8"),
+      Buffer.from(AuthService.ACCESS_SECRET, "utf-8"),
       { expiresIn: AuthService.ACCESS_EXPIRY } as jwt.SignOptions,
     );
 
     const refreshToken = jwt.sign(
       { sub: user.id },
-      Buffer.from(refreshSecret, "utf-8"),
+      Buffer.from(AuthService.REFRESH_SECRET, "utf-8"),
       { expiresIn: AuthService.REFRESH_EXPIRY } as jwt.SignOptions,
     );
 
-    // Lưu refresh token vào DB (đồng bộ)
     await prisma.refreshToken.create({
       data: {
         token: refreshToken,
@@ -238,7 +253,7 @@ export class AuthService {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
-        is2FAEnabled: user.is2FAEnabled,
+        is2FAEnabled: user.is2FAEnabled || false,
       },
     };
   }

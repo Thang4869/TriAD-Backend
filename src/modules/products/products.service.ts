@@ -60,7 +60,6 @@ export class ProductsService {
       prisma.product.count({ where }),
     ]);
 
-    // Calculate average rating
     const productsWithRating = products.map((p) => ({
       ...p,
       avgRating:

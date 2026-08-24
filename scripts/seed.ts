@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcrypt';
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
@@ -16,26 +16,26 @@ async function main() {
     prisma.user.deleteMany(),
   ]);
 
-  const adminPassword = await bcrypt.hash('admin123', 10);
+  const adminPassword = await bcrypt.hash("admin123", 10);
   const admin = await prisma.user.create({
     data: {
-      email: 'admin@shop.vn',
+      email: "admin@shop.vn",
       password: adminPassword,
-      firstName: 'Admin',
-      lastName: 'TriAD',
-      role: 'ADMIN',
+      firstName: "Admin",
+      lastName: "TriAD",
+      role: "ADMIN",
       isVerified: true,
       cart: { create: {} },
     },
   });
 
-  const userPassword = await bcrypt.hash('user123', 10);
+  const userPassword = await bcrypt.hash("user123", 10);
   const user = await prisma.user.create({
     data: {
-      email: 'user@example.com',
+      email: "user@example.com",
       password: userPassword,
-      firstName: 'User',
-      lastName: 'Test',
+      firstName: "User",
+      lastName: "Test",
       isVerified: true,
       cart: { create: {} },
     },
@@ -43,49 +43,49 @@ async function main() {
 
   const products = [
     {
-      name: 'TriAD Storage Container (1000ml/37oz)',
-      description: 'Borosilicate glass container, leak-proof, microwave safe.',
+      name: "TriAD Storage Container (1000ml/37oz)",
+      description: "Borosilicate glass container, leak-proof, microwave safe.",
       price: 150000,
       stock: 50,
-      category: 'glass',
-      images: ['/images/21.jpg'],
-      slug: 'triad-storage-container-1000ml',
+      category: "glass",
+      images: ["/images/21.jpg"],
+      slug: "triad-storage-container-1000ml",
     },
     {
-      name: 'TriAD Storage Container (400ml/13.5oz)',
-      description: 'Small size, perfect for snacks and side dishes.',
+      name: "TriAD Storage Container (400ml/13.5oz)",
+      description: "Small size, perfect for snacks and side dishes.",
       price: 110000,
       stock: 100,
-      category: 'glass',
-      images: ['/images/22.jpg'],
-      slug: 'triad-storage-container-400ml',
+      category: "glass",
+      images: ["/images/22.jpg"],
+      slug: "triad-storage-container-400ml",
     },
     {
-      name: 'TriAD Storage Container (800ml/27oz)',
-      description: 'Medium size, ideal for lunch portions.',
+      name: "TriAD Storage Container (800ml/27oz)",
+      description: "Medium size, ideal for lunch portions.",
       price: 130000,
       stock: 80,
-      category: 'glass',
-      images: ['/images/23.jpg'],
-      slug: 'triad-storage-container-800ml',
+      category: "glass",
+      images: ["/images/23.jpg"],
+      slug: "triad-storage-container-800ml",
     },
     {
-      name: 'TriAD Storage Container (400ml/13.5oz) White',
-      description: 'Classic white, elegant design.',
+      name: "TriAD Storage Container (400ml/13.5oz) White",
+      description: "Classic white, elegant design.",
       price: 110000,
       stock: 60,
-      category: 'glass',
-      images: ['/images/24.jpg'],
-      slug: 'triad-storage-container-400ml-white',
+      category: "glass",
+      images: ["/images/24.jpg"],
+      slug: "triad-storage-container-400ml-white",
     },
     {
-      name: 'TriAD Storage Container Combo',
-      description: 'Set of 3 containers with different sizes.',
+      name: "TriAD Storage Container Combo",
+      description: "Set of 3 containers with different sizes.",
       price: 350000,
       stock: 30,
-      category: 'glass',
-      images: ['/images/25.jpg'],
-      slug: 'triad-storage-container-combo',
+      category: "glass",
+      images: ["/images/25.jpg"],
+      slug: "triad-storage-container-combo",
     },
   ];
 
@@ -95,7 +95,7 @@ async function main() {
     });
   }
 
-  console.log('Seed completed!');
+  console.log("Seed completed!");
   console.log(`Admin: admin@shop.vn / admin123`);
   console.log(`User: user@example.com / user123`);
 }

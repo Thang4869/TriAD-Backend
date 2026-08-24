@@ -7,8 +7,10 @@ export const redis = new Redis(redisUrl, {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
   connectTimeout: 10000,
-  retryStrategy(times) { return Math.min(times * 50, 2000); }
-  });
+  retryStrategy(times) {
+    return Math.min(times * 50, 2000);
+  },
+});
 
 redis.on("connect", () => {
   logger.info("Redis connected");

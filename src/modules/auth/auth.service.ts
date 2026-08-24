@@ -95,33 +95,6 @@ export class AuthService {
     return this.generateTokens(user);
   }
 
-  async refreshToken(refreshToken: string) {
-    try {
-      const payload = jwt.verify(refreshToken, AuthService.REFRESH_SECRET) as {
-        sub: string;
-      };
-
-      const tokenRecord = await prisma.refreshToken.findUnique({
-        where: { token: refreshToken },
-        include: { user: true },
-      });
-
-      if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
-        throw new UnauthorizedError("Invalid refresh token");
-      }
-
-      const user = tokenRecord.user;
-
-      await prisma.refreshToken.delete({
-        where: { id: tokenRecord.id },
-      });
-
-      return this.generateTokens(user);
-    } catch {
-      throw new UnauthorizedError("Invalid refresh token");
-    }
-  }
-
   async logout(userId: string, accessToken?: string, refreshToken?: string) {
     if (accessToken) {
       try {
@@ -142,6 +115,7 @@ export class AuthService {
         where: { userId },
       });
     }
+    await this.invalidateAllUserTokens(userId);
   }
 
   async enable2FA(userId: string) {
@@ -256,5 +230,40 @@ export class AuthService {
         is2FAEnabled: user.is2FAEnabled || false,
       },
     };
+  }
+
+  async invalidateAllUserTokens(userId: string) {
+    await prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+  }
+
+  async refreshToken(refreshToken: string) {
+    try {
+      const payload = jwt.verify(refreshToken, AuthService.REFRESH_SECRET) as {
+        sub: string;
+      };
+
+      const tokenRecord = await prisma.refreshToken.findUnique({
+        where: { token: refreshToken },
+        include: { user: true },
+      });
+
+      if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
+        throw new UnauthorizedError("Invalid refresh token");
+      }
+
+      const user = tokenRecord.user;
+
+      await prisma.refreshToken.delete({
+        where: { id: tokenRecord.id },
+      });
+
+      await this.invalidateAllUserTokens(user.id);
+
+      return this.generateTokens(user);
+    } catch {
+      throw new UnauthorizedError("Invalid refresh token");
+    }
   }
 }

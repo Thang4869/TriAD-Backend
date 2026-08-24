@@ -14,8 +14,6 @@ module.exports = {
   transform: {
     "^.+\\.tsx?$": ["ts-jest", { tsconfig: "tsconfig.json" }],
   },
-  // Thêm dòng này để load path alias khi chạy test
   transformIgnorePatterns: [],
-  // Có thể dùng setupFiles để load tsconfig-paths
   setupFiles: ["tsconfig-paths/register"],
 };

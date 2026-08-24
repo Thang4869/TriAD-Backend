@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { logger } from "@core/logger/winston";
 import { Prisma } from "@prisma/client";
+import { ZodError } from "zod";
 
 export class AppError extends Error {
   public statusCode: number;
@@ -20,6 +21,9 @@ export const errorHandler = (
   res: Response,
   next: NextFunction,
 ) => {
+  const correlationId = req.headers["x-correlation-id"] || 
+    `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
   logger.error("Error:", {
     message: err.message,
     stack: err.stack,
@@ -28,6 +32,7 @@ export const errorHandler = (
     method: req.method,
     ip: req.ip,
     userId: req.user?.id,
+    correlationId,
   });
 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -35,17 +40,20 @@ export const errorHandler = (
       return res.status(409).json({
         success: false,
         error: "Duplicate entry",
+        correlationId,
       });
     }
     if (err.code === "P2025") {
       return res.status(404).json({
         success: false,
         error: "Record not found",
+        correlationId,
       });
     }
     return res.status(400).json({
       success: false,
       error: "Database error",
+      correlationId,
     });
   }
 
@@ -53,14 +61,19 @@ export const errorHandler = (
     return res.status(400).json({
       success: false,
       error: "Invalid data provided",
+      correlationId,
     });
   }
 
-  if (err.name === "ZodError") {
+  if (err instanceof ZodError) {
     return res.status(400).json({
       success: false,
       error: "Validation failed",
-      details: err.errors,
+      details: err.errors.map((e) => ({
+        field: e.path.join("."),
+        message: e.message,
+      })),
+      correlationId,
     });
   }
 
@@ -68,6 +81,7 @@ export const errorHandler = (
     return res.status(401).json({
       success: false,
       error: "Invalid or expired token",
+      correlationId,
     });
   }
 
@@ -77,6 +91,7 @@ export const errorHandler = (
   res.status(statusCode).json({
     success: false,
     error: message,
+    correlationId,
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 };

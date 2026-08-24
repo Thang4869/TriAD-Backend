@@ -51,5 +51,13 @@ if (!parseResult.success) {
   process.exit(1);
 }
 
-export const config = parseResult.data;
+const rawConfig = parseResult.data;
+
+export const config = {
+  ...rawConfig,
+  isProduction: rawConfig.NODE_ENV === "production",
+  isDevelopment: rawConfig.NODE_ENV === "development",
+  isTest: rawConfig.NODE_ENV === "test",
+} as const;
+
 export default config;

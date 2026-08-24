@@ -13,6 +13,8 @@ export class CheckoutService {
     process.env.IDEMPOTENCY_TTL || "86400",
     10,
   );
+  private readonly MAX_RETRIES = 5;
+  private readonly BASE_DELAY_MS = 100;
 
   async checkout(
     userId: string,
@@ -38,7 +40,7 @@ export class CheckoutService {
         const orderId = JSON.parse(cached);
         const order = await prisma.order.findUnique({
           where: { id: orderId },
-          include: { items: true },
+          include: { items: { include: { product: true } } },
         });
         if (order) {
           return { order, idempotent: true };
@@ -72,24 +74,6 @@ export class CheckoutService {
       0,
     );
 
-    const stockChecks = await Promise.all(
-      cartItems.map(async (item) => {
-        const product = await prisma.product.findUnique({
-          where: { id: item.productId },
-          select: { id: true, stock: true, name: true, price: true },
-        });
-        if (!product) {
-          throw new NotFoundError(`Product ${item.productId} not found`);
-        }
-        if (product.stock < item.quantity) {
-          throw new BadRequestError(
-            `Not enough stock for ${product.name}. Available: ${product.stock}`,
-          );
-        }
-        return product;
-      }),
-    );
-
     let discountAmount = 0;
     if (discountCode) {
     }
@@ -98,103 +82,107 @@ export class CheckoutService {
     const shippingFee = subtotal > 500000 ? 0 : 30000;
     const total = subtotal + tax + shippingFee - discountAmount;
 
-    const order = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        for (const item of cartItems) {
-          for (const item of cartItems) {
-            const product = await tx.product.findUnique({
-              where: { id: item.productId },
-              select: { id: true, stock: true, version: true, name: true, price: true },
-            });
-            if (!product) {
-              throw new NotFoundError(`Product ${item.productId} not found`);
-            }
-            if (product.stock < item.quantity) {
-              throw new BadRequestError(
-                `Not enough stock for ${product.name}. Available: ${product.stock}`
-              );
-            }
+    const result = await this.executeWithRetry(async (tx) => {
+      const productIds = cartItems.map((item) => item.productId);
+      const products = await tx.$queryRaw<any[]>`
+        SELECT id, stock, version, name, price 
+        FROM products 
+        WHERE id = ANY(${productIds})
+        FOR UPDATE
+      `;
 
-            const updateResult = await tx.product.updateMany({
-              where: {
-                id: item.productId,
-                version: product.version,
-              },
-              data: {
-                stock: { decrement: item.quantity },
-                version: { increment: 1 },
-              },
-            });
+      const productMap = new Map(
+        products.map((p) => [p.id, p])
+      );
 
-            if (updateResult.count === 0) {
-              throw new ConflictError(
-                `Stock conflict for product ${item.productId}. Please retry.`
-              );
-            }
-          }
+      for (const item of cartItems) {
+        const product = productMap.get(item.productId);
+        if (!product) {
+          throw new NotFoundError(`Product ${item.productId} not found`);
         }
+        if (product.stock < item.quantity) {
+          throw new BadRequestError(
+            `Not enough stock for ${product.name}. Available: ${product.stock}`,
+          );
+        }
+      }
 
-        const orderData = {
-          orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
-          userId,
-          status: "PENDING" as const,
-          paymentMethod,
-          paymentStatus: "PENDING" as const,
-          subtotal,
-          tax,
-          shippingFee,
-          total,
-          discountAmount,
-          discountCode,
-          customerName: `${user.firstName} ${user.lastName}`,
-          customerEmail: user.email,
-          customerPhone: phone || user.phone || "",
-          customerAddress: address,
-          notes,
-          idempotencyKey,
-        };
-
-        const newOrder = await tx.order.create({
-          data: orderData,
+      for (const item of cartItems) {
+        const product = productMap.get(item.productId);
+        const updateResult = await tx.product.updateMany({
+          where: {
+            id: item.productId,
+            version: product.version,
+          },
+          data: {
+            stock: { decrement: item.quantity },
+            version: { increment: 1 },
+          },
         });
 
-        await tx.orderItem.createMany({
-          data: cartItems.map((item) => ({
-            orderId: newOrder.id,
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.product.price,
-            total: item.product.price * item.quantity,
-          })),
-        });
+        if (updateResult.count === 0) {
+          throw new ConflictError(
+            `Stock conflict for product ${item.productId}. Please retry.`
+          );
+        }
+      }
 
-        await tx.cartItem.deleteMany({
-          where: { cartId: user.cart!.id },
-        });
+      const orderData = {
+        orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
+        userId,
+        status: "PENDING" as const,
+        paymentMethod,
+        paymentStatus: "PENDING" as const,
+        subtotal,
+        tax,
+        shippingFee,
+        total,
+        discountAmount,
+        discountCode,
+        customerName: `${user.firstName} ${user.lastName}`,
+        customerEmail: user.email,
+        customerPhone: phone || user.phone || "",
+        customerAddress: address,
+        notes,
+        idempotencyKey,
+      };
 
-        return newOrder;
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        timeout: 10000,
-      },
-    );
+      const newOrder = await tx.order.create({
+        data: orderData,
+      });
+
+      await tx.orderItem.createMany({
+        data: cartItems.map((item) => ({
+          orderId: newOrder.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          price: item.product.price,
+          total: item.product.price * item.quantity,
+        })),
+      });
+
+      await tx.cartItem.deleteMany({
+        where: { cartId: user.cart!.id },
+      });
+
+      return newOrder;
+    });
 
     if (idempotencyKey) {
       await redis.setex(
         `idempotent:${idempotencyKey}`,
         this.IDEMPOTENCY_TTL,
-        JSON.stringify(order.id),
+        JSON.stringify(result.id),
       );
     }
 
     await emailQueue.add("order-confirmation", {
       to: user.email,
-      subject: `Order #${order.orderNumber} Confirmed`,
+      subject: `Order #${result.orderNumber} Confirmed`,
       template: "order-confirmation",
       data: {
-        orderNumber: order.orderNumber,
-        total: order.total,
+        orderNumber: result.orderNumber,
+        total: result.total,
         items: cartItems.map((item) => ({
           name: item.product.name,
           quantity: item.quantity,
@@ -203,7 +191,32 @@ export class CheckoutService {
       },
     });
 
-    return { order, idempotent: false };
+    return { order: result, idempotent: false };
+  }
+
+  private async executeWithRetry<T>(
+    operation: (tx: Prisma.TransactionClient) => Promise<T>,
+    retryCount: number = 0,
+  ): Promise<T> {
+    try {
+      return await prisma.$transaction(
+        async (tx) => operation(tx),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 10000,
+        },
+      );
+    } catch (error) {
+      if (
+        error instanceof ConflictError &&
+        retryCount < this.MAX_RETRIES
+      ) {
+        const delay = this.BASE_DELAY_MS * Math.pow(2, retryCount);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return this.executeWithRetry(operation, retryCount + 1);
+      }
+      throw error;
+    }
   }
 
   async getOrder(orderId: string, userId: string) {

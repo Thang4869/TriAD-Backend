@@ -6,6 +6,8 @@ import redis from "@core/redis/client";
 import { logger } from "@core/logger/winston";
 import { emailQueue } from "@core/queue/bull";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
+import { Prisma } from "@prisma/client";
+
 
 export class AuthService {
   private static get ACCESS_SECRET(): string {
@@ -66,7 +68,10 @@ export class AuthService {
     return this.generateTokens(user);
   }
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string): Promise<
+    | { accessToken: string; refreshToken: string; user: any }
+    | { requires2FA: true; userId: string; message: string }
+  > {
     const user = await prisma.user.findUnique({
       where: { email },
     });

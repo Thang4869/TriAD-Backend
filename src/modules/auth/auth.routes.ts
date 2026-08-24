@@ -442,7 +442,10 @@ router.post(
  */
 router.get(
   "/google",
-  passport.authenticate("google", { scope: ["profile", "email"] }),
+  passport.authenticate("google", { 
+    scope: ["profile", "email"],
+    session: false,
+  }),
 );
 
 /**
@@ -453,12 +456,15 @@ router.get(
  *     tags: [Auth]
  *     responses:
  *       302:
- *         description: Redirect to frontend with tokens
+ *         description: Redirect to frontend with cookies
  */
 router.get(
   "/google/callback",
-  passport.authenticate("google", { session: false, failureRedirect: "/login" }),
-  controller.googleCallback.bind(controller) // đã sửa
+  passport.authenticate("google", { 
+    session: false, 
+    failureRedirect: `${config.FRONTEND_URL}?error=oauth_failed`,
+  }),
+  controller.googleCallback.bind(controller),
 );
 
 /**
@@ -473,7 +479,10 @@ router.get(
  */
 router.get(
   "/facebook",
-  passport.authenticate("facebook", { scope: ["email"] }),
+  passport.authenticate("facebook", { 
+    scope: ["email"],
+    session: false,
+  }),
 );
 
 /**
@@ -484,12 +493,15 @@ router.get(
  *     tags: [Auth]
  *     responses:
  *       302:
- *         description: Redirect to frontend with tokens
+ *         description: Redirect to frontend with cookies
  */
 router.get(
   "/facebook/callback",
-  passport.authenticate("facebook", { session: false, failureRedirect: "/login" }),
-  controller.facebookCallback.bind(controller)
+  passport.authenticate("facebook", { 
+    session: false, 
+    failureRedirect: `${config.FRONTEND_URL}?error=oauth_failed`,
+  }),
+  controller.facebookCallback.bind(controller),
 );
 
 export { router as authRoutes };

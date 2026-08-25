@@ -33,3 +33,15 @@ export const verify2FASchema = z.object({
 export const enable2FASchema = z.object({
   body: z.object({}),
 });
+
+export const verifyEmailSchema = z.object({
+  query: z.object({
+    token: z.string().min(1, "Verification token is required"),
+  }),
+});
+
+export const resendVerificationSchema = z.object({
+  body: z.object({
+    email: z.string().email("Invalid email address"),
+  }),
+});

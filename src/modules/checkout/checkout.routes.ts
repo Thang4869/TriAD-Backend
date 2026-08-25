@@ -2,6 +2,12 @@ import { Router } from "express";
 import { CheckoutController } from "./checkout.controller";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
 import { idempotencyMiddleware } from "@shared/middlewares/idempotency.middleware";
+import { validate } from "@shared/middlewares/validation.middleware";
+import { 
+    checkoutSchema, 
+    getOrdersQuerySchema, 
+    getOrderParamsSchema 
+} from "./dto/checkout.dto";
 
 const router = Router();
 const controller = new CheckoutController();
@@ -42,7 +48,12 @@ router.use(authMiddleware);
  *       201:
  *         description: Order placed successfully
  */
-router.post("/", idempotencyMiddleware(), controller.checkout.bind(controller));
+router.post(
+  "/",
+  validate(checkoutSchema),
+  idempotencyMiddleware(),
+  controller.checkout.bind(controller),
+);
 
 /**
  * @swagger
@@ -63,7 +74,11 @@ router.post("/", idempotencyMiddleware(), controller.checkout.bind(controller));
  *       200:
  *         description: List of orders
  */
-router.get("/orders", controller.getOrders.bind(controller));
+router.get(
+  "/orders",
+  validate(getOrdersQuerySchema),
+  controller.getOrders.bind(controller)
+);
 
 /**
  * @swagger
@@ -84,6 +99,10 @@ router.get("/orders", controller.getOrders.bind(controller));
  *       404:
  *         description: Order not found
  */
-router.get("/orders/:orderId", controller.getOrder.bind(controller));
+router.get(
+  "/orders/:orderId",
+  validate(getOrderParamsSchema),
+  controller.getOrder.bind(controller),
+);
 
 export { router as checkoutRoutes };

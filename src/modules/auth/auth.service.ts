@@ -1,5 +1,6 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import speakeasy from "speakeasy";
 import prisma from "@core/database/prisma";
 import redis from "@core/redis/client";
@@ -7,12 +8,16 @@ import { logger } from "@core/logger/winston";
 import { emailQueue } from "@core/queue/bull";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
 import { Prisma } from "@prisma/client";
+import config from "@config";
 
+const BLACKLIST_PREFIX = "jwt:blacklist:";
+const EMAIL_VERIFY_PREFIX = "email-verify:";
+const EMAIL_VERIFY_TTL_SECONDS = 15 * 60 * 1;
 
 export class AuthService {
   private static get ACCESS_SECRET(): string {
     const secret = process.env.JWT_ACCESS_SECRET;
-    if (!secret) throw new Error("JWT_ACCESS_SECRET is not defined");
+    if (!secret) throw new Error("JWT_ACCESS_SECRET is not defined"); 
     return secret;
   }
 
@@ -58,14 +63,86 @@ export class AuthService {
       data: { userId: user.id },
     });
 
-    await emailQueue.add("welcome", {
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    await redis.setex(
+      `${EMAIL_VERIFY_PREFIX}${verificationToken}`,
+      EMAIL_VERIFY_TTL_SECONDS,
+      user.id,
+    );
+
+    const verifyUrl = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+
+    await emailQueue.add("verify-email", {
       to: user.email,
-      subject: "Welcome to TriAD!",
-      template: "welcome",
-      data: { name: user.firstName },
+      subject: "Xác thực tài khoản TriAD của bạn",
+      template: "verify-email",
+      data: { name: user.firstName, verifyUrl },
     });
 
-    return this.generateTokens(user);
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
+      message: "Registered successfully. Please check your email to verify your account.",
+    };
+  }
+
+  async verifyEmail(token: string) {
+    const userId = await redis.get(`${EMAIL_VERIFY_PREFIX}${token}`);
+    if (!userId) {
+      throw new BadRequestError("Verification link is invalid or has expired");
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new BadRequestError("User not found");
+    }
+
+    await redis.del(`${EMAIL_VERIFY_PREFIX}${token}`);
+
+    if (user.isVerified) {
+      return this.generateTokens(user);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { isVerified: true },
+    });
+
+    return this.generateTokens(updatedUser);
+  }
+
+  async resendVerificationEmail(email: string) {
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user || user.isVerified) {
+      return {
+        message: "If that account exists and is not verified yet, a new verification email has been sent.",
+      };
+    }
+
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    await redis.setex(
+      `${EMAIL_VERIFY_PREFIX}${verificationToken}`,
+      EMAIL_VERIFY_TTL_SECONDS,
+      user.id,
+    );
+
+    const verifyUrl = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+
+    await emailQueue.add("verify-email", {
+      to: user.email,
+      subject: "Xác thực tài khoản TriAD của bạn",
+      template: "verify-email",
+      data: { name: user.firstName, verifyUrl },
+    });
+
+    return {
+      message: "If that account exists and is not verified yet, a new verification email has been sent.",
+    };
   }
 
   async login(email: string, password: string): Promise<
@@ -105,8 +182,10 @@ export class AuthService {
       try {
         const decoded = jwt.decode(accessToken) as { exp: number };
         if (decoded && decoded.exp) {
-          const ttl = Math.max(0, decoded.exp - Math.floor(Date.now() / 1000));
-          await redis.setex(`jwt:blacklist:${accessToken}`, ttl, "1");
+          const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+          if (ttl > 0) {
+            await redis.setex(`${BLACKLIST_PREFIX}${accessToken}`, ttl, "1");
+          }
         }
       } catch {}
     }

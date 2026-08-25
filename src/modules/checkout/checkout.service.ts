@@ -74,14 +74,6 @@ export class CheckoutService {
       0,
     );
 
-    let discountAmount = 0;
-    if (discountCode) {
-    }
-
-    const tax = subtotal * 0.1;
-    const shippingFee = subtotal > 500000 ? 0 : 30000;
-    const total = subtotal + tax + shippingFee - discountAmount;
-
     const result = await this.executeWithRetry(async (tx) => {
       const productIds = cartItems.map((item) => item.productId);
       const products = await tx.$queryRaw<any[]>`
@@ -127,6 +119,16 @@ export class CheckoutService {
         }
       }
 
+      const discountAmount = await this.applyDiscount(
+        tx,
+        discountCode,
+        subtotal,
+      );
+
+      const tax = subtotal * 0.1;
+      const shippingFee = subtotal > 500000 ? 0 : 30000;
+      const total = Math.max(0, subtotal + tax + shippingFee - discountAmount);
+
       const orderData = {
         orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
         userId,
@@ -138,7 +140,7 @@ export class CheckoutService {
         shippingFee,
         total,
         discountAmount,
-        discountCode,
+        discountCode: discountAmount > 0 ? discountCode : undefined,
         customerName: `${user.firstName} ${user.lastName}`,
         customerEmail: user.email,
         customerPhone: phone || user.phone || "",
@@ -192,6 +194,60 @@ export class CheckoutService {
     });
 
     return { order: result, idempotent: false };
+  }
+
+  private async applyDiscount(
+    tx: Prisma.TransactionClient,
+    discountCode: string | undefined,
+    subtotal: number,
+  ): Promise<number> {
+    if (!discountCode) {
+      return 0;
+    }
+
+    const discount = await (tx as any).discount.findUnique({
+      where: { code: discountCode },
+    });
+
+    if (!discount || !discount.isActive) {
+      throw new BadRequestError("Invalid or inactive discount code");
+    }
+
+    if (discount.expiresAt && discount.expiresAt < new Date()) {
+      throw new BadRequestError("Discount code has expired");
+    }
+
+    if (
+      discount.minOrderAmount != null &&
+      subtotal < discount.minOrderAmount
+    ) {
+      throw new BadRequestError(
+        `Order must be at least ${discount.minOrderAmount} to use this discount code`,
+      );
+    }
+
+    const updateResult = await (tx as any).discount.updateMany({
+      where: {
+        id: discount.id,
+        ...(discount.maxUses != null
+          ? { usedCount: { lt: discount.maxUses } }
+          : {}),
+      },
+      data: { usedCount: { increment: 1 } },
+    });
+
+    if (updateResult.count === 0) {
+      throw new ConflictError(
+        "Discount code just reached its usage limit. Please retry.",
+      );
+    }
+
+    const rawAmount =
+      discount.type === "PERCENTAGE"
+        ? subtotal * (discount.value / 100)
+        : discount.value;
+
+    return Math.min(rawAmount, subtotal);
   }
 
   private async executeWithRetry<T>(

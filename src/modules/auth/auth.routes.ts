@@ -8,8 +8,11 @@ import {
   loginSchema,
   refreshSchema,
   verify2FASchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
 } from "./dto";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
+import { authRateLimiter } from "@shared/middlewares/rate-limit.middleware";
 import passport from "./strategies/oauth2.strategy";
 
 const router = Router();
@@ -59,7 +62,7 @@ const cookieOptions = {
  *                 example: 0123456789
  *     responses:
  *       201:
- *         description: User registered successfully
+ *         description: User registered successfully, verification email sent
  *         content:
  *           application/json:
  *             schema:
@@ -71,10 +74,6 @@ const cookieOptions = {
  *                 data:
  *                   type: object
  *                   properties:
- *                     accessToken:
- *                       type: string
- *                     refreshToken:
- *                       type: string
  *                     user:
  *                       type: object
  *                       properties:
@@ -86,10 +85,8 @@ const cookieOptions = {
  *                           type: string
  *                         lastName:
  *                           type: string
- *                         role:
- *                           type: string
- *                         is2FAEnabled:
- *                           type: boolean
+ *                 message:
+ *                   type: string
  *       400:
  *         description: Bad request
  *       409:
@@ -97,8 +94,61 @@ const cookieOptions = {
  */
 router.post(
   "/register",
+  authRateLimiter,
   validate(registerSchema),
   controller.register.bind(controller),
+);
+
+/**
+ * @swagger
+ * /api/auth/verify-email:
+ *   get:
+ *     summary: Verify user email using token sent by mail
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Email verified, tokens returned (auto-login)
+ *       400:
+ *         description: Invalid or expired verification token
+ */
+router.get(
+  "/verify-email",
+  validate(verifyEmailSchema),
+  controller.verifyEmail.bind(controller),
+);
+
+/**
+ * @swagger
+ * /api/auth/resend-verification:
+ *   post:
+ *     summary: Resend the email verification link
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Verification email sent if applicable
+ */
+router.post(
+  "/resend-verification",
+  authRateLimiter,
+  validate(resendVerificationSchema),
+  controller.resendVerification.bind(controller),
 );
 
 /**
@@ -172,7 +222,12 @@ router.post(
  *       403:
  *         description: Email not verified
  */
-router.post("/login", validate(loginSchema), controller.login.bind(controller));
+router.post(
+  "/login",
+  authRateLimiter,
+  validate(loginSchema),
+  controller.login.bind(controller),
+);
 
 /**
  * @swagger

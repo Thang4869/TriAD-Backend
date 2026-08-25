@@ -16,6 +16,8 @@ declare global {
   }
 }
 
+const BLACKLIST_PREFIX = "jwt:blacklist:";
+
 export const authMiddleware = async (
   req: Request,
   res: Response,
@@ -29,7 +31,7 @@ export const authMiddleware = async (
 
     const token = authHeader.substring(7);
 
-    const isBlacklisted = await redis.sismember("jwt:blacklist", token);
+    const isBlacklisted = await redis.exists(`${BLACKLIST_PREFIX}${token}`);
     if (isBlacklisted) {
       throw new UnauthorizedError("Token revoked");
     }
@@ -74,17 +76,21 @@ export const optionalAuthMiddleware = async (
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
-      const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as {
-        sub: string;
-        email: string;
-        role: string;
-      };
-      const user = await prisma.user.findUnique({
-        where: { id: decoded.sub },
-        select: { id: true, email: true, role: true },
-      });
-      if (user) {
-        req.user = user;
+
+      const isBlacklisted = await redis.exists(`${BLACKLIST_PREFIX}${token}`);
+      if (!isBlacklisted) {
+        const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as {
+          sub: string;
+          email: string;
+          role: string;
+        };
+        const user = await prisma.user.findUnique({
+          where: { id: decoded.sub },
+          select: { id: true, email: true, role: true },
+        });
+        if (user) {
+          req.user = user;
+        }
       }
     }
   } catch {}

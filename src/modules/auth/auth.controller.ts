@@ -15,7 +15,6 @@ const cookieOptions = (maxAge: number) => ({
   ...(config.isProduction && { domain: process.env.COOKIE_DOMAIN }),
 });
 
-// Type guard: checks for the 2FA variant
 function is2FAResult(
   result: any,
 ): result is { requires2FA: true; userId: string; message: string } {
@@ -31,13 +30,43 @@ export class AuthController {
   async register(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await authService.register(req.body);
-      this.setAuthCookies(res, result.accessToken, result.refreshToken);
       res.status(201).json({
         success: true,
         data: {
           user: result.user,
         },
+        message: result.message,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async verifyEmail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const token = req.query.token as string;
+      if (!token) {
+        throw new BadRequestError("Verification token is required");
+      }
+      const result = await authService.verifyEmail(token);
+      this.setAuthCookies(res, result.accessToken, result.refreshToken);
+      res.json({
+        success: true,
+        data: {
+          user: result.user,
+        },
+        message: "Email verified successfully",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async resendVerification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email } = req.body;
+      const result = await authService.resendVerificationEmail(email);
+      res.json({ success: true, message: result.message });
     } catch (error) {
       next(error);
     }
@@ -48,7 +77,6 @@ export class AuthController {
       const { email, password } = req.body;
       const result = await authService.login(email, password);
 
-      // If 2FA is required, return the 2FA response
       if (is2FAResult(result)) {
         return res.json({
           success: true,
@@ -60,7 +88,6 @@ export class AuthController {
         });
       }
 
-      // TypeScript now correctly infers result as the success variant
       this.setAuthCookies(res, result.accessToken, result.refreshToken);
       res.json({
         success: true,

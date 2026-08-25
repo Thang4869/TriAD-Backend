@@ -1,5 +1,11 @@
 import { Router } from "express";
 import { ProductsController } from "./products.controller";
+import { validate } from "@shared/middlewares/validation.middleware";
+import { 
+    getProductsQuerySchema, 
+    getProductParamsSchema, 
+    getProductBySlugParamsSchema 
+} from "./dto/query-product.dto";
 
 const router = Router();
 const controller = new ProductsController();
@@ -39,7 +45,11 @@ const controller = new ProductsController();
  *       200:
  *         description: List of products
  */
-router.get("/", controller.getAll.bind(controller));
+router.get(
+    "/", 
+    validate(getProductsQuerySchema), 
+    controller.getAll.bind(controller)
+);
 
 /**
  * @swagger
@@ -58,7 +68,11 @@ router.get("/", controller.getAll.bind(controller));
  *       404:
  *         description: Product not found
  */
-router.get("/:id", controller.getById.bind(controller));
+router.get(
+    "/:id",
+    validate(getProductParamsSchema),
+    controller.getById.bind(controller)
+);
 
 /**
  * @swagger
@@ -77,7 +91,11 @@ router.get("/:id", controller.getById.bind(controller));
  *       404:
  *         description: Product not found
  */
-router.get("/slug/:slug", controller.getBySlug.bind(controller));
+router.get(
+    "/slug/:slug",
+    validate(getProductBySlugParamsSchema),
+    controller.getBySlug.bind(controller)
+);
 
 /**
  * @swagger
@@ -89,6 +107,9 @@ router.get("/slug/:slug", controller.getBySlug.bind(controller));
  *       200:
  *         description: List of categories
  */
-router.get("/categories", controller.getCategories.bind(controller));
+router.get(
+    "/categories",
+    controller.getCategories.bind(controller)
+);
 
 export { router as productRoutes };

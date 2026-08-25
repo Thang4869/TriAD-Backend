@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { NotificationsController } from "./notifications.controller";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
+import { validate } from "@shared/middlewares/validation.middleware";
+import {
+  getNotificationsQuerySchema,
+  markAsReadParamsSchema,
+} from "./dto/notifications.dto";
 
 const router = Router();
 const controller = new NotificationsController();
@@ -19,7 +24,11 @@ router.use(authMiddleware);
  *       200:
  *         description: List of notifications
  */
-router.get("/", controller.getNotifications.bind(controller));
+router.get(
+    "/", 
+    validate(getNotificationsQuerySchema), 
+    controller.getNotifications.bind(controller)
+);
 
 /**
  * @swagger
@@ -38,7 +47,11 @@ router.get("/", controller.getNotifications.bind(controller));
  *       200:
  *         description: Notification updated
  */
-router.put("/:id/read", controller.markAsRead.bind(controller));
+router.put(
+  "/:id/read",
+  validate(markAsReadParamsSchema),
+  controller.markAsRead.bind(controller)
+);
 
 /**
  * @swagger
@@ -52,6 +65,9 @@ router.put("/:id/read", controller.markAsRead.bind(controller));
  *       200:
  *         description: All notifications marked as read
  */
-router.put("/read-all", controller.markAllAsRead.bind(controller));
+router.put(
+    "/read-all", 
+    controller.markAllAsRead.bind(controller)
+);
 
 export { router as notificationRoutes };

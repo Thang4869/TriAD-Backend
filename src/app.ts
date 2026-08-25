@@ -2,7 +2,11 @@ import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import { json, urlencoded } from "body-parser";
+import { 
+  json, 
+  urlencoded 
+} from "body-parser";
+
 import cookieParser from "cookie-parser";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "@config/swagger";
@@ -12,10 +16,12 @@ import {
   rateLimiter,
   strictRateLimiter,
 } from "@shared/middlewares/rate-limit.middleware";
+
 import {
   errorHandler,
   notFoundHandler,
 } from "@shared/middlewares/error-handler.middleware";
+
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
 
 import { authRoutes } from "@modules/auth/auth.routes";

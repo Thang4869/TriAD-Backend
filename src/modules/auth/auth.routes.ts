@@ -11,6 +11,7 @@ import {
   verifyEmailSchema,
   resendVerificationSchema,
 } from "./dto";
+
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
 import { authRateLimiter } from "@shared/middlewares/rate-limit.middleware";
 import passport from "./strategies/oauth2.strategy";
@@ -322,7 +323,11 @@ router.post(
  *       401:
  *         description: Unauthorized
  */
-router.post("/logout", authMiddleware, controller.logout.bind(controller));
+router.post(
+  "/logout", 
+  authMiddleware, 
+  controller.logout.bind(controller)
+);
 
 /**
  * @swagger

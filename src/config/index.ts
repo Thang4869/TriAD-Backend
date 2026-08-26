@@ -37,6 +37,40 @@ const configSchema = z.object({
 
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   LOG_FILE_PATH: z.string().default("./logs"),
+
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional().transform(Number),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().email().optional(),
+
+}).superRefine((data, ctx) => {
+  if (data.NODE_ENV === 'production') {
+    const smtpVars = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'];
+    for (const v of smtpVars) {
+      if (!data[v as keyof typeof data]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [v],
+          message: `${v} is required in production`,
+        });
+      }
+    }
+    if (!data.DATABASE_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['DATABASE_URL'],
+        message: 'DATABASE_URL is required',
+      });
+    }
+    if (!data.REDIS_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['REDIS_URL'],
+        message: 'REDIS_URL is required',
+      });
+    }
+  }
 });
 
 export type Config = z.infer<typeof configSchema>;

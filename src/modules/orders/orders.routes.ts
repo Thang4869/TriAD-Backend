@@ -16,18 +16,6 @@ const controller = new OrdersController();
 router.use(authMiddleware);
 
 router.get(
-  "/", 
-  validate(getMyOrdersQuerySchema), 
-  controller.getMyOrders.bind(controller)
-);
-
-router.get(
-  "/:orderId", 
-  validate(getOrderParamsSchema), 
-  controller.getMyOrder.bind(controller)
-);
-
-router.get(
   "/admin/all",
   requireAdmin,
   validate(adminGetOrdersQuerySchema),
@@ -38,6 +26,18 @@ router.patch(
   requireAdmin,
   validate(updateOrderStatusSchema),
   controller.adminUpdateStatus.bind(controller),
+);
+
+router.get(
+  "/", 
+  validate(getMyOrdersQuerySchema), 
+  controller.getMyOrders.bind(controller)
+);
+
+router.get(
+  "/:orderId", 
+  validate(getOrderParamsSchema), 
+  controller.getMyOrder.bind(controller)
 );
 
 export { router as orderRoutes };

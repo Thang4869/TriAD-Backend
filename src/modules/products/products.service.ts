@@ -1,6 +1,6 @@
 import prisma from "@core/database/prisma";
 import { Prisma } from "@prisma/client";
-import { NotFoundError } from "@shared/utils/errors";
+import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 
 export class ProductsService {
   async findAll(params: {
@@ -50,7 +50,7 @@ export class ProductsService {
         where,
         orderBy,
         skip,
-        take: limit,
+        take: safeLimit,
         include: {
           reviews: {
             select: {
@@ -75,8 +75,8 @@ export class ProductsService {
       products: productsWithRating,
       total,
       page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
     };
   }
 
@@ -163,5 +163,156 @@ export class ProductsService {
       name: c.category,
       count: c._count.category,
     }));
+  }
+
+  // ---------- Admin methods ----------
+
+  async adminFindAll(params: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    keyword?: string;
+    isActive?: boolean;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+  }) {
+    const {
+      page = 1,
+      limit = 20,
+      category,
+      keyword,
+      isActive,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = params;
+
+    const MAX_LIMIT = 50;
+    const safeLimit = Math.min(limit, MAX_LIMIT);
+    const skip = (page - 1) * safeLimit;
+
+    const where: Prisma.ProductWhereInput = {
+      ...(isActive !== undefined && { isActive }),
+      ...(category && { category }),
+      ...(keyword && {
+        OR: [
+          { name: { contains: keyword, mode: "insensitive" } },
+          { description: { contains: keyword, mode: "insensitive" } },
+        ],
+      }),
+    };
+
+    const orderBy: Prisma.ProductOrderByWithRelationInput = {
+      [sortBy]: sortOrder,
+    };
+
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        orderBy,
+        skip,
+        take: safeLimit,
+      }),
+      prisma.product.count({ where }),
+    ]);
+
+    return {
+      products,
+      total,
+      page,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    };
+  }
+
+  async create(data: {
+    name: string;
+    description: string;
+    price: number;
+    stock: number;
+    category: string;
+    images: string[];
+    slug: string;
+  }) {
+    const existing = await prisma.product.findUnique({
+      where: { slug: data.slug },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new BadRequestError("Slug already exists");
+    }
+
+    return prisma.product.create({
+      data: {
+        ...data,
+        isActive: true,
+      },
+    });
+  }
+
+  async update(
+    id: string,
+    data: Partial<{
+      name: string;
+      description: string;
+      price: number;
+      stock: number;
+      category: string;
+      images: string[];
+      slug: string;
+      isActive: boolean;
+    }>,
+  ) {
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) {
+      throw new NotFoundError("Product not found");
+    }
+
+    if (data.slug && data.slug !== product.slug) {
+      const existing = await prisma.product.findUnique({
+        where: { slug: data.slug },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new BadRequestError("Slug already exists");
+      }
+    }
+
+    return prisma.product.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async delete(id: string) {
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) {
+      throw new NotFoundError("Product not found");
+    }
+
+    if (!product.isActive) {
+      throw new BadRequestError("Product is already deactivated");
+    }
+
+    return prisma.product.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  async restore(id: string) {
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) {
+      throw new NotFoundError("Product not found");
+    }
+
+    if (product.isActive) {
+      throw new BadRequestError("Product is already active");
+    }
+
+    return prisma.product.update({
+      where: { id },
+      data: { isActive: true },
+    });
   }
 }

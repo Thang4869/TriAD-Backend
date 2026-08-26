@@ -1,1 +1,1 @@
-export * from "./query-product.dto";
+export * from "./products.dto";

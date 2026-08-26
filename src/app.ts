@@ -2,25 +2,16 @@ import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import { 
-  json, 
-  urlencoded 
-} from "body-parser";
+import { json, urlencoded } from "body-parser";
 
 import cookieParser from "cookie-parser";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "@config/swagger";
 import config from "@config";
 
-import {
-  rateLimiter,
-  strictRateLimiter,
-} from "@shared/middlewares/rate-limit.middleware";
+import {rateLimiter, strictRateLimiter,} from "@shared/middlewares/rate-limit.middleware";
 
-import {
-  errorHandler,
-  notFoundHandler,
-} from "@shared/middlewares/error-handler.middleware";
+import {errorHandler, notFoundHandler,} from "@shared/middlewares/error-handler.middleware";
 
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
 
@@ -32,6 +23,8 @@ import { checkoutRoutes } from "@modules/checkout/checkout.routes";
 import { orderRoutes } from "@modules/orders/orders.routes";
 import { reviewRoutes } from "@modules/reviews/reviews.routes";
 import { notificationRoutes } from "@modules/notifications/notifications.routes";
+
+import { requestLogger } from '@shared/middlewares/logger.middleware';
 
 const app: Application = express();
 
@@ -82,6 +75,7 @@ app.use(
 );
 
 app.use(compression());
+app.use(requestLogger);
 app.use(cookieParser());
 app.use(json({ limit: "10mb" }));
 app.use(urlencoded({ extended: true, limit: "10mb" }));

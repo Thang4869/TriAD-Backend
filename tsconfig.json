@@ -1,12 +1,11 @@
 {
   "compilerOptions": {
-    "types": ["node", "jest"],
+    "types": ["node"],
     "noImplicitAny": false,
     "target": "ES2022",
     "module": "commonjs",
     "lib": ["ES2022"],
     "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,6 +13,19 @@
     "resolveJsonModule": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
+    //Ngừng việc sử dụng các tính năng cũ của TypeScript
+    //Ngừng việc ghi "baseUrl": ".", vì tùy chọn 'baseUrl' đã lỗi thời và sẽ ngừng hoạt động trong TypeScript 7.0.
+    //Chắc chắn sẽ lỗi khi sử dụng "baseUrl" trong tsconfig.json, vì nó đã bị loại bỏ trong TypeScript 7.0. Thay vào đó, bạn nên sử dụng các đường dẫn tuyệt đối hoặc cấu hình module resolution khác.
+
+    // "baseUrl": ".",
+
+    //Ngừng việc nghe theo hướng dẫn thiết lập tùy chọn trình biên dịch `"ignoreDeprecations": "6.0"` để bỏ qua lỗi 'baseUrl'
+    //Khi sử dụng "baseUrl" và vẫn cố chấp sử dụng thêm "ignoreDeprecations" để bỏ qua lỗi 'baseUrl' thì khi khởi chạy terminal sẽ xuất hiện cảnh báo: 
+    // tsconfig.json:16:27 - error TS5103: Giá trị không hợp lệ cho '--ignoreDeprecations'.
+
+    // "ignoreDeprecations": "6.0",
+
+    //Cho nên việc sử dụng "baseUrl" và "ignoreDeprecations" trong tsconfig.json là không hợp lệ và sẽ gây ra lỗi khi biên dịch TypeScript.
     "paths": {
       "@/*": ["./src/*"],
       "@core/*": ["./src/core/*"],
@@ -24,6 +36,6 @@
     },
     "typeRoots": ["./node_modules/@types", "./src/shared/types"]
   },
-  "include": ["src/**/*.ts"],  
+  "include": ["src/**/*.ts"], 
   "exclude": ["node_modules", "dist"]
 }

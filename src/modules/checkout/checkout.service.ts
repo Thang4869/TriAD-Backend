@@ -1,20 +1,24 @@
 import prisma from "@core/database/prisma";
-import { redis } from "@core/redis/client";
+import redis from "@core/redis/client";
 import { emailQueue } from "@core/queue/bull";
+import { EmailService } from '@shared/services/email.service';
+import { Prisma } from "@prisma/client";
+
 import {
   NotFoundError,
   BadRequestError,
   ConflictError,
 } from "@shared/utils/errors";
-import { Prisma } from "@prisma/client";
 
 export class CheckoutService {
-  private readonly IDEMPOTENCY_TTL = parseInt(
-    process.env.IDEMPOTENCY_TTL || "86400",
-    10,
-  );
+  private readonly IDEMPOTENCY_TTL = parseInt(process.env.IDEMPOTENCY_TTL || "86400", 10,);
   private readonly MAX_RETRIES = 5;
   private readonly BASE_DELAY_MS = 100;
+  private readonly emailService: EmailService;
+  
+  constructor(emailService?: EmailService) {
+    this.emailService = emailService || new EmailService();
+  }
 
   async checkout(
     userId: string,
@@ -192,6 +196,16 @@ export class CheckoutService {
         })),
       },
     });
+
+    await this.emailService.sendOrderConfirmation(
+      { email: user.email },
+      { orderNumber: result.orderNumber, total: result.total },
+      cartItems.map(item => ({
+        product: { name: item.product.name },
+        quantity: item.quantity,
+        price: item.product.price,
+      }))
+    );
 
     return { order: result, idempotent: false };
   }

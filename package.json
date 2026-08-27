@@ -4,7 +4,7 @@
   "description": "TriAD E-Commerce Backend API",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc && tsc-alias",
+    "build": "tsc -p tsconfig.build.json && tsc-alias",
     "start": "node dist/server.js",
     "dev": "cross-env TS_NODE_BASEURL=./ kill-port 5000 && cross-env TS_NODE_BASEURL=./ nodemon --exec ts-node -r tsconfig-paths/register src/server.ts",
     "test": "vitest --run --no-file-parallelism",

@@ -1,31 +1,19 @@
-import prisma from "@core/database/prisma";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import {
+  IReviewsRepository,
+  PrismaReviewsRepository,
+} from "./reviews.repository";
 
 export class ReviewsService {
-  async getReviewsByProduct(
-    productId: string,
-    page: number = 1,
-    limit: number = 10,
-  ) {
+  constructor(
+    private readonly repository: IReviewsRepository = new PrismaReviewsRepository(),
+  ) {}
+
+  async getReviewsByProduct(productId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
     const [reviews, total] = await Promise.all([
-      prisma.review.findMany({
-        where: { productId },
-        include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.review.count({ where: { productId } }),
+      this.repository.findByProduct(productId, skip, limit),
+      this.repository.countByProduct(productId),
     ]);
 
     return {
@@ -43,53 +31,29 @@ export class ReviewsService {
     rating: number,
     content: string,
   ) {
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    });
-    if (!product) {
+    const exists = await this.repository.productExists(productId);
+    if (!exists) {
       throw new NotFoundError("Product not found");
     }
 
-    const existing = await prisma.review.findFirst({
-      where: {
-        userId,
-        productId,
-      },
-    });
+    const existing = await this.repository.findByUserAndProduct(
+      userId,
+      productId,
+    );
     if (existing) {
       throw new BadRequestError("You have already reviewed this product");
     }
 
-    const review = await prisma.review.create({
-      data: {
-        userId,
-        productId,
-        rating,
-        comment: content,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
+    return this.repository.create({
+      userId,
+      productId,
+      rating,
+      comment: content,
     });
-
-    return review;
   }
 
-  async deleteReview(
-    reviewId: string,
-    userId: string,
-    isAdmin: boolean = false,
-  ) {
-    const review = await prisma.review.findUnique({
-      where: { id: reviewId },
-    });
+  async deleteReview(reviewId: string, userId: string, isAdmin = false) {
+    const review = await this.repository.findById(reviewId);
     if (!review) {
       throw new NotFoundError("Review not found");
     }
@@ -98,39 +62,15 @@ export class ReviewsService {
       throw new BadRequestError("You are not authorized to delete this review");
     }
 
-    await prisma.review.delete({
-      where: { id: reviewId },
-    });
-
+    await this.repository.delete(reviewId);
     return { deleted: true };
   }
 
-  async adminGetAll(page: number = 1, limit: number = 10) {
+  async adminGetAll(page = 1, limit = 10) {
     const skip = (page - 1) * limit;
     const [reviews, total] = await Promise.all([
-      prisma.review.findMany({
-        include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-          product: {
-            select: {
-              id: true,
-              name: true,
-              images: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.review.count(),
+      this.repository.findAllAdmin(skip, limit),
+      this.repository.count(),
     ]);
 
     return {

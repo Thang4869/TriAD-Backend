@@ -3,61 +3,61 @@ import { OrdersService } from "./orders.service";
 import { ForbiddenError } from "@shared/utils/errors";
 import { OrderStatus } from "@prisma/client";
 
-const ordersService = new OrdersService();
-
 export class OrdersController {
-  async getMyOrders(req: Request, res: Response, next: NextFunction) {
+  constructor(
+    private readonly service: OrdersService = new OrdersService(),
+  ) {}
+
+  getMyOrders = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id;
       const page = req.query.page ? Number(req.query.page) : 1;
       const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const result = await ordersService.getOrders(userId, page, limit);
-      res.json({
-        success: true,
-        data: result,
-      });
+      const result = await this.service.getOrders(userId, page, limit);
+      res.json({ success: true, data: result });
     } catch (error) {
       next(error);
     }
-  }
+  };
 
-  async getMyOrder(req: Request, res: Response, next: NextFunction) {
+  getMyOrder = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id;
       const { orderId } = req.params;
-      const order = await ordersService.getOrderById(orderId, userId);
-      res.json({
-        success: true,
-        data: order,
-      });
+      const order = await this.service.getOrderById(orderId, userId);
+      res.json({ success: true, data: order });
     } catch (error) {
       next(error);
     }
-  }
+  };
 
-  async adminGetOrders(req: Request, res: Response, next: NextFunction) {
+  adminGetOrders = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (req.user?.role !== "ADMIN") {
         throw new ForbiddenError("Admin access required");
       }
-      const { status, userId } = req.query;
+      const { status, userId } = req.query as {
+        status?: OrderStatus;
+        userId?: string;
+      };
       const page = req.query.page ? Number(req.query.page) : 1;
       const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const result = await ordersService.adminGetOrders(
+      const result = await this.service.adminGetOrders(
         { status, userId },
         page,
         limit,
       );
-      res.json({
-        success: true,
-        data: result,
-      });
+      res.json({ success: true, data: result });
     } catch (error) {
       next(error);
     }
-  }
+  };
 
-  async adminUpdateStatus(req: Request, res: Response, next: NextFunction) {
+  adminUpdateStatus = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
     try {
       if (req.user?.role !== "ADMIN") {
         throw new ForbiddenError("Admin access required");
@@ -65,17 +65,12 @@ export class OrdersController {
       const { orderId } = req.params;
       const { status } = req.body;
       if (!status || !Object.values(OrderStatus).includes(status)) {
-        return res
-          .status(400)
-          .json({ success: false, error: "Invalid status" });
+        return res.status(400).json({ success: false, error: "Invalid status" });
       }
-      const updated = await ordersService.updateOrderStatus(orderId, status);
-      res.json({
-        success: true,
-        data: updated,
-      });
+      const updated = await this.service.updateOrderStatus(orderId, status);
+      res.json({ success: true, data: updated });
     } catch (error) {
       next(error);
     }
-  }
+  };
 }

@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from "express";
-import { ProductsService } from "./products.service";
-
-const productsService = new ProductsService();
+import { IProductsService, ProductsService } from "./products.service";
 
 export class ProductsController {
-  async getAll(req: Request, res: Response, next: NextFunction) {
+  constructor(
+    private readonly service: IProductsService = new ProductsService(),
+  ) {}
+
+  getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const {
         page,
@@ -17,7 +19,7 @@ export class ProductsController {
         sortOrder,
       } = req.query;
 
-      const result = await productsService.findAll({
+      const result = await this.service.findAll({
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
         category: category as string,
@@ -28,61 +30,49 @@ export class ProductsController {
         sortOrder: sortOrder as "asc" | "desc" | undefined,
       });
 
-      res.json({
-        success: true,
-        data: result,
-      });
+      res.json({ success: true, data: result });
     } catch (error) {
       next(error);
     }
-  }
+  };
 
-  async getById(req: Request, res: Response, next: NextFunction) {
+  getById = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const product = await productsService.findById(id);
-      res.json({
-        success: true,
-        data: product,
-      });
+      const product = await this.service.findById(id);
+      res.json({ success: true, data: product });
     } catch (error) {
       next(error);
     }
-  }
+  };
 
-  async getBySlug(req: Request, res: Response, next: NextFunction) {
+  getBySlug = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { slug } = req.params;
-      const product = await productsService.getBySlug(slug);
-      res.json({
-        success: true,
-        data: product,
-      });
+      const product = await this.service.getBySlug(slug);
+      res.json({ success: true, data: product });
     } catch (error) {
       next(error);
     }
-  }
+  };
 
-  async getCategories(req: Request, res: Response, next: NextFunction) {
+  getCategories = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const categories = await productsService.getCategories();
-      res.json({
-        success: true,
-        data: categories,
-      });
+      const categories = await this.service.getCategories();
+      res.json({ success: true, data: categories });
     } catch (error) {
       next(error);
     }
-  }
+  };
 
   // ---------- Admin ----------
 
-  async adminGetAll(req: Request, res: Response, next: NextFunction) {
+  adminGetAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { page, limit, category, keyword, isActive, sortBy, sortOrder } =
         req.query as Record<string, string | undefined>;
 
-      const result = await productsService.adminFindAll({
+      const result = await this.service.adminFindAll({
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
         category,
@@ -92,44 +82,35 @@ export class ProductsController {
         sortOrder: sortOrder as "asc" | "desc" | undefined,
       });
 
-      res.json({
-        success: true,
-        data: result,
-      });
+      res.json({ success: true, data: result });
     } catch (error) {
       next(error);
     }
-  }
+  };
 
-  async adminCreate(req: Request, res: Response, next: NextFunction) {
+  adminCreate = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const product = await productsService.create(req.body);
-      res.status(201).json({
-        success: true,
-        data: product,
-      });
+      const product = await this.service.create(req.body);
+      res.status(201).json({ success: true, data: product });
     } catch (error) {
       next(error);
     }
-  }
+  };
 
-  async adminUpdate(req: Request, res: Response, next: NextFunction) {
+  adminUpdate = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const product = await productsService.update(id, req.body);
-      res.json({
-        success: true,
-        data: product,
-      });
+      const product = await this.service.update(id, req.body);
+      res.json({ success: true, data: product });
     } catch (error) {
       next(error);
     }
-  }
+  };
 
-  async adminDelete(req: Request, res: Response, next: NextFunction) {
+  adminDelete = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const product = await productsService.delete(id);
+      const product = await this.service.delete(id);
       res.json({
         success: true,
         message: "Product deactivated successfully",
@@ -138,12 +119,12 @@ export class ProductsController {
     } catch (error) {
       next(error);
     }
-  }
+  };
 
-  async adminRestore(req: Request, res: Response, next: NextFunction) {
+  adminRestore = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const product = await productsService.restore(id);
+      const product = await this.service.restore(id);
       res.json({
         success: true,
         message: "Product reactivated successfully",
@@ -152,5 +133,5 @@ export class ProductsController {
     } catch (error) {
       next(error);
     }
-  }
+  };
 }

@@ -1,217 +1,194 @@
-import prisma from "@core/database/prisma";
-import redis from "@core/redis/client";
 import { emailQueue } from "@core/queue/bull";
-import { EmailService } from '@shared/services/email.service';
-import { Prisma } from "@prisma/client";
-
+import { EmailService } from "@shared/services/email.service";
+import { NotFoundError, BadRequestError, ConflictError } from "@shared/utils/errors";
 import {
-  NotFoundError,
-  BadRequestError,
-  ConflictError,
-} from "@shared/utils/errors";
+  ICheckoutRepository,
+  PrismaCheckoutRepository,
+  TxClient,
+  CreateOrderData,
+} from "./checkout.repository";
+
+const IDEMPOTENCY_TTL = parseInt(process.env.IDEMPOTENCY_TTL || "86400", 10);
+const MAX_RETRIES = 5;
+const BASE_DELAY_MS = 100;
+const FREE_SHIPPING_THRESHOLD = 500_000;
+const SHIPPING_FEE = 30_000;
+const TAX_RATE = 0.1;
+
+export interface CheckoutInput {
+  idempotencyKey: string;
+  paymentMethod: "COD" | "CARD" | "BANKING";
+  address: string;
+  phone: string;
+  notes?: string;
+  discountCode?: string;
+}
 
 export class CheckoutService {
-  private readonly IDEMPOTENCY_TTL = parseInt(process.env.IDEMPOTENCY_TTL || "86400", 10,);
-  private readonly MAX_RETRIES = 5;
-  private readonly BASE_DELAY_MS = 100;
-  private readonly emailService: EmailService;
-  
-  constructor(emailService?: EmailService) {
-    this.emailService = emailService || new EmailService();
-  }
+  constructor(
+    private readonly repository: ICheckoutRepository = new PrismaCheckoutRepository(),
+    private readonly emailService: EmailService = new EmailService(),
+  ) {}
 
-  async checkout(
-    userId: string,
-    {
-      idempotencyKey,
-      paymentMethod,
-      address,
-      phone,
-      notes,
-      discountCode,
-    }: {
-      idempotencyKey: string;
-      paymentMethod: "COD" | "CARD" | "BANKING";
-      address: string;
-      phone: string;
-      notes?: string;
-      discountCode?: string;
-    },
-  ) {
-    if (idempotencyKey) {
-      const cached = await redis.get(`idempotent:${idempotencyKey}`);
-      if (cached) {
-        const orderId = JSON.parse(cached);
-        const order = await prisma.order.findUnique({
-          where: { id: orderId },
-          include: { items: { include: { product: true } } },
-        });
-        if (order) {
-          return { order, idempotent: true };
-        }
-      }
+  async checkout(userId: string, input: CheckoutInput) {
+    const idempotentResult = await this.tryReturnIdempotentOrder(input.idempotencyKey);
+    if (idempotentResult) {
+      return idempotentResult;
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        cart: {
-          include: {
-            items: {
-              include: {
-                product: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
+    const user = await this.repository.findUserCartForCheckout(userId);
     if (!user || !user.cart || user.cart.items.length === 0) {
       throw new BadRequestError("Cart is empty");
     }
 
     const cartItems = user.cart.items;
-
     const subtotal = cartItems.reduce(
       (sum, item) => sum + item.product.price * item.quantity,
       0,
     );
 
-    const result = await this.executeWithRetry(async (tx) => {
-      const productIds = cartItems.map((item) => item.productId);
-      const products = await tx.$queryRaw<any[]>`
-        SELECT id, stock, version, name, price 
-        FROM products 
-        WHERE id = ANY(${productIds})
-        FOR UPDATE
-      `;
-
-      const productMap = new Map(
-        products.map((p) => [p.id, p])
-      );
-
-      for (const item of cartItems) {
-        const product = productMap.get(item.productId);
-        if (!product) {
-          throw new NotFoundError(`Product ${item.productId} not found`);
-        }
-        if (product.stock < item.quantity) {
-          throw new BadRequestError(
-            `Not enough stock for ${product.name}. Available: ${product.stock}`,
-          );
-        }
-      }
-
-      for (const item of cartItems) {
-        const product = productMap.get(item.productId);
-        const updateResult = await tx.product.updateMany({
-          where: {
-            id: item.productId,
-            version: product.version,
-          },
-          data: {
-            stock: { decrement: item.quantity },
-            version: { increment: 1 },
-          },
-        });
-
-        if (updateResult.count === 0) {
-          throw new ConflictError(
-            `Stock conflict for product ${item.productId}. Please retry.`
-          );
-        }
-      }
+    const order = await this.executeWithRetry(async (tx) => {
+      await this.reserveStock(tx, cartItems);
 
       const discountAmount = await this.applyDiscount(
         tx,
-        discountCode,
+        input.discountCode,
         subtotal,
       );
 
-      const tax = subtotal * 0.1;
-      const shippingFee = subtotal > 500000 ? 0 : 30000;
+      const tax = subtotal * TAX_RATE;
+      const shippingFee = subtotal > FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE;
       const total = Math.max(0, subtotal + tax + shippingFee - discountAmount);
 
-      const orderData = {
+      const orderData: CreateOrderData = {
         orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
         userId,
-        status: "PENDING" as const,
-        paymentMethod,
-        paymentStatus: "PENDING" as const,
+        status: "PENDING",
+        paymentMethod: input.paymentMethod,
+        paymentStatus: "PENDING",
         subtotal,
         tax,
         shippingFee,
         total,
         discountAmount,
-        discountCode: discountAmount > 0 ? discountCode : undefined,
+        discountCode: discountAmount > 0 ? input.discountCode : undefined,
         customerName: `${user.firstName} ${user.lastName}`,
         customerEmail: user.email,
-        customerPhone: phone || user.phone || "",
-        customerAddress: address,
-        notes,
-        idempotencyKey,
+        customerPhone: input.phone || user.phone || "",
+        customerAddress: input.address,
+        notes: input.notes,
+        idempotencyKey: input.idempotencyKey,
       };
 
-      const newOrder = await tx.order.create({
-        data: orderData,
-      });
+      const newOrder = await this.repository.createOrder(tx, orderData);
 
-      await tx.orderItem.createMany({
-        data: cartItems.map((item) => ({
+      await this.repository.createOrderItems(
+        tx,
+        cartItems.map((item) => ({
           orderId: newOrder.id,
           productId: item.productId,
           quantity: item.quantity,
           price: item.product.price,
           total: item.product.price * item.quantity,
         })),
-      });
+      );
 
-      await tx.cartItem.deleteMany({
-        where: { cartId: user.cart!.id },
-      });
+      await this.repository.clearCartItems(tx, user.cart!.id);
 
       return newOrder;
     });
 
-    if (idempotencyKey) {
-      await redis.setex(
-        `idempotent:${idempotencyKey}`,
-        this.IDEMPOTENCY_TTL,
-        JSON.stringify(result.id),
+    if (input.idempotencyKey) {
+      await this.repository.cacheOrderId(
+        input.idempotencyKey,
+        order.id,
+        IDEMPOTENCY_TTL,
       );
     }
 
-    await emailQueue.add("order-confirmation", {
-      to: user.email,
-      subject: `Order #${result.orderNumber} Confirmed`,
-      template: "order-confirmation",
-      data: {
-        orderNumber: result.orderNumber,
-        total: result.total,
-        items: cartItems.map((item) => ({
-          name: item.product.name,
-          quantity: item.quantity,
-          price: item.product.price,
-        })),
-      },
-    });
+    await this.notifyOrderConfirmation(user.email, order, cartItems);
 
-    await this.emailService.sendOrderConfirmation(
-      { email: user.email },
-      { orderNumber: result.orderNumber, total: result.total },
-      cartItems.map(item => ({
-        product: { name: item.product.name },
-        quantity: item.quantity,
-        price: item.product.price,
-      }))
+    return { order, idempotent: false };
+  }
+
+  async getOrder(orderId: string, userId: string) {
+    const order = await this.repository.findOrderByUserAndId(orderId, userId);
+    if (!order) {
+      throw new NotFoundError("Order not found");
+    }
+    return order;
+  }
+
+  async getOrders(userId: string, page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+
+    const [orders, total] = await Promise.all([
+      this.repository.findOrdersByUser(userId, skip, limit),
+      this.repository.countOrdersByUser(userId),
+    ]);
+
+    return {
+      orders,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  // ---------- Private orchestration helpers ----------
+
+  private async tryReturnIdempotentOrder(idempotencyKey: string) {
+    if (!idempotencyKey) return null;
+
+    const cachedOrderId = await this.repository.findCachedOrderId(idempotencyKey);
+    if (!cachedOrderId) return null;
+
+    const order = await this.repository.findOrderWithItems(cachedOrderId);
+    return order ? { order, idempotent: true } : null;
+  }
+
+  private async reserveStock(
+    tx: TxClient,
+    cartItems: { productId: string; quantity: number }[],
+  ): Promise<void> {
+    const productIds = cartItems.map((item) => item.productId);
+    const lockedProducts = await this.repository.lockProductsForUpdate(
+      tx,
+      productIds,
     );
+    const productMap = new Map(lockedProducts.map((p) => [p.id, p]));
 
-    return { order: result, idempotent: false };
+    for (const item of cartItems) {
+      const product = productMap.get(item.productId);
+      if (!product) {
+        throw new NotFoundError(`Product ${item.productId} not found`);
+      }
+      if (product.stock < item.quantity) {
+        throw new BadRequestError(
+          `Not enough stock for ${product.name}. Available: ${product.stock}`,
+        );
+      }
+    }
+
+    for (const item of cartItems) {
+      const product = productMap.get(item.productId)!;
+      const success = await this.repository.decrementProductStock(
+        tx,
+        item.productId,
+        product.version,
+        item.quantity,
+      );
+      if (!success) {
+        throw new ConflictError(
+          `Stock conflict for product ${item.productId}. Please retry.`,
+        );
+      }
+    }
   }
 
   private async applyDiscount(
-    tx: Prisma.TransactionClient,
+    tx: TxClient,
     discountCode: string | undefined,
     subtotal: number,
   ): Promise<number> {
@@ -219,9 +196,7 @@ export class CheckoutService {
       return 0;
     }
 
-    const discount = await (tx as any).discount.findUnique({
-      where: { code: discountCode },
-    });
+    const discount = await this.repository.findDiscountByCode(tx, discountCode);
 
     if (!discount || !discount.isActive) {
       throw new BadRequestError("Invalid or inactive discount code");
@@ -231,26 +206,18 @@ export class CheckoutService {
       throw new BadRequestError("Discount code has expired");
     }
 
-    if (
-      discount.minOrderAmount != null &&
-      subtotal < discount.minOrderAmount
-    ) {
+    if (discount.minOrderAmount != null && subtotal < discount.minOrderAmount) {
       throw new BadRequestError(
         `Order must be at least ${discount.minOrderAmount} to use this discount code`,
       );
     }
 
-    const updateResult = await (tx as any).discount.updateMany({
-      where: {
-        id: discount.id,
-        ...(discount.maxUses != null
-          ? { usedCount: { lt: discount.maxUses } }
-          : {}),
-      },
-      data: { usedCount: { increment: 1 } },
-    });
-
-    if (updateResult.count === 0) {
+    const success = await this.repository.incrementDiscountUsage(
+      tx,
+      discount.id,
+      discount.maxUses,
+    );
+    if (!success) {
       throw new ConflictError(
         "Discount code just reached its usage limit. Please retry.",
       );
@@ -264,24 +231,21 @@ export class CheckoutService {
     return Math.min(rawAmount, subtotal);
   }
 
+  /**
+   * Retries the whole transaction on optimistic-lock conflicts, using
+   * exponential backoff. Retry policy is a business/orchestration decision,
+   * so it stays in the service; the transaction mechanics themselves live
+   * in the repository.
+   */
   private async executeWithRetry<T>(
-    operation: (tx: Prisma.TransactionClient) => Promise<T>,
-    retryCount: number = 0,
+    operation: (tx: TxClient) => Promise<T>,
+    retryCount = 0,
   ): Promise<T> {
     try {
-      return await prisma.$transaction(
-        async (tx) => operation(tx),
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-          timeout: 10000,
-        },
-      );
+      return await this.repository.runInTransaction(operation);
     } catch (error) {
-      if (
-        error instanceof ConflictError &&
-        retryCount < this.MAX_RETRIES
-      ) {
-        const delay = this.BASE_DELAY_MS * Math.pow(2, retryCount);
+      if (error instanceof ConflictError && retryCount < MAX_RETRIES) {
+        const delay = BASE_DELAY_MS * Math.pow(2, retryCount);
         await new Promise((resolve) => setTimeout(resolve, delay));
         return this.executeWithRetry(operation, retryCount + 1);
       }
@@ -289,67 +253,34 @@ export class CheckoutService {
     }
   }
 
-  async getOrder(orderId: string, userId: string) {
-    const order = await prisma.order.findFirst({
-      where: {
-        id: orderId,
-        userId,
-      },
-      include: {
-        items: {
-          include: {
-            product: {
-              select: {
-                id: true,
-                name: true,
-                images: true,
-                slug: true,
-              },
-            },
-          },
-        },
+  private async notifyOrderConfirmation(
+    email: string,
+    order: { orderNumber: string; total: number },
+    cartItems: { product: { name: string; price: number }; quantity: number }[],
+  ): Promise<void> {
+    await emailQueue.add("order-confirmation", {
+      to: email,
+      subject: `Order #${order.orderNumber} Confirmed`,
+      template: "order-confirmation",
+      data: {
+        orderNumber: order.orderNumber,
+        total: order.total,
+        items: cartItems.map((item) => ({
+          name: item.product.name,
+          quantity: item.quantity,
+          price: item.product.price,
+        })),
       },
     });
 
-    if (!order) {
-      throw new NotFoundError("Order not found");
-    }
-
-    return order;
-  }
-
-  async getOrders(userId: string, page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
-
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        where: { userId },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-        include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  name: true,
-                  images: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-      prisma.order.count({ where: { userId } }),
-    ]);
-
-    return {
-      orders,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    await this.emailService.sendOrderConfirmation(
+      { email },
+      { orderNumber: order.orderNumber, total: order.total },
+      cartItems.map((item) => ({
+        product: { name: item.product.name },
+        quantity: item.quantity,
+        price: item.product.price,
+      })),
+    );
   }
 }

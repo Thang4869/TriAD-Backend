@@ -1,21 +1,70 @@
-import prisma from "@core/database/prisma";
 import { Prisma } from "@prisma/client";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import {
+  IProductsRepository,
+  PrismaProductsRepository,
+  CreateProductData,
+  UpdateProductData,
+} from "./products.repository";
 
-export class ProductsService {
-  async findAll(params: {
-    page?: number;
-    limit?: number;
-    category?: string;
-    minPrice?: number;
-    maxPrice?: number;
-    keyword?: string;
-    sortBy?: string;
-    sortOrder?: "asc" | "desc";
-  }) {
+const MAX_PAGE_LIMIT = 50;
+const DEFAULT_PUBLIC_LIMIT = 12;
+const DEFAULT_ADMIN_LIMIT = 20;
+
+export interface FindProductsParams {
+  page?: number;
+  limit?: number;
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  keyword?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+
+export interface AdminFindProductsParams {
+  page?: number;
+  limit?: number;
+  category?: string;
+  keyword?: string;
+  isActive?: boolean;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+
+export interface IProductsService {
+  findAll(params: FindProductsParams): Promise<unknown>;
+  findById(id: string): Promise<unknown>;
+  getBySlug(slug: string): Promise<unknown>;
+  getCategories(): Promise<unknown>;
+  adminFindAll(params: AdminFindProductsParams): Promise<unknown>;
+  create(data: CreateProductData): Promise<unknown>;
+  update(id: string, data: UpdateProductData): Promise<unknown>;
+  delete(id: string): Promise<unknown>;
+  restore(id: string): Promise<unknown>;
+}
+
+function calculateAvgRating(reviews: { rating: number }[]): number {
+  if (reviews.length === 0) return 0;
+  const sum = reviews.reduce((total, review) => total + review.rating, 0);
+  return sum / reviews.length;
+}
+
+function buildPagination(page: number, limit: number, cap = MAX_PAGE_LIMIT) {
+  const safeLimit = Math.min(limit, cap);
+  const skip = (page - 1) * safeLimit;
+  return { safeLimit, skip };
+}
+
+export class ProductsService implements IProductsService {
+  constructor(
+    private readonly repository: IProductsRepository = new PrismaProductsRepository(),
+  ) {}
+
+  async findAll(params: FindProductsParams) {
     const {
       page = 1,
-      limit = 12,
+      limit = DEFAULT_PUBLIC_LIMIT,
       category,
       minPrice,
       maxPrice,
@@ -24,9 +73,7 @@ export class ProductsService {
       sortOrder = "desc",
     } = params;
 
-    const MAX_LIMIT = 50;
-    const safeLimit = Math.min(limit, MAX_LIMIT);
-    const skip = (page - 1) * safeLimit;
+    const { safeLimit, skip } = buildPagination(page, limit);
 
     const where: Prisma.ProductWhereInput = {
       isActive: true,
@@ -46,29 +93,19 @@ export class ProductsService {
     };
 
     const [products, total] = await Promise.all([
-      prisma.product.findMany({
+      this.repository.findManyWithRatings({
         where,
         orderBy,
         skip,
         take: safeLimit,
-        include: {
-          reviews: {
-            select: {
-              rating: true,
-            },
-          },
-        },
       }),
-      prisma.product.count({ where }),
+      this.repository.count(where),
     ]);
 
-    const productsWithRating = products.map((p) => ({
-      ...p,
-      avgRating:
-        p.reviews.length > 0
-          ? p.reviews.reduce((sum, r) => sum + r.rating, 0) / p.reviews.length
-          : 0,
-      reviewCount: p.reviews.length,
+    const productsWithRating = products.map((product) => ({
+      ...product,
+      avgRating: calculateAvgRating(product.reviews),
+      reviewCount: product.reviews.length,
     }));
 
     return {
@@ -81,104 +118,42 @@ export class ProductsService {
   }
 
   async findById(id: string) {
-    const product = await prisma.product.findUnique({
-      where: { id },
-      include: {
-        reviews: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    });
-
+    const product = await this.repository.findByIdWithReviews(id);
     if (!product) {
       throw new NotFoundError("Product not found");
     }
 
-    const avgRating =
-      product.reviews.length > 0
-        ? product.reviews.reduce((sum, r) => sum + r.rating, 0) /
-          product.reviews.length
-        : 0;
-
     return {
       ...product,
-      avgRating,
+      avgRating: calculateAvgRating(product.reviews),
       reviewCount: product.reviews.length,
     };
   }
 
   async getBySlug(slug: string) {
-    const product = await prisma.product.findUnique({
-      where: { slug },
-      include: {
-        reviews: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    });
-
+    const product = await this.repository.findBySlugWithReviews(slug);
     if (!product) {
       throw new NotFoundError("Product not found");
     }
 
-    const avgRating =
-      product.reviews.length > 0
-        ? product.reviews.reduce((sum, r) => sum + r.rating, 0) /
-          product.reviews.length
-        : 0;
-
     return {
       ...product,
-      avgRating,
+      avgRating: calculateAvgRating(product.reviews),
       reviewCount: product.reviews.length,
     };
   }
 
   async getCategories() {
-    const categories = await prisma.product.groupBy({
-      by: ["category"],
-      where: { isActive: true },
-      _count: { category: true },
-    });
-    return categories.map((c) => ({
-      name: c.category,
-      count: c._count.category,
-    }));
+    const categories = await this.repository.groupByCategory();
+    return categories.map((c) => ({ name: c.category, count: c.count }));
   }
 
   // ---------- Admin methods ----------
 
-  async adminFindAll(params: {
-    page?: number;
-    limit?: number;
-    category?: string;
-    keyword?: string;
-    isActive?: boolean;
-    sortBy?: string;
-    sortOrder?: "asc" | "desc";
-  }) {
+  async adminFindAll(params: AdminFindProductsParams) {
     const {
       page = 1,
-      limit = 20,
+      limit = DEFAULT_ADMIN_LIMIT,
       category,
       keyword,
       isActive,
@@ -186,9 +161,7 @@ export class ProductsService {
       sortOrder = "desc",
     } = params;
 
-    const MAX_LIMIT = 50;
-    const safeLimit = Math.min(limit, MAX_LIMIT);
-    const skip = (page - 1) * safeLimit;
+    const { safeLimit, skip } = buildPagination(page, limit);
 
     const where: Prisma.ProductWhereInput = {
       ...(isActive !== undefined && { isActive }),
@@ -206,13 +179,8 @@ export class ProductsService {
     };
 
     const [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where,
-        orderBy,
-        skip,
-        take: safeLimit,
-      }),
-      prisma.product.count({ where }),
+      this.repository.findManyAdmin({ where, orderBy, skip, take: safeLimit }),
+      this.repository.count(where),
     ]);
 
     return {
@@ -224,95 +192,49 @@ export class ProductsService {
     };
   }
 
-  async create(data: {
-    name: string;
-    description: string;
-    price: number;
-    stock: number;
-    category: string;
-    images: string[];
-    slug: string;
-  }) {
-    const existing = await prisma.product.findUnique({
-      where: { slug: data.slug },
-      select: { id: true },
-    });
-
+  async create(data: CreateProductData) {
+    const existing = await this.repository.findBySlugId(data.slug);
     if (existing) {
       throw new BadRequestError("Slug already exists");
     }
-
-    return prisma.product.create({
-      data: {
-        ...data,
-        isActive: true,
-      },
-    });
+    return this.repository.create(data);
   }
 
-  async update(
-    id: string,
-    data: Partial<{
-      name: string;
-      description: string;
-      price: number;
-      stock: number;
-      category: string;
-      images: string[];
-      slug: string;
-      isActive: boolean;
-    }>,
-  ) {
-    const product = await prisma.product.findUnique({ where: { id } });
+  async update(id: string, data: UpdateProductData) {
+    const product = await this.repository.findById(id);
     if (!product) {
       throw new NotFoundError("Product not found");
     }
 
     if (data.slug && data.slug !== product.slug) {
-      const existing = await prisma.product.findUnique({
-        where: { slug: data.slug },
-        select: { id: true },
-      });
+      const existing = await this.repository.findBySlugId(data.slug);
       if (existing) {
         throw new BadRequestError("Slug already exists");
       }
     }
 
-    return prisma.product.update({
-      where: { id },
-      data,
-    });
+    return this.repository.update(id, data);
   }
 
   async delete(id: string) {
-    const product = await prisma.product.findUnique({ where: { id } });
+    const product = await this.repository.findById(id);
     if (!product) {
       throw new NotFoundError("Product not found");
     }
-
     if (!product.isActive) {
       throw new BadRequestError("Product is already deactivated");
     }
-
-    return prisma.product.update({
-      where: { id },
-      data: { isActive: false },
-    });
+    return this.repository.setActive(id, false);
   }
 
   async restore(id: string) {
-    const product = await prisma.product.findUnique({ where: { id } });
+    const product = await this.repository.findById(id);
     if (!product) {
       throw new NotFoundError("Product not found");
     }
-
     if (product.isActive) {
       throw new BadRequestError("Product is already active");
     }
-
-    return prisma.product.update({
-      where: { id },
-      data: { isActive: true },
-    });
+    return this.repository.setActive(id, true);
   }
 }

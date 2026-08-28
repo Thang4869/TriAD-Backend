@@ -6,6 +6,7 @@ import {
   CreateProductData,
   UpdateProductData,
 } from "./products.repository";
+import { toProductListResponse, toProductDetailResponse } from "./products.mapper";
 
 const MAX_PAGE_LIMIT = 50;
 const DEFAULT_PUBLIC_LIMIT = 12;
@@ -109,7 +110,7 @@ export class ProductsService implements IProductsService {
     }));
 
     return {
-      products: productsWithRating,
+      products: toProductListResponse(productsWithRating),
       total,
       page,
       limit: safeLimit,
@@ -123,11 +124,11 @@ export class ProductsService implements IProductsService {
       throw new NotFoundError("Product not found");
     }
 
-    return {
+    return toProductDetailResponse({
       ...product,
       avgRating: calculateAvgRating(product.reviews),
       reviewCount: product.reviews.length,
-    };
+    });
   }
 
   async getBySlug(slug: string) {
@@ -136,11 +137,11 @@ export class ProductsService implements IProductsService {
       throw new NotFoundError("Product not found");
     }
 
-    return {
+    return toProductDetailResponse({
       ...product,
       avgRating: calculateAvgRating(product.reviews),
       reviewCount: product.reviews.length,
-    };
+    });
   }
 
   async getCategories() {

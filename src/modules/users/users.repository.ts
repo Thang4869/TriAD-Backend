@@ -27,10 +27,7 @@ export interface UpdateProfileData {
 export interface IUsersRepository {
   findProfileById(userId: string): Promise<UserProfile | null>;
   findById(userId: string): Promise<User | null>;
-  updateProfile(
-    userId: string,
-    data: UpdateProfileData,
-  ): Promise<UserProfile>;
+  updateProfile(userId: string, data: UpdateProfileData): Promise<UserProfile>;
   updatePassword(userId: string, hashedPassword: string): Promise<void>;
 }
 
@@ -48,10 +45,7 @@ export class PrismaUsersRepository implements IUsersRepository {
     return prisma.user.findUnique({ where: { id: userId } });
   }
 
-  async updateProfile(
-    userId: string,
-    data: UpdateProfileData,
-  ): Promise<UserProfile> {
+  async updateProfile(userId: string, data: UpdateProfileData): Promise<UserProfile> {
     return prisma.user.update({
       where: { id: userId },
       data: {

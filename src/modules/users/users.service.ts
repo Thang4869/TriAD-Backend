@@ -1,61 +1,34 @@
 import bcrypt from "bcrypt";
-import prisma from "@core/database/prisma";
-import { BadRequestError, NotFoundError } from "@shared/utils/errors";
+import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import {
+  IUsersRepository,
+  PrismaUsersRepository,
+  UpdateProfileData,
+} from "@modules/users/users.repository";
 
 export class UsersService {
+  constructor(
+    private readonly repository: IUsersRepository = new PrismaUsersRepository(),
+  ) {}
+
   async getProfile(userId: string) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-        role: true,
-        isVerified: true,
-        is2FAEnabled: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    const user = await this.repository.findProfileById(userId);
     if (!user) {
       throw new NotFoundError("User not found");
     }
     return user;
   }
 
-  async updateProfile(userId: string, data: { firstName?: string; lastName?: string; phone?: string }) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+  async updateProfile(userId: string, data: UpdateProfileData) {
+    const user = await this.repository.findById(userId);
     if (!user) {
       throw new NotFoundError("User not found");
     }
-
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phone: data.phone,
-      },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-        role: true,
-        isVerified: true,
-        is2FAEnabled: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-    return updated;
+    return this.repository.updateProfile(userId, data);
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.repository.findById(userId);
     if (!user) {
       throw new NotFoundError("User not found");
     }
@@ -66,11 +39,7 @@ export class UsersService {
     }
 
     const hashed = await bcrypt.hash(newPassword, 10);
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: { password: hashed },
-    });
+    await this.repository.updatePassword(userId, hashed);
 
     return { success: true };
   }

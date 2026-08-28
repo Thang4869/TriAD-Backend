@@ -13,6 +13,7 @@ import {
   PrismaAuthRepository,
   CreateUserData,
 } from "./auth.repository";
+import { toAuthUserResponse, AuthUserResponse } from "./auth.mapper";
 
 const BLACKLIST_PREFIX = "jwt:blacklist:";
 const EMAIL_VERIFY_PREFIX = "email-verify:";
@@ -22,14 +23,7 @@ const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
-  user: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: string;
-    is2FAEnabled: boolean;
-  };
+  user: AuthUserResponse;
 }
 
 export interface TwoFactorRequired {
@@ -125,10 +119,7 @@ export class AuthService {
     };
   }
 
-  async login(
-    email: string,
-    password: string,
-  ): Promise<AuthTokens | TwoFactorRequired> {
+  async login(email: string, password: string): Promise<AuthTokens | TwoFactorRequired> {
     const user = await this.repository.findUserByEmail(email);
 
     if (!user) {
@@ -240,14 +231,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        is2FAEnabled: user.is2FAEnabled || false,
-      },
+      user: toAuthUserResponse(user),
     };
   }
 

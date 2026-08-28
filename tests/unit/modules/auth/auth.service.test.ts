@@ -1,174 +1,173 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import { AuthService } from '@modules/auth/auth.service';
-import { BadRequestError, UnauthorizedError } from '@shared/utils/errors';
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import bcrypt from "bcrypt";
+import { User } from "@prisma/client";
+import { AuthService } from "@modules/auth/auth.service";
+import { IAuthRepository } from "@modules/auth/auth.repository";
+import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
 
-vi.mock('@core/database/prisma', () => ({
-  default: {
-    user: {
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-    },
-    cart: {
-      create: vi.fn(),
-    },
-    refreshToken: {
-      create: vi.fn(),
-      deleteMany: vi.fn(),
-    },
-  },
-}));
-
-vi.mock('@core/redis/client', () => ({
+vi.mock("@core/redis/client", () => ({
   default: {
     get: vi.fn(),
-    setex: vi.fn(),
+    setex: vi.fn().mockResolvedValue("OK"),
     del: vi.fn(),
   },
 }));
 
-vi.mock('@core/queue/bull', () => ({
-  emailQueue: {
-    add: vi.fn(),
-  },
+vi.mock("@core/queue/bull", () => ({
+  emailQueue: { add: vi.fn().mockResolvedValue({}) },
 }));
 
-vi.mock('bcrypt', () => ({
-  default: {
-    hash: vi.fn(),
-    compare: vi.fn(),
-  },
+vi.mock("bcrypt", () => ({
+  default: { hash: vi.fn(), compare: vi.fn() },
 }));
 
-vi.mock('jsonwebtoken', () => ({
-  sign: vi.fn(),
-  verify: vi.fn(),
-}));
+import { emailQueue } from "@core/queue/bull";
 
-vi.mock('crypto', () => ({
-  default: {
-    randomBytes: vi.fn(() => Buffer.from('token')),
-  },
-}));
+function createFakeRepository(
+  overrides: Partial<IAuthRepository> = {},
+): IAuthRepository {
+  return {
+    findUserByEmail: vi.fn().mockResolvedValue(null),
+    findUserById: vi.fn().mockResolvedValue(null),
+    createUser: vi.fn(),
+    createCartForUser: vi.fn().mockResolvedValue(undefined),
+    updateUser: vi.fn(),
+    createRefreshToken: vi.fn().mockResolvedValue({}),
+    findRefreshTokenWithUser: vi.fn().mockResolvedValue(null),
+    deleteRefreshTokenById: vi.fn().mockResolvedValue(undefined),
+    deleteRefreshTokenByToken: vi.fn().mockResolvedValue(undefined),
+    deleteRefreshTokensByUserId: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
 
-import prisma from '@core/database/prisma';
-import redis from '@core/redis/client';
-import { emailQueue } from '@core/queue/bull';
+const baseUser: User = {
+  id: "user-id",
+  email: "test@test.com",
+  password: "hashed",
+  firstName: "John",
+  lastName: "Doe",
+  phone: null,
+  role: "USER",
+  isVerified: true,
+  is2FAEnabled: false,
+  totpSecret: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+} as User;
 
-describe('AuthService', () => {
-  let service: AuthService;
-
+describe("AuthService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new AuthService();
-    process.env.JWT_ACCESS_SECRET = 'test-access-secret-32charslongenough';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-32charslongenough';
+    process.env.JWT_ACCESS_SECRET = "test-access-secret-32charslongenough";
+    process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32charslongenough";
   });
 
-  describe('register', () => {
-    it('should throw if email already exists', async () => {
-      (prisma.user.findUnique as any).mockResolvedValueOnce({ id: 'existing' });
+  describe("register", () => {
+    it("throws BadRequestError if email already exists", async () => {
+      const repository = createFakeRepository({
+        findUserByEmail: vi.fn().mockResolvedValue({ id: "existing" }),
+      });
+      const service = new AuthService(repository);
+
       await expect(
         service.register({
-          email: 'test@test.com',
-          password: '123456',
-          firstName: 'John',
-          lastName: 'Doe',
-        })
-      ).rejects.toThrow(BadRequestError);
+          email: "test@test.com",
+          password: "123456",
+          firstName: "John",
+          lastName: "Doe",
+        }),
+      ).rejects.toBeInstanceOf(BadRequestError);
+
+      expect(repository.createUser).not.toHaveBeenCalled();
     });
 
-    it('should create user, cart, and enqueue verification email', async () => {
-      (prisma.user.findUnique as any).mockResolvedValueOnce(null);
-      (bcrypt.hash as any).mockResolvedValueOnce('hashed');
-      const mockUser = {
-        id: 'user-id',
-        email: 'test@test.com',
-        firstName: 'John',
-        lastName: 'Doe',
-      };
-      (prisma.user.create as any).mockResolvedValueOnce(mockUser);
-      (prisma.cart.create as any).mockResolvedValueOnce({});
-      (redis.setex as any).mockResolvedValueOnce('OK');
-      (emailQueue.add as any).mockResolvedValueOnce({});
+    it("creates user, cart, and enqueues verification email", async () => {
+      (bcrypt.hash as any).mockResolvedValueOnce("hashed");
+
+      const repository = createFakeRepository({
+        findUserByEmail: vi.fn().mockResolvedValue(null),
+        createUser: vi.fn().mockResolvedValue(baseUser),
+      });
+      const service = new AuthService(repository);
 
       const result = await service.register({
-        email: 'test@test.com',
-        password: '123456',
-        firstName: 'John',
-        lastName: 'Doe',
+        email: "test@test.com",
+        password: "123456",
+        firstName: "John",
+        lastName: "Doe",
       });
 
-      expect(result.user).toMatchObject({ email: 'test@test.com' });
-      expect(result.message).toContain('check your email');
+      expect(result.user).toMatchObject({ email: "test@test.com" });
+      expect(result.message).toContain("check your email");
+      expect(repository.createCartForUser).toHaveBeenCalledWith(baseUser.id);
       expect(emailQueue.add).toHaveBeenCalledWith(
-        'verify-email',
-        expect.objectContaining({ to: 'test@test.com' })
+        "verify-email",
+        expect.objectContaining({ to: "test@test.com" }),
       );
     });
   });
 
-  describe('login', () => {
-    it('should throw if user not found', async () => {
-      (prisma.user.findUnique as any).mockResolvedValueOnce(null);
-      await expect(service.login('notfound@test.com', 'pass')).rejects.toThrow(UnauthorizedError);
-    });
-
-    it('should throw if password incorrect', async () => {
-      (prisma.user.findUnique as any).mockResolvedValueOnce({
-        email: 'test@test.com',
-        password: 'hash',
+  describe("login", () => {
+    it("throws UnauthorizedError if user not found", async () => {
+      const repository = createFakeRepository({
+        findUserByEmail: vi.fn().mockResolvedValue(null),
       });
-      (bcrypt.compare as any).mockResolvedValueOnce(false);
-      await expect(service.login('test@test.com', 'wrong')).rejects.toThrow(UnauthorizedError);
+      const service = new AuthService(repository);
+
+      await expect(
+        service.login("notfound@test.com", "pass"),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
     });
 
-    it('should return tokens if 2FA not enabled', async () => {
-      const user = {
-        id: '1',
-        email: 'test@test.com',
-        role: 'USER',
-        isVerified: true,
-        is2FAEnabled: false,
-        firstName: 'Test',
-        lastName: 'User',
-      };
-      (prisma.user.findUnique as any).mockResolvedValueOnce(user);
+    it("throws UnauthorizedError if password is incorrect", async () => {
+      (bcrypt.compare as any).mockResolvedValueOnce(false);
+      const repository = createFakeRepository({
+        findUserByEmail: vi.fn().mockResolvedValue(baseUser),
+      });
+      const service = new AuthService(repository);
+
+      await expect(
+        service.login("test@test.com", "wrong"),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
+    });
+
+    it("returns tokens when 2FA is not enabled", async () => {
       (bcrypt.compare as any).mockResolvedValueOnce(true);
-      vi.spyOn(service, 'generateTokens').mockResolvedValueOnce({
-        accessToken: 'at',
-        refreshToken: 'rt',
+      const repository = createFakeRepository({
+        findUserByEmail: vi.fn().mockResolvedValue(baseUser),
+      });
+      const service = new AuthService(repository);
+      vi.spyOn(service, "generateTokens").mockResolvedValueOnce({
+        accessToken: "at",
+        refreshToken: "rt",
         user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          is2FAEnabled: user.is2FAEnabled,
+          id: baseUser.id,
+          email: baseUser.email,
+          firstName: baseUser.firstName,
+          lastName: baseUser.lastName,
+          role: baseUser.role,
+          is2FAEnabled: baseUser.is2FAEnabled,
         },
       });
 
-      const result = await service.login('test@test.com', 'pass');
-      expect(result).toHaveProperty('accessToken');
+      const result = await service.login("test@test.com", "pass");
+      expect(result).toHaveProperty("accessToken");
     });
 
-    it('should return requires2FA if 2FA enabled', async () => {
-      const user = {
-        id: '1',
-        email: 'test@test.com',
-        isVerified: true,
-        is2FAEnabled: true,
-      };
-      (prisma.user.findUnique as any).mockResolvedValueOnce(user);
+    it("returns requires2FA when 2FA is enabled", async () => {
       (bcrypt.compare as any).mockResolvedValueOnce(true);
+      const twoFactorUser: User = { ...baseUser, is2FAEnabled: true };
+      const repository = createFakeRepository({
+        findUserByEmail: vi.fn().mockResolvedValue(twoFactorUser),
+      });
+      const service = new AuthService(repository);
 
-      const result = await service.login('test@test.com', 'pass');
+      const result = await service.login("test@test.com", "pass");
       expect(result).toEqual({
         requires2FA: true,
-        userId: '1',
-        message: '2FA required',
+        userId: baseUser.id,
+        message: "2FA required",
       });
     });
   });

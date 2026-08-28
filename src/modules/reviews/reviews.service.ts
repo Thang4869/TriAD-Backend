@@ -25,12 +25,7 @@ export class ReviewsService {
     };
   }
 
-  async createReview(
-    userId: string,
-    productId: string,
-    rating: number,
-    content: string,
-  ) {
+  async createReview(userId: string, productId: string, rating: number, content: string) {
     const exists = await this.repository.productExists(productId);
     if (!exists) {
       throw new NotFoundError("Product not found");

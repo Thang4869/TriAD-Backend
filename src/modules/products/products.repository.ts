@@ -53,25 +53,23 @@ export interface CreateProductData {
   slug: string;
 }
 
-export type UpdateProductData = Partial<
-  CreateProductData & { isActive: boolean }
->;
+export type UpdateProductData = Partial<CreateProductData & { isActive: boolean }>;
 
 // ---------- Repository contract ----------
 
 export interface IProductsRepository {
-  findManyWithRatings(
-    query: ProductListQuery,
-  ): Promise<ProductWithRatingReviews[]>;
+  findManyWithRatings(query: ProductListQuery): Promise<ProductWithRatingReviews[]>;
   count(where: Prisma.ProductWhereInput): Promise<number>;
   findByIdWithReviews(id: string): Promise<ProductWithFullReviews | null>;
   findBySlugWithReviews(slug: string): Promise<ProductWithShortReviews | null>;
   findBySlugId(slug: string): Promise<Pick<Product, "id"> | null>;
+
   groupByCategory(): Promise<CategoryCount[]>;
 
   findManyAdmin(query: ProductListQuery): Promise<Product[]>;
   findById(id: string): Promise<Product | null>;
   create(data: CreateProductData): Promise<Product>;
+
   update(id: string, data: UpdateProductData): Promise<Product>;
   setActive(id: string, isActive: boolean): Promise<Product>;
 }
@@ -79,9 +77,7 @@ export interface IProductsRepository {
 // ---------- Prisma implementation ----------
 
 export class PrismaProductsRepository implements IProductsRepository {
-  async findManyWithRatings(
-    query: ProductListQuery,
-  ): Promise<ProductWithRatingReviews[]> {
+  async findManyWithRatings(query: ProductListQuery): Promise<ProductWithRatingReviews[]> {
     return prisma.product.findMany({
       where: query.where,
       orderBy: query.orderBy,
@@ -99,9 +95,7 @@ export class PrismaProductsRepository implements IProductsRepository {
     return prisma.product.count({ where });
   }
 
-  async findByIdWithReviews(
-    id: string,
-  ): Promise<ProductWithFullReviews | null> {
+  async findByIdWithReviews(id: string): Promise<ProductWithFullReviews | null> {
     return prisma.product.findUnique({
       where: { id },
       include: {
@@ -122,9 +116,7 @@ export class PrismaProductsRepository implements IProductsRepository {
     });
   }
 
-  async findBySlugWithReviews(
-    slug: string,
-  ): Promise<ProductWithShortReviews | null> {
+  async findBySlugWithReviews(slug: string): Promise<ProductWithShortReviews | null> {
     return prisma.product.findUnique({
       where: { slug },
       include: {

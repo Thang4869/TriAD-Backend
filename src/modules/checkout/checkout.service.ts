@@ -231,12 +231,6 @@ export class CheckoutService {
     return Math.min(rawAmount, subtotal);
   }
 
-  /**
-   * Retries the whole transaction on optimistic-lock conflicts, using
-   * exponential backoff. Retry policy is a business/orchestration decision,
-   * so it stays in the service; the transaction mechanics themselves live
-   * in the repository.
-   */
   private async executeWithRetry<T>(
     operation: (tx: TxClient) => Promise<T>,
     retryCount = 0,

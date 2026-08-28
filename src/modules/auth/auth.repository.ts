@@ -58,19 +58,13 @@ export class PrismaAuthRepository implements IAuthRepository {
     return prisma.user.update({ where: { id }, data });
   }
 
-  async createRefreshToken(
-    token: string,
-    userId: string,
-    expiresAt: Date,
-  ): Promise<RefreshToken> {
+  async createRefreshToken(token: string, userId: string, expiresAt: Date): Promise<RefreshToken> {
     return prisma.refreshToken.create({
       data: { token, userId, expiresAt },
     });
   }
 
-  async findRefreshTokenWithUser(
-    token: string,
-  ): Promise<RefreshTokenWithUser | null> {
+  async findRefreshTokenWithUser(token: string): Promise<RefreshTokenWithUser | null> {
     return prisma.refreshToken.findUnique({
       where: { token },
       include: { user: true },

@@ -21,6 +21,7 @@ router.get(
   validate(adminGetOrdersQuerySchema),
   controller.adminGetOrders.bind(controller),
 );
+
 router.patch(
   "/admin/:orderId/status",
   requireAdmin,

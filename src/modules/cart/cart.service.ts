@@ -8,16 +8,8 @@ import {
 
 export interface ICartService {
   getCart(userId: string): Promise<CartWithItems>;
-  addItem(
-    userId: string,
-    productId: string,
-    quantity: number,
-  ): Promise<CartItemWithProduct>;
-  updateItem(
-    userId: string,
-    productId: string,
-    quantity: number,
-  ): Promise<CartItemWithProduct | void>;
+  addItem(userId: string, productId: string, quantity: number): Promise<CartItemWithProduct>;
+  updateItem(userId: string, productId: string, quantity: number,): Promise<CartItemWithProduct | void>;
   removeItem(userId: string, productId: string): Promise<void>;
   clearCart(userId: string): Promise<{ count: number }>;
 }
@@ -35,11 +27,7 @@ export class CartService implements ICartService {
     return this.repository.createCartWithItems(userId);
   }
 
-  async addItem(
-    userId: string,
-    productId: string,
-    quantity: number,
-  ): Promise<CartItemWithProduct> {
+  async addItem(userId: string, productId: string, quantity: number): Promise<CartItemWithProduct> {
     if (quantity <= 0) {
       throw new BadRequestError("Quantity must be greater than 0");
     }
@@ -67,11 +55,7 @@ export class CartService implements ICartService {
     return this.repository.createCartItem(cart.id, productId, quantity);
   }
 
-  async updateItem(
-    userId: string,
-    productId: string,
-    quantity: number,
-  ): Promise<CartItemWithProduct | void> {
+  async updateItem(userId: string, productId: string, quantity: number,): Promise<CartItemWithProduct | void> {
     if (quantity < 0) {
       throw new BadRequestError("Quantity cannot be negative");
     }

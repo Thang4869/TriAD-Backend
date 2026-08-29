@@ -25,6 +25,7 @@ model User {
   orders        Order[]
   refreshTokens RefreshToken[]
   reviews       Review[]
+  wishlistItems WishlistItem[]
 
   @@map("users")
 }
@@ -45,6 +46,8 @@ model Product {
   cartItems   CartItem[]
   orderItems  OrderItem[]
   reviews     Review[]
+  wishlistedBy WishlistItem[]
+  searchVector Unsupported("tsvector")?
 
   @@map("products")
 }
@@ -168,6 +171,19 @@ model Discount {
   updatedAt      DateTime     @updatedAt
 
   @@map("discounts")
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlist_items")
 }
 
 enum Role {

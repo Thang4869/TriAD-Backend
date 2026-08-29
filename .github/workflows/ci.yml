@@ -50,8 +50,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://test:test@localhost:5432/triad_test
       REDIS_URL: redis://localhost:6379
-      JWT_ACCESS_SECRET: ci-test-secret-access
-      JWT_REFRESH_SECRET: ci-test-secret-refresh
+      JWT_ACCESS_SECRET: ci-test-access-secret-32charslongenough
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-32charslongenough
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v4

@@ -164,6 +164,16 @@ CREATE TABLE "discounts" (
     CONSTRAINT "discounts_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "wishlist_items" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "wishlist_items_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
@@ -190,6 +200,9 @@ CREATE UNIQUE INDEX "refresh_tokens_token_key" ON "refresh_tokens"("token");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "discounts_code_key" ON "discounts"("code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "wishlist_items_userId_productId_key" ON "wishlist_items"("userId", "productId");
 
 -- AddForeignKey
 ALTER TABLE "carts" ADD CONSTRAINT "carts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -220,3 +233,13 @@ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_userId_fkey" FOREIGN K
 
 -- AddForeignKey
 ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "wishlist_items" ADD CONSTRAINT "wishlist_items_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "wishlist_items" ADD CONSTRAINT "wishlist_items_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "searchVector" tsvector;
+CREATE INDEX IF NOT EXISTS "products_searchVector_idx" ON "products" USING GIN ("searchVector");

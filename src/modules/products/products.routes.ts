@@ -3,15 +3,10 @@ import { ProductsController } from "./products.controller";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
 import { requireAdmin } from "@shared/middlewares/rbac.middleware";
 import { validate } from "@shared/middlewares/validation.middleware";
-import {
-  getProductsQuerySchema,
-  getProductParamsSchema,
-  getProductBySlugParamsSchema,
-  createProductSchema,
-  updateProductSchema,
-  deleteProductParamsSchema,
-  adminGetProductsQuerySchema,
-} from "./dto/products.dto";
+import { uploadProductImage } from "@shared/middlewares/upload.middleware";
+import { getProductsQuerySchema, getProductParamsSchema, getProductBySlugParamsSchema} from "./dto/products.dto";
+import { createProductSchema, updateProductSchema, deleteProductParamsSchema} from "./dto/products.dto";
+import { adminGetProductsQuerySchema, searchProductsQuerySchema } from "./dto/products.dto";
 
 const router = Router();
 const controller = new ProductsController();
@@ -276,6 +271,65 @@ router.get(
   "/:id",
   validate(getProductParamsSchema),
   controller.getById.bind(controller)
+);
+
+/**
+ * @swagger
+ * /api/products/admin/{id}/images:
+ *   post:
+ *     summary: Upload a product image (queued for async processing)
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       202:
+ *         description: Image accepted and queued
+ *       400:
+ *         description: Invalid file
+ *       404:
+ *         description: Product not found
+ */
+router.post(
+  "/admin/:id/images",
+  validate(deleteProductParamsSchema),
+  uploadProductImage,
+  controller.adminUploadImage.bind(controller),
+);
+
+/**
+ * @swagger
+ * /api/products/search:
+ *   get:
+ *     summary: Full-text search products (Postgres tsvector, ranked)
+ *     tags: [Products]
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema: { type: string, minLength: 2 }
+ *     responses:
+ *       200:
+ *         description: Ranked search results
+ */
+router.get(
+  "/search",
+  validate(searchProductsQuerySchema),
+  controller.search.bind(controller),
 );
 
 export { router as productRoutes };

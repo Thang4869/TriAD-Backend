@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { IProductsService, ProductsService } from "./products.service";
 import { asyncHandler } from "@shared/utils/async-handler";
+import { uploadProductImage } from "@shared/middlewares/upload.middleware";
+import { BadRequestError } from "@shared/utils/errors";
 
 export class ProductsController {
   constructor(
@@ -39,6 +41,16 @@ export class ProductsController {
   getCategories = asyncHandler(async (_req: Request, res: Response) => {
     const categories = await this.service.getCategories();
     res.json({ success: true, data: categories });
+  });
+
+  search = asyncHandler(async (req: Request, res: Response) => {
+    const { q, page, limit } = req.query as { q: string; page?: string; limit?: string };
+    const result = await this.service.search(
+      q,
+      page ? Number(page) : undefined,
+      limit ? Number(limit) : undefined,
+    );
+    res.json({ success: true, data: result });
   });
 
   // ---------- Admin ----------
@@ -88,6 +100,19 @@ export class ProductsController {
       success: true,
       message: "Product reactivated successfully",
       data: product,
+    });
+  });
+
+  adminUploadImage = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (!req.file) {
+      throw new BadRequestError("Image file is required (field name: 'image')");
+    }
+    const result = await this.service.uploadImage(id, req.file.path);
+    res.status(202).json({
+      success: true,
+      message: "Image queued for processing",
+      data: result,
     });
   });
 }

@@ -14,9 +14,19 @@ export const updateOrderStatusSchema = z.object({
 
 export const adminGetOrdersQuerySchema = z.object({
   query: z.object({
-    page: z.string().optional().transform(Number).pipe(z.number().int().min(1).default(1)),
-    limit: z.string().optional().transform(Number).pipe(z.number().int().min(1).max(50).default(10)),
-    status: z.enum(Object.values(OrderStatus) as [string, ...string[]]).optional(),
+    page: z
+      .string()
+      .optional()
+      .transform(Number)
+      .pipe(z.number().int().min(1).default(1)),
+    limit: z
+      .string()
+      .optional()
+      .transform(Number)
+      .pipe(z.number().int().min(1).max(50).default(10)),
+    status: z
+      .enum(Object.values(OrderStatus) as [string, ...string[]])
+      .optional(),
     userId: z.string().uuid("Invalid user ID format").optional(),
   }),
 });
@@ -29,7 +39,15 @@ export const getOrderParamsSchema = z.object({
 
 export const getMyOrdersQuerySchema = z.object({
   query: z.object({
-    page: z.string().optional().transform(Number).pipe(z.number().int().min(1).default(1)),
-    limit: z.string().optional().transform(Number).pipe(z.number().int().min(1).max(50).default(10)),
+    page: z
+      .string()
+      .optional()
+      .transform(Number)
+      .pipe(z.number().int().min(1).default(1)),
+    limit: z
+      .string()
+      .optional()
+      .transform(Number)
+      .pipe(z.number().int().min(1).max(50).default(10)),
   }),
 });

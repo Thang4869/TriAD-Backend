@@ -2,7 +2,7 @@ import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import path from "path/win32";
+import path from "path";
 import { json, urlencoded } from "body-parser";
 
 import cookieParser from "cookie-parser";
@@ -10,10 +10,13 @@ import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "@config/swagger";
 import config from "@config";
 
-import {rateLimiter, strictRateLimiter,} from "@shared/middlewares/rate-limit.middleware";
-import {errorHandler, notFoundHandler,} from "@shared/middlewares/error-handler.middleware";
+import { rateLimiter } from "@shared/middlewares/rate-limit.middleware";
+import {
+  errorHandler,
+  notFoundHandler,
+} from "@shared/middlewares/error-handler.middleware";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
-import { requestLogger } from '@shared/middlewares/logger.middleware';
+import { requestLogger } from "@shared/middlewares/logger.middleware";
 
 import { authRoutes } from "@modules/auth/auth.routes";
 import { userRoutes } from "@modules/users/users.routes";
@@ -32,46 +35,51 @@ import { metricsRoutes } from "@core/metrics/metrics.routes";
 
 const app: Application = express();
 
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
     },
-  },
-  hsts: {
-    maxAge: 31536000,
-    includeSubDomains: true,
-    preload: true,
-  },
-  frameguard: { action: "deny" },
-  noSniff: true,
-  xssFilter: true,
-}));
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    frameguard: { action: "deny" },
+    noSniff: true,
+    xssFilter: true,
+  }),
+);
 
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      
+
       if (config.isDevelopment) {
         return callback(null, true);
       }
-      
+
       const allowedOrigins = config.CORS_ORIGIN;
       if (allowedOrigins.length === 0) {
-        return callback(new Error("CORS_ORIGIN not configured in production"), false);
+        return callback(
+          new Error("CORS_ORIGIN not configured in production"),
+          false,
+        );
       }
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      
+
       if (origin.match(/^https?:\/\/localhost:\d+$/)) {
         return callback(null, true);
       }
-      
+
       callback(new Error("Not allowed by CORS"), false);
     },
     credentials: true,
@@ -87,7 +95,8 @@ app.use(json({ limit: "10mb" }));
 app.use(urlencoded({ extended: true, limit: "10mb" }));
 
 app.use((req, res, next) => {
-  const requestId = req.headers["x-request-id"] || 
+  const requestId =
+    req.headers["x-request-id"] ||
     `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   res.setHeader("x-request-id", requestId);
   (req as any).requestId = requestId;
@@ -97,8 +106,8 @@ app.use((req, res, next) => {
 app.use("/api", rateLimiter());
 
 app.get("/health", (req, res) => {
-  res.json({ 
-    status: "ok", 
+  res.json({
+    status: "ok",
     timestamp: new Date().toISOString(),
     environment: config.NODE_ENV,
   });

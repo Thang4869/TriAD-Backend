@@ -1,7 +1,10 @@
 import redis from "@core/redis/client";
 import { logger } from "@core/logger/winston";
 import { Queue, Worker, QueueEvents } from "bullmq";
-import { queueJobsWaiting, queueJobsFailed } from "@core/metrics/metrics.registry";
+import {
+  queueJobsWaiting,
+  queueJobsFailed,
+} from "@core/metrics/metrics.registry";
 
 export const emailQueue = new Queue("email", {
   connection: redis,
@@ -29,21 +32,25 @@ queueEvents.on("failed", ({ jobId, failedReason }) => {
   logger.error("Job failed", { jobId, failedReason });
 });
 
-export const emailWorker = new Worker("email", async (job) => {
-    const { to, subject, template, data } = job.data;
+export const emailWorker = new Worker(
+  "email",
+  async (job) => {
+    const { to, subject, _template, _data } = job.data;
     logger.info("Sending email", { to, subject });
   },
   { connection: redis, concurrency: 5 },
 );
 
-export const imageWorker = new Worker("image", async (job) => {
+export const imageWorker = new Worker(
+  "image",
+  async (job) => {
     const { productId, imageUrl } = job.data;
     logger.info("Processing image", { productId, imageUrl });
   },
   { connection: redis, concurrency: 2 },
 );
 
-export const queues = {email: emailQueue, image: imageQueue};
+export const queues = { email: emailQueue, image: imageQueue };
 
 const QUEUE_METRICS_POLL_INTERVAL_MS = 15_000;
 

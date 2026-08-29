@@ -22,7 +22,9 @@ export const idempotencyMiddleware = (
       try {
         const cachedResponse = JSON.parse(cached);
         return res.status(cachedResponse.status).json(cachedResponse.data);
-      } catch {}
+      } catch {
+        // Ignore JSON parse errors
+      }
     }
 
     const originalJson = res.json.bind(res);

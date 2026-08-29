@@ -2,7 +2,11 @@ import { Router } from "express";
 import { WishlistController } from "./wishlist.controller";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
 import { validate } from "@shared/middlewares/validation.middleware";
-import { addToWishlistSchema, removeFromWishlistSchema, getWishlistQuerySchema} from "./dto/wishlist.dto";
+import {
+  addToWishlistSchema,
+  removeFromWishlistSchema,
+  getWishlistQuerySchema,
+} from "./dto/wishlist.dto";
 
 const router = Router();
 const controller = new WishlistController();

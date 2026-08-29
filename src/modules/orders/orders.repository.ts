@@ -36,7 +36,10 @@ export interface IOrdersRepository {
     take: number,
   ): Promise<OrderWithItems[]>;
   countByUser(userId: string): Promise<number>;
-  findByIdAndUser(orderId: string, userId: string): Promise<OrderWithItems | null>;
+  findByIdAndUser(
+    orderId: string,
+    userId: string,
+  ): Promise<OrderWithItems | null>;
 
   findManyAdmin(
     filters: AdminOrderFilters,
@@ -106,7 +109,9 @@ export class PrismaOrdersRepository implements IOrdersRepository {
           select: { id: true, email: true, firstName: true, lastName: true },
         },
         items: {
-          include: { product: { select: { id: true, name: true, images: true } } },
+          include: {
+            product: { select: { id: true, name: true, images: true } },
+          },
         },
       },
     });

@@ -25,9 +25,9 @@ router.use(authMiddleware);
  *         description: List of notifications
  */
 router.get(
-    "/", 
-    validate(getNotificationsQuerySchema), 
-    controller.getNotifications.bind(controller)
+  "/",
+  validate(getNotificationsQuerySchema),
+  controller.getNotifications.bind(controller),
 );
 
 /**
@@ -50,7 +50,7 @@ router.get(
 router.put(
   "/:id/read",
   validate(markAsReadParamsSchema),
-  controller.markAsRead.bind(controller)
+  controller.markAsRead.bind(controller),
 );
 
 /**
@@ -65,9 +65,6 @@ router.put(
  *       200:
  *         description: All notifications marked as read
  */
-router.put(
-    "/read-all", 
-    controller.markAllAsRead.bind(controller)
-);
+router.put("/read-all", controller.markAllAsRead.bind(controller));
 
 export { router as notificationRoutes };

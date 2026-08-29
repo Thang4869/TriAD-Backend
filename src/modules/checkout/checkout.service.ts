@@ -1,6 +1,10 @@
 import { emailQueue } from "@core/queue/bull";
 import { EmailService } from "@shared/services/email.service";
-import { NotFoundError, BadRequestError, ConflictError } from "@shared/utils/errors";
+import {
+  NotFoundError,
+  BadRequestError,
+  ConflictError,
+} from "@shared/utils/errors";
 import {
   ICheckoutRepository,
   PrismaCheckoutRepository,
@@ -31,7 +35,9 @@ export class CheckoutService {
   ) {}
 
   async checkout(userId: string, input: CheckoutInput) {
-    const idempotentResult = await this.tryReturnIdempotentOrder(input.idempotencyKey);
+    const idempotentResult = await this.tryReturnIdempotentOrder(
+      input.idempotencyKey,
+    );
     if (idempotentResult) {
       return idempotentResult;
     }
@@ -141,7 +147,8 @@ export class CheckoutService {
   private async tryReturnIdempotentOrder(idempotencyKey: string) {
     if (!idempotencyKey) return null;
 
-    const cachedOrderId = await this.repository.findCachedOrderId(idempotencyKey);
+    const cachedOrderId =
+      await this.repository.findCachedOrderId(idempotencyKey);
     if (!cachedOrderId) return null;
 
     const order = await this.repository.findOrderWithItems(cachedOrderId);

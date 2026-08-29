@@ -4,9 +4,7 @@ import { BadRequestError } from "@shared/utils/errors";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class CartController {
-  constructor(
-    private readonly service: ICartService = new CartService(),
-  ) {}
+  constructor(private readonly service: ICartService = new CartService()) {}
 
   getCart = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;

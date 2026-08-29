@@ -25,9 +25,7 @@ export interface IAuthRepository {
     userId: string,
     expiresAt: Date,
   ): Promise<RefreshToken>;
-  findRefreshTokenWithUser(
-    token: string,
-  ): Promise<RefreshTokenWithUser | null>;
+  findRefreshTokenWithUser(token: string): Promise<RefreshTokenWithUser | null>;
   deleteRefreshTokenById(id: string): Promise<void>;
   deleteRefreshTokenByToken(token: string): Promise<void>;
   deleteRefreshTokensByUserId(userId: string): Promise<void>;
@@ -58,13 +56,19 @@ export class PrismaAuthRepository implements IAuthRepository {
     return prisma.user.update({ where: { id }, data });
   }
 
-  async createRefreshToken(token: string, userId: string, expiresAt: Date): Promise<RefreshToken> {
+  async createRefreshToken(
+    token: string,
+    userId: string,
+    expiresAt: Date,
+  ): Promise<RefreshToken> {
     return prisma.refreshToken.create({
       data: { token, userId, expiresAt },
     });
   }
 
-  async findRefreshTokenWithUser(token: string): Promise<RefreshTokenWithUser | null> {
+  async findRefreshTokenWithUser(
+    token: string,
+  ): Promise<RefreshTokenWithUser | null> {
     return prisma.refreshToken.findUnique({
       where: { token },
       include: { user: true },

@@ -9,7 +9,11 @@ import { logger } from "@core/logger/winston";
 import { emailQueue } from "@core/queue/bull";
 
 import { toAuthUserResponse, AuthUserResponse } from "./auth.mapper";
-import { IAuthRepository, PrismaAuthRepository, CreateUserData} from "./auth.repository";
+import {
+  IAuthRepository,
+  PrismaAuthRepository,
+  CreateUserData,
+} from "./auth.repository";
 
 import { SECURITY } from "@shared/constants/security.constant";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
@@ -18,10 +22,8 @@ import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
 
 import { decodeToken as jwtDecode } from "@shared/utils/jwt";
 
-const BLACKLIST_PREFIX = "jwt:blacklist:";
 const EMAIL_VERIFY_PREFIX = "email-verify:";
 const EMAIL_VERIFY_TTL_SECONDS = 15 * 60;
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface AuthTokens {
   accessToken: string;
@@ -122,7 +124,10 @@ export class AuthService {
     };
   }
 
-  async login(email: string, password: string): Promise<AuthTokens | TwoFactorRequired> {
+  async login(
+    email: string,
+    password: string,
+  ): Promise<AuthTokens | TwoFactorRequired> {
     const user = await this.repository.findUserByEmail(email);
     if (!user) {
       throw new UnauthorizedError("Invalid credentials");

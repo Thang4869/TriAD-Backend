@@ -2,10 +2,7 @@ import { Router } from "express";
 import { UsersController } from "./users.controller";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
 import { validate } from "@shared/middlewares/validation.middleware";
-import { 
-  updateProfileSchema, 
-  changePasswordSchema 
-} from "./dto/users.dto";
+import { updateProfileSchema, changePasswordSchema } from "./dto/users.dto";
 
 const router = Router();
 const controller = new UsersController();
@@ -26,10 +23,7 @@ router.use(authMiddleware);
  *       401:
  *         description: Unauthorized
  */
-router.get(
-  "/me", 
-  controller.getProfile.bind(controller)
-);
+router.get("/me", controller.getProfile.bind(controller));
 
 /**
  * @swagger
@@ -57,9 +51,9 @@ router.get(
  *         description: Updated profile
  */
 router.put(
-  "/me", 
-  validate(updateProfileSchema), 
-  controller.updateProfile.bind(controller)
+  "/me",
+  validate(updateProfileSchema),
+  controller.updateProfile.bind(controller),
 );
 
 /**
@@ -89,9 +83,9 @@ router.put(
  *         description: Password changed
  */
 router.put(
-  "/me/password", 
-  validate(changePasswordSchema), 
-  controller.changePassword.bind(controller)
+  "/me/password",
+  validate(changePasswordSchema),
+  controller.changePassword.bind(controller),
 );
 
 export { router as userRoutes };

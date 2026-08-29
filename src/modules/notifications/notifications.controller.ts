@@ -1,5 +1,8 @@
 import { Request, Response } from "express";
-import { INotificationsService, NotificationsService } from "./notifications.service";
+import {
+  INotificationsService,
+  NotificationsService,
+} from "./notifications.service";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class NotificationsController {

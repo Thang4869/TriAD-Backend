@@ -21,16 +21,22 @@ export interface ProductDetailResponse extends ProductListItemResponse {
   reviews: unknown;
 }
 
-export function toProductListItem(product: ProductCore): ProductListItemResponse {
-  const { reviews, ...listItem } = product;
+export function toProductListItem(
+  product: ProductCore,
+): ProductListItemResponse {
+  const { reviews: _reviews, ...listItem } = product;
   return listItem;
 }
 
-export function toProductListResponse(products: ProductCore[]): ProductListItemResponse[] {
+export function toProductListResponse(
+  products: ProductCore[],
+): ProductListItemResponse[] {
   return products.map(toProductListItem);
 }
 
-export function toProductDetailResponse(product: ProductCore): ProductDetailResponse {
+export function toProductDetailResponse(
+  product: ProductCore,
+): ProductDetailResponse {
   return {
     ...toProductListItem(product),
     reviews: product.reviews,

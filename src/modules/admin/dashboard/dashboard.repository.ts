@@ -32,7 +32,10 @@ export interface IDashboardRepository {
   getTotalRevenue(sinceDate: Date): Promise<number>;
   getOrderStatusBreakdown(): Promise<OrderStatusCount[]>;
   getRevenueByDay(days: number): Promise<RevenueByDay[]>;
-  getTopSellingProducts(limit: number, sinceDate: Date): Promise<TopSellingProduct[]>;
+  getTopSellingProducts(
+    limit: number,
+    sinceDate: Date,
+  ): Promise<TopSellingProduct[]>;
   getLowStockProducts(threshold: number): Promise<LowStockProduct[]>;
   getNewUsersCount(sinceDate: Date): Promise<number>;
   getTotalUsersCount(): Promise<number>;

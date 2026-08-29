@@ -1,7 +1,15 @@
 import { Prisma } from "@prisma/client";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
-import { IProductsRepository, PrismaProductsRepository, CreateProductData, UpdateProductData} from "./products.repository";
-import { toProductListResponse, toProductDetailResponse } from "./products.mapper";
+import {
+  IProductsRepository,
+  PrismaProductsRepository,
+  CreateProductData,
+  UpdateProductData,
+} from "./products.repository";
+import {
+  toProductListResponse,
+  toProductDetailResponse,
+} from "./products.mapper";
 import { imageQueue } from "@core/queue/bull";
 
 const MAX_PAGE_LIMIT = 50;
@@ -39,8 +47,11 @@ export interface IProductsService {
   update(id: string, data: UpdateProductData): Promise<unknown>;
   delete(id: string): Promise<unknown>;
   restore(id: string): Promise<unknown>;
-  uploadImage(productId: string, localFilePath: string): Promise<{ queued: true }>;
-  search(query: string, page?: number, limit?: number): Promise<unknown>; 
+  uploadImage(
+    productId: string,
+    localFilePath: string,
+  ): Promise<{ queued: true }>;
+  search(query: string, page?: number, limit?: number): Promise<unknown>;
 }
 
 function calculateAvgRating(reviews: { rating: number }[]): number {

@@ -3,10 +3,10 @@ import { CheckoutController } from "./checkout.controller";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
 import { idempotencyMiddleware } from "@shared/middlewares/idempotency.middleware";
 import { validate } from "@shared/middlewares/validation.middleware";
-import { 
-    checkoutSchema, 
-    getOrdersQuerySchema, 
-    getOrderParamsSchema 
+import {
+  checkoutSchema,
+  getOrdersQuerySchema,
+  getOrderParamsSchema,
 } from "./dto/checkout.dto";
 
 const router = Router();
@@ -77,7 +77,7 @@ router.post(
 router.get(
   "/orders",
   validate(getOrdersQuerySchema),
-  controller.getOrders.bind(controller)
+  controller.getOrders.bind(controller),
 );
 
 /**

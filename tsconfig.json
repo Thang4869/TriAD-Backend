@@ -8,8 +8,8 @@
     "allowJs": false,
     "checkJs": false,
 
-    // "baseUrl": "./",
-    // "ignoreDeprecations": "6.0",
+    "baseUrl": "./",
+    //  "ignoreDeprecations": "6.0",
     "paths": {
       "@/*": ["./src/*"],
       "@core/*": ["./src/core/*"],
@@ -30,10 +30,5 @@
     "noImplicitAny": false
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/**/*.js",
-    "src/**/*.js.map"
-  ]
+  "exclude": ["node_modules", "dist", "src/**/*.js", "src/**/*.js.map"]
 }

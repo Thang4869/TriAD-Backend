@@ -27,7 +27,11 @@ export class UsersService {
     return this.repository.updateProfile(userId, data);
   }
 
-  async changePassword( userId: string,currentPassword: string, newPassword: string) {
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
     const user = await this.repository.findById(userId);
     if (!user) {
       throw new NotFoundError("User not found");

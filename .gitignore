@@ -55,6 +55,7 @@ prisma/*.sqlite
 dump.rdb
 .data/
 docker-data/
+uploads/
 
 # Temp
 tmp/

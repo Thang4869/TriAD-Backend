@@ -88,3 +88,11 @@ export const adminGetProductsQuerySchema = z.object({
     sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
   }),
 });
+
+export const searchProductsQuerySchema = z.object({
+  query: z.object({
+    q: z.string().min(2, "Search query must be at least 2 characters"),
+    page: z.string().optional().transform(Number).pipe(z.number().int().min(1).default(1)),
+    limit: z.string().optional().transform(Number).pipe(z.number().int().min(1).max(50).default(12)),
+  }),
+});

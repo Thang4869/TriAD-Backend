@@ -53,6 +53,18 @@ export interface CreateProductData {
   slug: string;
 }
 
+export interface FullTextSearchResult {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  stock: number;
+  category: string;
+  images: string[];
+  slug: string;
+  rank: number;
+}
+
 export type UpdateProductData = Partial<CreateProductData & { isActive: boolean }>;
 
 // ---------- Repository contract ----------
@@ -72,6 +84,9 @@ export interface IProductsRepository {
 
   update(id: string, data: UpdateProductData): Promise<Product>;
   setActive(id: string, isActive: boolean): Promise<Product>;
+  existsAndActive(id: string): Promise<boolean>;
+  searchFullText(query: string, skip: number, take: number): Promise<FullTextSearchResult[]>;
+  countFullTextSearch(query: string): Promise<number>;
 }
 
 // ---------- Prisma implementation ----------
@@ -177,5 +192,37 @@ export class PrismaProductsRepository implements IProductsRepository {
 
   async setActive(id: string, isActive: boolean): Promise<Product> {
     return prisma.product.update({ where: { id }, data: { isActive } });
+  }
+
+  async existsAndActive(id: string): Promise<boolean> {
+    const product = await prisma.product.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    return product !== null;
+  }
+
+  async searchFullText(query: string, skip: number, take: number): Promise<FullTextSearchResult[]> {
+    return prisma.$queryRaw<FullTextSearchResult[]>`
+      SELECT
+        "id", "name", "description", "price", "stock",
+        "category", "images", "slug",
+        ts_rank("searchVector", plainto_tsquery('simple', ${query})) AS rank
+      FROM "products"
+      WHERE "isActive" = true
+        AND "searchVector" @@ plainto_tsquery('simple', ${query})
+      ORDER BY rank DESC
+      OFFSET ${skip} LIMIT ${take}
+    `;
+  }
+
+  async countFullTextSearch(query: string): Promise<number> {
+    const result = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM "products"
+      WHERE "isActive" = true
+        AND "searchVector" @@ plainto_tsquery('simple', ${query})
+    `;
+    return Number(result[0]?.count ?? 0);
   }
 }

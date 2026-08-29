@@ -1,12 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
-import {
-  IProductsRepository,
-  PrismaProductsRepository,
-  CreateProductData,
-  UpdateProductData,
-} from "./products.repository";
+import { IProductsRepository, PrismaProductsRepository, CreateProductData, UpdateProductData} from "./products.repository";
 import { toProductListResponse, toProductDetailResponse } from "./products.mapper";
+import { imageQueue } from "@core/queue/bull";
 
 const MAX_PAGE_LIMIT = 50;
 const DEFAULT_PUBLIC_LIMIT = 12;
@@ -43,6 +39,8 @@ export interface IProductsService {
   update(id: string, data: UpdateProductData): Promise<unknown>;
   delete(id: string): Promise<unknown>;
   restore(id: string): Promise<unknown>;
+  uploadImage(productId: string, localFilePath: string): Promise<{ queued: true }>;
+  search(query: string, page?: number, limit?: number): Promise<unknown>; 
 }
 
 function calculateAvgRating(reviews: { rating: number }[]): number {
@@ -237,5 +235,36 @@ export class ProductsService implements IProductsService {
       throw new BadRequestError("Product is already active");
     }
     return this.repository.setActive(id, true);
+  }
+
+  async uploadImage(productId: string, localFilePath: string) {
+    const exists = await this.repository.existsAndActive(productId);
+    if (!exists) {
+      throw new NotFoundError("Product not found");
+    }
+
+    await imageQueue.add("process-product-image", {
+      productId,
+      localFilePath,
+    });
+
+    return { queued: true as const };
+  }
+
+  async search(query: string, page = 1, limit = DEFAULT_PUBLIC_LIMIT) {
+    const { safeLimit, skip } = buildPagination(page, limit);
+
+    const [results, total] = await Promise.all([
+      this.repository.searchFullText(query, skip, safeLimit),
+      this.repository.countFullTextSearch(query),
+    ]);
+
+    return {
+      products: results,
+      total,
+      page,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    };
   }
 }

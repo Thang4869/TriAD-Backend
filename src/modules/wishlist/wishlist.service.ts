@@ -1,5 +1,8 @@
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
-import { PAGINATION_DEFAULTS, resolvePagination } from "@shared/constants/pagination.constant";
+import {
+  PAGINATION_DEFAULTS,
+  resolvePagination,
+} from "@shared/constants/pagination.constant";
 import {
   IWishlistRepository,
   PrismaWishlistRepository,
@@ -28,7 +31,13 @@ export class WishlistService implements IWishlistService {
       this.repository.countByUser(userId),
     ]);
 
-    return { items, total, page, limit: safeLimit, totalPages: Math.ceil(total / safeLimit) };
+    return {
+      items,
+      total,
+      page,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    };
   }
 
   async addItem(userId: string, productId: string) {

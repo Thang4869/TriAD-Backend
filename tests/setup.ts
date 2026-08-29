@@ -1,11 +1,11 @@
-import { beforeAll, afterAll, afterEach } from 'vitest';
-import dotenv from 'dotenv';
+import { beforeAll, afterAll, afterEach } from "vitest";
+import dotenv from "dotenv";
 
-dotenv.config({ path: '.env.test' });
+dotenv.config({ path: ".env.test" });
 
-import prisma from '../src/core/database/prisma';
-import redis from '../src/core/redis/client';
-import { emailWorker, imageWorker } from '../src/core/queue/bull';
+import prisma from "../src/core/database/prisma";
+import redis from "../src/core/redis/client";
+import { emailWorker, imageWorker } from "../src/core/queue/bull";
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -21,15 +21,15 @@ afterAll(async () => {
 
 afterEach(async () => {
   const tables = [
-    'cart_items',
-    'carts',
-    'order_items',
-    'orders',
-    'reviews',
-    'notifications',
-    'refresh_tokens',
-    'users',
-    'products',
+    "cart_items",
+    "carts",
+    "order_items",
+    "orders",
+    "reviews",
+    "notifications",
+    "refresh_tokens",
+    "users",
+    "products",
   ];
   for (const table of tables) {
     await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);

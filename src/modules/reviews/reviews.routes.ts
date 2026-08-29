@@ -14,23 +14,23 @@ const router = Router();
 const controller = new ReviewsController();
 
 router.get(
-  "/product/:productId", 
-  validate(getReviewsQuerySchema), 
-  controller.getByProduct.bind(controller)
+  "/product/:productId",
+  validate(getReviewsQuerySchema),
+  controller.getByProduct.bind(controller),
 );
 
 router.post(
-  "/", 
-  validate(createReviewSchema), 
-  authMiddleware, 
-  controller.create.bind(controller)
+  "/",
+  validate(createReviewSchema),
+  authMiddleware,
+  controller.create.bind(controller),
 );
 
 router.delete(
-  "/:reviewId", 
-  validate(deleteReviewParamsSchema), 
-  authMiddleware, 
-  controller.delete.bind(controller)
+  "/:reviewId",
+  validate(deleteReviewParamsSchema),
+  authMiddleware,
+  controller.delete.bind(controller),
 );
 
 router.get(

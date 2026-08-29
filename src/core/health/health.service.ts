@@ -17,16 +17,25 @@ export interface ReadinessReport {
   components: Record<string, ComponentHealth>;
 }
 
-async function withTimeout<T>( promise: Promise<T>, timeoutMs: number): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs),
+      setTimeout(
+        () => reject(new Error(`Timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      ),
     ),
   ]);
 }
 
-async function measure(check: () => Promise<unknown>, timeoutMs = 2000): Promise<ComponentHealth> {
+async function measure(
+  check: () => Promise<unknown>,
+  timeoutMs = 2000,
+): Promise<ComponentHealth> {
   const start = Date.now();
   try {
     await withTimeout(check(), timeoutMs);

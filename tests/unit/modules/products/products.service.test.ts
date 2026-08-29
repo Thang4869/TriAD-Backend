@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ProductsService } from "@modules/products/products.service";
 import { IProductsRepository } from "@modules/products/products.repository";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
@@ -15,6 +15,9 @@ function createFakeRepository(
     groupByCategory: vi.fn().mockResolvedValue([]),
     findManyAdmin: vi.fn().mockResolvedValue([]),
     findById: vi.fn().mockResolvedValue(null),
+    existsAndActive: vi.fn().mockResolvedValue(true),
+    searchFullText: vi.fn().mockResolvedValue([]),
+    countFullTextSearch: vi.fn().mockResolvedValue(0),
     create: vi.fn(),
     update: vi.fn(),
     setActive: vi.fn(),

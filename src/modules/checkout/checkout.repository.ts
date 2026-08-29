@@ -1,7 +1,6 @@
 import prisma from "@core/database/prisma";
 import redis from "@core/redis/client";
 import { Prisma, Order } from "@prisma/client";
-import { ConflictError } from "@shared/utils/errors";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -87,9 +86,7 @@ export interface ICheckoutRepository {
   ): Promise<void>;
 
   findOrderWithItems(orderId: string): Promise<OrderWithItems | null>;
-  findUserCartForCheckout(
-    userId: string,
-  ): Promise<UserCartForCheckout | null>;
+  findUserCartForCheckout(userId: string): Promise<UserCartForCheckout | null>;
 
   runInTransaction<T>(fn: (tx: TxClient) => Promise<T>): Promise<T>;
 
@@ -257,7 +254,9 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
       include: {
         items: {
           include: {
-            product: { select: { id: true, name: true, images: true, slug: true } },
+            product: {
+              select: { id: true, name: true, images: true, slug: true },
+            },
           },
         },
       },

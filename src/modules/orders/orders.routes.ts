@@ -30,15 +30,15 @@ router.patch(
 );
 
 router.get(
-  "/", 
-  validate(getMyOrdersQuerySchema), 
-  controller.getMyOrders.bind(controller)
+  "/",
+  validate(getMyOrdersQuerySchema),
+  controller.getMyOrders.bind(controller),
 );
 
 router.get(
-  "/:orderId", 
-  validate(getOrderParamsSchema), 
-  controller.getMyOrder.bind(controller)
+  "/:orderId",
+  validate(getOrderParamsSchema),
+  controller.getMyOrder.bind(controller),
 );
 
 export { router as orderRoutes };

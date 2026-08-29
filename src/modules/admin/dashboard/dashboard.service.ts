@@ -39,7 +39,10 @@ export class DashboardService implements IDashboardService {
       this.repository.getTotalRevenue(since30Days),
       this.repository.getOrderStatusBreakdown(),
       this.repository.getRevenueByDay(DEFAULT_REVENUE_WINDOW_DAYS),
-      this.repository.getTopSellingProducts(DEFAULT_TOP_PRODUCTS_LIMIT, since30Days),
+      this.repository.getTopSellingProducts(
+        DEFAULT_TOP_PRODUCTS_LIMIT,
+        since30Days,
+      ),
       this.repository.getLowStockProducts(DEFAULT_LOW_STOCK_THRESHOLD),
       this.repository.getNewUsersCount(since30Days),
       this.repository.getTotalUsersCount(),

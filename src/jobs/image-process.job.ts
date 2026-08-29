@@ -30,7 +30,10 @@ async function loadSourceBuffer(data: ImageProcessJobData): Promise<Buffer> {
 
 export const processImage = async (job: { data: ImageProcessJobData }) => {
   const { productId, localFilePath, imageUrl } = job.data;
-  logger.info(`Processing image for product ${productId}`, { imageUrl, localFilePath });
+  logger.info(`Processing image for product ${productId}`, {
+    imageUrl,
+    localFilePath,
+  });
 
   try {
     const sourceBuffer = await loadSourceBuffer(job.data);
@@ -66,7 +69,9 @@ export const processImage = async (job: { data: ImageProcessJobData }) => {
       });
     }
 
-    logger.info(`Image processed and linked to product ${productId}: ${publicUrl}`);
+    logger.info(
+      `Image processed and linked to product ${productId}: ${publicUrl}`,
+    );
     return { processed: true, url: publicUrl };
   } catch (error) {
     logger.error("Image processing failed", { productId, error });

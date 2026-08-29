@@ -65,12 +65,16 @@ export interface FullTextSearchResult {
   rank: number;
 }
 
-export type UpdateProductData = Partial<CreateProductData & { isActive: boolean }>;
+export type UpdateProductData = Partial<
+  CreateProductData & { isActive: boolean }
+>;
 
 // ---------- Repository contract ----------
 
 export interface IProductsRepository {
-  findManyWithRatings(query: ProductListQuery): Promise<ProductWithRatingReviews[]>;
+  findManyWithRatings(
+    query: ProductListQuery,
+  ): Promise<ProductWithRatingReviews[]>;
   count(where: Prisma.ProductWhereInput): Promise<number>;
   findByIdWithReviews(id: string): Promise<ProductWithFullReviews | null>;
   findBySlugWithReviews(slug: string): Promise<ProductWithShortReviews | null>;
@@ -85,14 +89,20 @@ export interface IProductsRepository {
   update(id: string, data: UpdateProductData): Promise<Product>;
   setActive(id: string, isActive: boolean): Promise<Product>;
   existsAndActive(id: string): Promise<boolean>;
-  searchFullText(query: string, skip: number, take: number): Promise<FullTextSearchResult[]>;
+  searchFullText(
+    query: string,
+    skip: number,
+    take: number,
+  ): Promise<FullTextSearchResult[]>;
   countFullTextSearch(query: string): Promise<number>;
 }
 
 // ---------- Prisma implementation ----------
 
 export class PrismaProductsRepository implements IProductsRepository {
-  async findManyWithRatings(query: ProductListQuery): Promise<ProductWithRatingReviews[]> {
+  async findManyWithRatings(
+    query: ProductListQuery,
+  ): Promise<ProductWithRatingReviews[]> {
     return prisma.product.findMany({
       where: query.where,
       orderBy: query.orderBy,
@@ -110,7 +120,9 @@ export class PrismaProductsRepository implements IProductsRepository {
     return prisma.product.count({ where });
   }
 
-  async findByIdWithReviews(id: string): Promise<ProductWithFullReviews | null> {
+  async findByIdWithReviews(
+    id: string,
+  ): Promise<ProductWithFullReviews | null> {
     return prisma.product.findUnique({
       where: { id },
       include: {
@@ -131,7 +143,9 @@ export class PrismaProductsRepository implements IProductsRepository {
     });
   }
 
-  async findBySlugWithReviews(slug: string): Promise<ProductWithShortReviews | null> {
+  async findBySlugWithReviews(
+    slug: string,
+  ): Promise<ProductWithShortReviews | null> {
     return prisma.product.findUnique({
       where: { slug },
       include: {
@@ -202,7 +216,11 @@ export class PrismaProductsRepository implements IProductsRepository {
     return product !== null;
   }
 
-  async searchFullText(query: string, skip: number, take: number): Promise<FullTextSearchResult[]> {
+  async searchFullText(
+    query: string,
+    skip: number,
+    take: number,
+  ): Promise<FullTextSearchResult[]> {
     return prisma.$queryRaw<FullTextSearchResult[]>`
       SELECT
         "id", "name", "description", "price", "stock",

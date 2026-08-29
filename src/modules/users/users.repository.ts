@@ -45,7 +45,10 @@ export class PrismaUsersRepository implements IUsersRepository {
     return prisma.user.findUnique({ where: { id: userId } });
   }
 
-  async updateProfile(userId: string, data: UpdateProfileData): Promise<UserProfile> {
+  async updateProfile(
+    userId: string,
+    data: UpdateProfileData,
+  ): Promise<UserProfile> {
     return prisma.user.update({
       where: { id: userId },
       data: {

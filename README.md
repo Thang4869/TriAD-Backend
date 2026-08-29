@@ -26,6 +26,7 @@ The application is a **modular Express.js backend** with clear separation betwee
 ## Features
 
 ### Authentication & Identity
+
 - User registration with email verification (token stored in Redis, 15-minute TTL)
 - Login with bcrypt password verification
 - JWT access tokens (default 15m) + refresh tokens (default 7d) stored in DB
@@ -37,6 +38,7 @@ The application is a **modular Express.js backend** with clear separation betwee
 - Resend verification email
 
 ### E-Commerce Domain
+
 - **Users**: profile retrieval/update, password change
 - **Products**: public listing with filters (category, price range, keyword, sort), slug/ID lookup, categories with counts; admin CRUD (create/update/soft-delete/restore) with slug uniqueness checks
 - **Cart**: get/create cart, add/update/remove items, clear cart; stock checks on mutation
@@ -46,6 +48,7 @@ The application is a **modular Express.js backend** with clear separation betwee
 - **Notifications**: basic notification endpoints (authenticated)
 
 ### Security
+
 - Helmet (CSP, HSTS, frameguard, noSniff, XSS filter)
 - Configurable CORS with credentials
 - JWT Bearer authentication + optional auth middleware
@@ -57,6 +60,7 @@ The application is a **modular Express.js backend** with clear separation betwee
 - Centralized error handling (Prisma, Zod, JWT, operational errors)
 
 ### Reliability & Data Integrity
+
 - Prisma transactions used in critical paths (e.g. seed, checkout concurrency test)
 - Optimistic concurrency field (`version`) on products (visible in concurrency test)
 - Refresh-token expiry checks and bulk invalidation
@@ -65,12 +69,14 @@ The application is a **modular Express.js backend** with clear separation betwee
 - Database connection verification on startup
 
 ### Background Processing
+
 - BullMQ queues: `email` (3 attempts, exponential backoff, concurrency 5) and `image` (2 attempts, fixed delay, concurrency 2)
 - Email job: Nodemailer-based templates (welcome, order-confirmation, verify-email)
 - Image job: Sharp resize/JPEG conversion and local filesystem save under `uploads/products`
 - Queue event logging (completed / failed)
 
 ### Observability
+
 - Winston logger: console (colorized) + daily-rotate file (`triad-%DATE%.log`, 20 MB max, 14-day retention)
 - Request/response logging middleware with duration and request ID
 - Correlation / request ID headers
@@ -80,23 +86,23 @@ The application is a **modular Express.js backend** with clear separation betwee
 
 ## Technology Stack
 
-| Category            | Technology                          | Notes / Version          |
-|---------------------|-------------------------------------|--------------------------|
-| Runtime             | Node.js                             | ES2022 target            |
-| Language            | TypeScript                          | ^5.3.3                   |
-| HTTP Framework      | Express.js                          | ^4.18.2                  |
-| ORM                 | Prisma                              | ^5.22.0                  |
-| Database            | PostgreSQL                          | 16 (Docker)              |
-| Cache / Queue       | Redis + BullMQ                      | Redis 7, BullMQ ^5.1.8   |
-| Auth                | JWT, Passport, OAuth2               | passport-jwt, Google, Facebook |
-| Password Hashing    | bcrypt                              | ^5.1.1                   |
-| Validation          | Zod                                 | ^3.22.4                  |
-| API Docs            | Swagger / OpenAPI 3.0               | swagger-jsdoc + UI       |
-| Logging             | Winston + daily-rotate-file         | ^3.11.0 / ^4.7.1         |
-| Email               | Nodemailer                          | ^9.0.5                   |
-| Image Processing    | Sharp                               | ^0.35.3                  |
-| Testing             | Vitest                              | ^4.1.11                  |
-| Containerization    | Docker / Docker Compose             | multi-stage Dockerfile   |
+| Category         | Technology                  | Notes / Version                |
+| ---------------- | --------------------------- | ------------------------------ |
+| Runtime          | Node.js                     | ES2022 target                  |
+| Language         | TypeScript                  | ^5.3.3                         |
+| HTTP Framework   | Express.js                  | ^4.18.2                        |
+| ORM              | Prisma                      | ^5.22.0                        |
+| Database         | PostgreSQL                  | 16 (Docker)                    |
+| Cache / Queue    | Redis + BullMQ              | Redis 7, BullMQ ^5.1.8         |
+| Auth             | JWT, Passport, OAuth2       | passport-jwt, Google, Facebook |
+| Password Hashing | bcrypt                      | ^5.1.1                         |
+| Validation       | Zod                         | ^3.22.4                        |
+| API Docs         | Swagger / OpenAPI 3.0       | swagger-jsdoc + UI             |
+| Logging          | Winston + daily-rotate-file | ^3.11.0 / ^4.7.1               |
+| Email            | Nodemailer                  | ^9.0.5                         |
+| Image Processing | Sharp                       | ^0.35.3                        |
+| Testing          | Vitest                      | ^4.1.11                        |
+| Containerization | Docker / Docker Compose     | multi-stage Dockerfile         |
 
 ---
 
@@ -174,20 +180,20 @@ flowchart TD
   E --> F[User clicks link]
   F --> G[Verify token → set isVerified]
   G --> H[Issue access + refresh tokens]
-  
+
   I[Login] --> J[Validate credentials]
   J --> K{2FA enabled?}
   K -->|Yes| L[Return requires2FA + userId]
   L --> M[POST /verify-totp]
   M --> H
   K -->|No| H
-  
+
   N[OAuth Google/Facebook] --> O[Find or create verified user]
   O --> H
-  
+
   H --> P[Set HTTP-only cookies]
   H --> Q[Store refresh token in DB]
-  
+
   R[Logout] --> S[Blacklist access token in Redis]
   S --> T[Delete refresh token(s)]
 ```
@@ -224,77 +230,77 @@ All routes are prefixed with `/api`. Authenticated routes require `Authorization
 
 ### Authentication (`/api/auth`)
 
-| Method | Endpoint                  | Auth | Role | Description                          |
-|--------|---------------------------|------|------|--------------------------------------|
-| POST   | `/register`               | No   | —    | Register + send verification email   |
-| GET    | `/verify-email?token=`    | No   | —    | Verify email, issue tokens           |
-| POST   | `/resend-verification`    | No   | —    | Resend verification email            |
-| POST   | `/login`                  | No   | —    | Login (may return `requires2FA`)     |
-| POST   | `/refresh`                | No   | —    | Refresh tokens                       |
-| POST   | `/logout`                 | Yes  | —    | Logout + invalidate tokens           |
-| POST   | `/2fa/enable`             | Yes  | —    | Generate TOTP secret + otpauth URL   |
-| POST   | `/2fa/verify`             | Yes  | —    | Activate 2FA                         |
-| POST   | `/verify-totp`            | No   | —    | Complete 2FA login                   |
-| GET    | `/google`                 | No   | —    | Redirect to Google OAuth             |
-| GET    | `/google/callback`        | No   | —    | Google callback → set cookies        |
-| GET    | `/facebook`               | No   | —    | Redirect to Facebook OAuth           |
-| GET    | `/facebook/callback`      | No   | —    | Facebook callback → set cookies      |
+| Method | Endpoint               | Auth | Role | Description                        |
+| ------ | ---------------------- | ---- | ---- | ---------------------------------- |
+| POST   | `/register`            | No   | —    | Register + send verification email |
+| GET    | `/verify-email?token=` | No   | —    | Verify email, issue tokens         |
+| POST   | `/resend-verification` | No   | —    | Resend verification email          |
+| POST   | `/login`               | No   | —    | Login (may return `requires2FA`)   |
+| POST   | `/refresh`             | No   | —    | Refresh tokens                     |
+| POST   | `/logout`              | Yes  | —    | Logout + invalidate tokens         |
+| POST   | `/2fa/enable`          | Yes  | —    | Generate TOTP secret + otpauth URL |
+| POST   | `/2fa/verify`          | Yes  | —    | Activate 2FA                       |
+| POST   | `/verify-totp`         | No   | —    | Complete 2FA login                 |
+| GET    | `/google`              | No   | —    | Redirect to Google OAuth           |
+| GET    | `/google/callback`     | No   | —    | Google callback → set cookies      |
+| GET    | `/facebook`            | No   | —    | Redirect to Facebook OAuth         |
+| GET    | `/facebook/callback`   | No   | —    | Facebook callback → set cookies    |
 
 ### Users (`/api/users`)
 
-| Method | Endpoint           | Auth | Role | Description              |
-|--------|--------------------|------|------|--------------------------|
-| GET    | `/me`              | Yes  | —    | Get profile              |
-| PUT    | `/me`              | Yes  | —    | Update profile           |
-| PUT    | `/me/password`     | Yes  | —    | Change password          |
+| Method | Endpoint       | Auth | Role | Description     |
+| ------ | -------------- | ---- | ---- | --------------- |
+| GET    | `/me`          | Yes  | —    | Get profile     |
+| PUT    | `/me`          | Yes  | —    | Update profile  |
+| PUT    | `/me/password` | Yes  | —    | Change password |
 
 ### Products (`/api/products`)
 
-| Method | Endpoint                    | Auth | Role  | Description                          |
-|--------|-----------------------------|------|-------|--------------------------------------|
-| GET    | `/`                         | No   | —     | List products (filters, pagination)  |
-| GET    | `/categories`               | No   | —     | Category list with counts            |
-| GET    | `/slug/:slug`               | No   | —     | Get by slug                          |
-| GET    | `/:id`                      | No   | —     | Get by ID                            |
-| GET    | `/admin/all`                | Yes  | ADMIN | Admin list (includes inactive)       |
-| POST   | `/admin`                    | Yes  | ADMIN | Create product                       |
-| PUT    | `/admin/:id`                | Yes  | ADMIN | Update product                       |
-| DELETE | `/admin/:id`                | Yes  | ADMIN | Soft-delete (deactivate)             |
-| PATCH  | `/admin/:id/restore`        | Yes  | ADMIN | Reactivate                           |
+| Method | Endpoint             | Auth | Role  | Description                         |
+| ------ | -------------------- | ---- | ----- | ----------------------------------- |
+| GET    | `/`                  | No   | —     | List products (filters, pagination) |
+| GET    | `/categories`        | No   | —     | Category list with counts           |
+| GET    | `/slug/:slug`        | No   | —     | Get by slug                         |
+| GET    | `/:id`               | No   | —     | Get by ID                           |
+| GET    | `/admin/all`         | Yes  | ADMIN | Admin list (includes inactive)      |
+| POST   | `/admin`             | Yes  | ADMIN | Create product                      |
+| PUT    | `/admin/:id`         | Yes  | ADMIN | Update product                      |
+| DELETE | `/admin/:id`         | Yes  | ADMIN | Soft-delete (deactivate)            |
+| PATCH  | `/admin/:id/restore` | Yes  | ADMIN | Reactivate                          |
 
 ### Cart (`/api/cart`)
 
-| Method | Endpoint              | Auth | Role | Description            |
-|--------|-----------------------|------|------|------------------------|
-| GET    | `/`                   | Yes  | —    | Get cart               |
-| POST   | `/items`              | Yes  | —    | Add item               |
-| PUT    | `/items/:productId`   | Yes  | —    | Update quantity        |
-| DELETE | `/items/:productId`   | Yes  | —    | Remove item            |
-| DELETE | `/`                   | Yes  | —    | Clear cart             |
+| Method | Endpoint            | Auth | Role | Description     |
+| ------ | ------------------- | ---- | ---- | --------------- |
+| GET    | `/`                 | Yes  | —    | Get cart        |
+| POST   | `/items`            | Yes  | —    | Add item        |
+| PUT    | `/items/:productId` | Yes  | —    | Update quantity |
+| DELETE | `/items/:productId` | Yes  | —    | Remove item     |
+| DELETE | `/`                 | Yes  | —    | Clear cart      |
 
 ### Checkout (`/api/checkout`)
 
-| Method | Endpoint | Auth | Role | Description                                      |
-|--------|----------|------|------|--------------------------------------------------|
-| POST   | `/`      | Yes  | —    | Place order (idempotency key recommended)        |
+| Method | Endpoint | Auth | Role | Description                               |
+| ------ | -------- | ---- | ---- | ----------------------------------------- |
+| POST   | `/`      | Yes  | —    | Place order (idempotency key recommended) |
 
 Body fields (validated): `paymentMethod` (COD|CARD|BANKING), `address`, `phone`, optional `notes`, `discountCode`, `idempotencyKey`.
 
 ### Orders (`/api/orders`)
 
-| Method | Endpoint     | Auth | Role | Description          |
-|--------|--------------|------|------|----------------------|
-| GET    | `/`          | Yes  | —    | List user orders     |
-| GET    | `/:orderId`  | Yes  | —    | Get order details    |
+| Method | Endpoint    | Auth | Role | Description       |
+| ------ | ----------- | ---- | ---- | ----------------- |
+| GET    | `/`         | Yes  | —    | List user orders  |
+| GET    | `/:orderId` | Yes  | —    | Get order details |
 
 ### Reviews (`/api/reviews`)
 
-| Method | Endpoint                | Auth | Role  | Description                |
-|--------|-------------------------|------|-------|----------------------------|
-| GET    | `/product/:productId`   | No   | —     | List reviews for product   |
-| POST   | `/`                     | Yes  | —     | Create review              |
-| DELETE | `/:reviewId`            | Yes  | —     | Delete (owner or ADMIN)    |
-| GET    | `/admin/all`            | Yes  | ADMIN | Admin list all reviews     |
+| Method | Endpoint              | Auth | Role  | Description              |
+| ------ | --------------------- | ---- | ----- | ------------------------ |
+| GET    | `/product/:productId` | No   | —     | List reviews for product |
+| POST   | `/`                   | Yes  | —     | Create review            |
+| DELETE | `/:reviewId`          | Yes  | —     | Delete (owner or ADMIN)  |
+| GET    | `/admin/all`          | Yes  | ADMIN | Admin list all reviews   |
 
 ### Notifications (`/api/notifications`)
 
@@ -303,7 +309,7 @@ Authenticated routes for listing and managing user notifications (see source for
 ### Health
 
 | Method | Endpoint  | Auth | Description          |
-|--------|-----------|------|----------------------|
+| ------ | --------- | ---- | -------------------- |
 | GET    | `/health` | No   | Liveness + timestamp |
 
 ---
@@ -372,6 +378,7 @@ Create a `.env` file in the project root (or use Docker environment injection).
 ## Local Development
 
 ### Prerequisites
+
 - Node.js (compatible with TypeScript 5.3 / ES2022)
 - npm
 - PostgreSQL 16 (or use Docker)
@@ -424,11 +431,11 @@ npm start       # node dist/server.js
 
 `docker-compose.yml` defines three services:
 
-| Service   | Image / Build          | Ports       | Notes                                      |
-|-----------|------------------------|-------------|--------------------------------------------|
-| postgres  | postgres:16-alpine     | 5433→5432   | healthcheck, volume `postgres_data`        |
-| redis     | redis:7-alpine         | 6379→6379   | healthcheck, volume `redis_data`           |
-| backend   | multi-stage Dockerfile | 5000→5000   | depends on healthy postgres + redis, `npm run dev` |
+| Service  | Image / Build          | Ports     | Notes                                              |
+| -------- | ---------------------- | --------- | -------------------------------------------------- |
+| postgres | postgres:16-alpine     | 5433→5432 | healthcheck, volume `postgres_data`                |
+| redis    | redis:7-alpine         | 6379→6379 | healthcheck, volume `redis_data`                   |
+| backend  | multi-stage Dockerfile | 5000→5000 | depends on healthy postgres + redis, `npm run dev` |
 
 ```bash
 docker compose up --build
@@ -535,20 +542,20 @@ This is **not** a claim of production security completeness. Review secrets mana
 
 ## Available npm Scripts
 
-| Command                   | Purpose                              |
-|---------------------------|--------------------------------------|
+| Command                   | Purpose                                |
+| ------------------------- | -------------------------------------- |
 | `npm run dev`             | Development server (nodemon + ts-node) |
-| `npm run build`           | Compile TypeScript → `dist/`         |
-| `npm start`               | Run compiled server                  |
-| `npm test`                | Run Vitest once                      |
-| `npm run test:watch`      | Vitest watch mode                    |
-| `npm run test:coverage`   | Coverage report                      |
-| `npm run prisma:generate` | Generate Prisma Client               |
-| `npm run prisma:migrate`  | Run Prisma migrations (dev)          |
-| `npm run prisma:studio`   | Open Prisma Studio                   |
-| `npm run seed`            | Seed development data                |
-| `npm run format`          | Prettier format                      |
-| `npm run lint`            | ESLint                               |
+| `npm run build`           | Compile TypeScript → `dist/`           |
+| `npm start`               | Run compiled server                    |
+| `npm test`                | Run Vitest once                        |
+| `npm run test:watch`      | Vitest watch mode                      |
+| `npm run test:coverage`   | Coverage report                        |
+| `npm run prisma:generate` | Generate Prisma Client                 |
+| `npm run prisma:migrate`  | Run Prisma migrations (dev)            |
+| `npm run prisma:studio`   | Open Prisma Studio                     |
+| `npm run seed`            | Seed development data                  |
+| `npm run format`          | Prettier format                        |
+| `npm run lint`            | ESLint                                 |
 
 ---
 
@@ -625,4 +632,7 @@ flowchart TD
 ## License
 
 License information is not currently defined in the repository.
+
+```
+
 ```

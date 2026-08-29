@@ -1,5 +1,5 @@
 import prisma from "@core/database/prisma";
-import { Prisma, WishlistItem } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 const PRODUCT_SUMMARY_SELECT = {
   id: true,

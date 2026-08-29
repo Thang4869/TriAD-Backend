@@ -4,9 +4,20 @@ import { authMiddleware } from "@shared/middlewares/auth.middleware";
 import { requireAdmin } from "@shared/middlewares/rbac.middleware";
 import { validate } from "@shared/middlewares/validation.middleware";
 import { uploadProductImage } from "@shared/middlewares/upload.middleware";
-import { getProductsQuerySchema, getProductParamsSchema, getProductBySlugParamsSchema} from "./dto/products.dto";
-import { createProductSchema, updateProductSchema, deleteProductParamsSchema} from "./dto/products.dto";
-import { adminGetProductsQuerySchema, searchProductsQuerySchema } from "./dto/products.dto";
+import {
+  getProductsQuerySchema,
+  getProductParamsSchema,
+  getProductBySlugParamsSchema,
+} from "./dto/products.dto";
+import {
+  createProductSchema,
+  updateProductSchema,
+  deleteProductParamsSchema,
+} from "./dto/products.dto";
+import {
+  adminGetProductsQuerySchema,
+  searchProductsQuerySchema,
+} from "./dto/products.dto";
 
 const router = Router();
 const controller = new ProductsController();
@@ -51,7 +62,7 @@ const controller = new ProductsController();
 router.get(
   "/",
   validate(getProductsQuerySchema),
-  controller.getAll.bind(controller)
+  controller.getAll.bind(controller),
 );
 
 /**
@@ -103,7 +114,7 @@ router.use("/admin", authMiddleware, requireAdmin);
 router.get(
   "/admin/all",
   validate(adminGetProductsQuerySchema),
-  controller.adminGetAll.bind(controller)
+  controller.adminGetAll.bind(controller),
 );
 
 /**
@@ -147,7 +158,7 @@ router.get(
 router.post(
   "/admin",
   validate(createProductSchema),
-  controller.adminCreate.bind(controller)
+  controller.adminCreate.bind(controller),
 );
 
 /**
@@ -172,7 +183,7 @@ router.post(
 router.put(
   "/admin/:id",
   validate(updateProductSchema),
-  controller.adminUpdate.bind(controller)
+  controller.adminUpdate.bind(controller),
 );
 
 /**
@@ -197,7 +208,7 @@ router.put(
 router.delete(
   "/admin/:id",
   validate(deleteProductParamsSchema),
-  controller.adminDelete.bind(controller)
+  controller.adminDelete.bind(controller),
 );
 
 /**
@@ -222,7 +233,7 @@ router.delete(
 router.patch(
   "/admin/:id/restore",
   validate(deleteProductParamsSchema),
-  controller.adminRestore.bind(controller)
+  controller.adminRestore.bind(controller),
 );
 
 // ---------- Public routes ----------
@@ -247,7 +258,7 @@ router.patch(
 router.get(
   "/slug/:slug",
   validate(getProductBySlugParamsSchema),
-  controller.getBySlug.bind(controller)
+  controller.getBySlug.bind(controller),
 );
 
 /**
@@ -270,7 +281,7 @@ router.get(
 router.get(
   "/:id",
   validate(getProductParamsSchema),
-  controller.getById.bind(controller)
+  controller.getById.bind(controller),
 );
 
 /**

@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import { IProductsService, ProductsService } from "./products.service";
 import { asyncHandler } from "@shared/utils/async-handler";
-import { uploadProductImage } from "@shared/middlewares/upload.middleware";
 import { BadRequestError } from "@shared/utils/errors";
 
 export class ProductsController {
@@ -10,7 +9,16 @@ export class ProductsController {
   ) {}
 
   getAll = asyncHandler(async (req: Request, res: Response) => {
-    const {page, limit, category, minPrice, maxPrice, keyword, sortBy, sortOrder} = req.query;
+    const {
+      page,
+      limit,
+      category,
+      minPrice,
+      maxPrice,
+      keyword,
+      sortBy,
+      sortOrder,
+    } = req.query;
 
     const result = await this.service.findAll({
       page: page ? Number(page) : undefined,
@@ -44,7 +52,11 @@ export class ProductsController {
   });
 
   search = asyncHandler(async (req: Request, res: Response) => {
-    const { q, page, limit } = req.query as { q: string; page?: string; limit?: string };
+    const { q, page, limit } = req.query as {
+      q: string;
+      page?: string;
+      limit?: string;
+    };
     const result = await this.service.search(
       q,
       page ? Number(page) : undefined,

@@ -29,11 +29,18 @@ export interface CreateReviewData {
 // ---------- Repository contract ----------
 
 export interface IReviewsRepository {
-  findByProduct(productId: string, skip: number, take: number): Promise<ReviewWithUser[]>;
+  findByProduct(
+    productId: string,
+    skip: number,
+    take: number,
+  ): Promise<ReviewWithUser[]>;
   countByProduct(productId: string): Promise<number>;
 
   productExists(productId: string): Promise<boolean>;
-  findByUserAndProduct(userId: string, productId: string): Promise<Review | null>;
+  findByUserAndProduct(
+    userId: string,
+    productId: string,
+  ): Promise<Review | null>;
   create(data: CreateReviewData): Promise<ReviewWithUser>;
 
   findById(reviewId: string): Promise<Review | null>;
@@ -46,7 +53,11 @@ export interface IReviewsRepository {
 // ---------- Prisma implementation ----------
 
 export class PrismaReviewsRepository implements IReviewsRepository {
-  async findByProduct(productId: string, skip: number, take: number): Promise<ReviewWithUser[]> {
+  async findByProduct(
+    productId: string,
+    skip: number,
+    take: number,
+  ): Promise<ReviewWithUser[]> {
     return prisma.review.findMany({
       where: { productId },
       include: { user: { select: REVIEWER_SELECT } },
@@ -68,7 +79,10 @@ export class PrismaReviewsRepository implements IReviewsRepository {
     return product !== null;
   }
 
-  async findByUserAndProduct(userId: string, productId: string): Promise<Review | null> {
+  async findByUserAndProduct(
+    userId: string,
+    productId: string,
+  ): Promise<Review | null> {
     return prisma.review.findFirst({ where: { userId, productId } });
   }
 
@@ -87,7 +101,10 @@ export class PrismaReviewsRepository implements IReviewsRepository {
     await prisma.review.delete({ where: { id: reviewId } });
   }
 
-  async findAllAdmin(skip: number, take: number): Promise<ReviewWithUserAndProduct[]> {
+  async findAllAdmin(
+    skip: number,
+    take: number,
+  ): Promise<ReviewWithUserAndProduct[]> {
     return prisma.review.findMany({
       include: {
         user: { select: REVIEWER_SELECT },

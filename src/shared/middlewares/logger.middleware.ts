@@ -1,21 +1,31 @@
-import { Request, Response, NextFunction } from 'express';
-import { logger } from '@core/logger/winston';
+import { Request, Response, NextFunction } from "express";
+import { logger } from "@core/logger/winston";
 
-const sensitiveFields = ['password', 'currentPassword', 'newPassword', 'token', 'refreshToken'];
+const sensitiveFields = [
+  "password",
+  "currentPassword",
+  "newPassword",
+  "token",
+  "refreshToken",
+];
 
 const sanitizeBody = (body: any): any => {
-  if (!body || typeof body !== 'object') return body;
+  if (!body || typeof body !== "object") return body;
   const sanitized = { ...body };
   for (const field of sensitiveFields) {
-    if (field in sanitized) sanitized[field] = '***REDACTED***';
+    if (field in sanitized) sanitized[field] = "***REDACTED***";
   }
   return sanitized;
 };
 
-export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
+export const requestLogger = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   const start = Date.now();
   const { method, url, query, body, ip, headers } = req;
-  const requestId = (req as any).requestId || 'N/A';
+  const requestId = (req as any).requestId || "N/A";
 
   logger.info(`Incoming ${method} ${url}`, {
     requestId,
@@ -24,7 +34,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     query,
     body: sanitizeBody(body),
     ip,
-    userAgent: headers['user-agent'],
+    userAgent: headers["user-agent"],
   });
 
   const originalEnd = res.end;
@@ -36,7 +46,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
       status,
       duration: `${duration}ms`,
     });
-    const responseBody = chunk?.toString() || '';
+    const _responseBody = chunk?.toString() || "";
     return originalEnd.call(this, chunk, encoding, callback);
   };
 

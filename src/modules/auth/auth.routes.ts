@@ -19,13 +19,6 @@ import passport from "./strategies/oauth2.strategy";
 const router = Router();
 const controller = new AuthController();
 
-const cookieOptions = {
-  httpOnly: true,
-  secure: config.NODE_ENV === "production",
-  sameSite: "lax" as const,
-  path: "/",
-};
-
 /**
  * @swagger
  * /api/auth/register:
@@ -323,11 +316,7 @@ router.post(
  *       401:
  *         description: Unauthorized
  */
-router.post(
-  "/logout", 
-  authMiddleware, 
-  controller.logout.bind(controller)
-);
+router.post("/logout", authMiddleware, controller.logout.bind(controller));
 
 /**
  * @swagger
@@ -502,7 +491,7 @@ router.post(
  */
 router.get(
   "/google",
-  passport.authenticate("google", { 
+  passport.authenticate("google", {
     scope: ["profile", "email"],
     session: false,
   }),
@@ -520,8 +509,8 @@ router.get(
  */
 router.get(
   "/google/callback",
-  passport.authenticate("google", { 
-    session: false, 
+  passport.authenticate("google", {
+    session: false,
     failureRedirect: `${config.FRONTEND_URL}?error=oauth_failed`,
   }),
   controller.googleCallback.bind(controller),
@@ -539,7 +528,7 @@ router.get(
  */
 router.get(
   "/facebook",
-  passport.authenticate("facebook", { 
+  passport.authenticate("facebook", {
     scope: ["email"],
     session: false,
   }),
@@ -557,8 +546,8 @@ router.get(
  */
 router.get(
   "/facebook/callback",
-  passport.authenticate("facebook", { 
-    session: false, 
+  passport.authenticate("facebook", {
+    session: false,
     failureRedirect: `${config.FRONTEND_URL}?error=oauth_failed`,
   }),
   controller.facebookCallback.bind(controller),

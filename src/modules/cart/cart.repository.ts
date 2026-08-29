@@ -40,9 +40,16 @@ export interface ICartRepository {
   findProductStockInfo(productId: string): Promise<ProductStockInfo | null>;
 
   findCartItem(cartId: string, productId: string): Promise<CartItem | null>;
-  createCartItem(cartId: string, productId: string, quantity: number): Promise<CartItemWithProduct>;
-  updateCartItemQuantity(itemId: string, quantity: number): Promise<CartItemWithProduct>;
-  
+  createCartItem(
+    cartId: string,
+    productId: string,
+    quantity: number,
+  ): Promise<CartItemWithProduct>;
+  updateCartItemQuantity(
+    itemId: string,
+    quantity: number,
+  ): Promise<CartItemWithProduct>;
+
   deleteCartItem(itemId: string): Promise<void>;
   deleteCartItemsByCartId(cartId: string): Promise<number>;
 }
@@ -93,27 +100,39 @@ export class PrismaCartRepository implements ICartRepository {
     return prisma.cart.create({ data: { userId } });
   }
 
-  async findProductStockInfo(productId: string): Promise<ProductStockInfo | null> {
+  async findProductStockInfo(
+    productId: string,
+  ): Promise<ProductStockInfo | null> {
     return prisma.product.findUnique({
       where: { id: productId },
       select: { id: true, stock: true, name: true },
     });
   }
 
-  async findCartItem(cartId: string, productId: string): Promise<CartItem | null> {
+  async findCartItem(
+    cartId: string,
+    productId: string,
+  ): Promise<CartItem | null> {
     return prisma.cartItem.findUnique({
       where: { cartId_productId: { cartId, productId } },
     });
   }
 
-  async createCartItem(cartId: string, productId: string, quantity: number): Promise<CartItemWithProduct> {
+  async createCartItem(
+    cartId: string,
+    productId: string,
+    quantity: number,
+  ): Promise<CartItemWithProduct> {
     return prisma.cartItem.create({
       data: { cartId, productId, quantity },
       include: { product: true },
     });
   }
 
-  async updateCartItemQuantity(itemId: string, quantity: number): Promise<CartItemWithProduct> {
+  async updateCartItemQuantity(
+    itemId: string,
+    quantity: number,
+  ): Promise<CartItemWithProduct> {
     return prisma.cartItem.update({
       where: { id: itemId },
       data: { quantity },

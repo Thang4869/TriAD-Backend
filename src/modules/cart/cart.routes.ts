@@ -2,10 +2,7 @@ import { Router } from "express";
 import { CartController } from "./cart.controller";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
 import { validate } from "@shared/middlewares/validation.middleware";
-import { 
-    addItemSchema, 
-    updateItemSchema 
-} from "./dto/cart.dto";
+import { addItemSchema, updateItemSchema } from "./dto/cart.dto";
 
 const router = Router();
 const controller = new CartController();
@@ -24,10 +21,7 @@ router.use(authMiddleware);
  *       200:
  *         description: Cart with items
  */
-router.get(
-    "/", 
-    controller.getCart.bind(controller)
-);
+router.get("/", controller.getCart.bind(controller));
 
 /**
  * @swagger
@@ -57,9 +51,9 @@ router.get(
  *         description: Item added
  */
 router.post(
-    "/items", 
-    validate(addItemSchema),
-    controller.addItem.bind(controller)
+  "/items",
+  validate(addItemSchema),
+  controller.addItem.bind(controller),
 );
 
 /**
@@ -92,9 +86,9 @@ router.post(
  *         description: Item updated
  */
 router.put(
-    "/items/:productId", 
-    validate(updateItemSchema),
-    controller.updateItem.bind(controller)
+  "/items/:productId",
+  validate(updateItemSchema),
+  controller.updateItem.bind(controller),
 );
 
 /**
@@ -114,10 +108,7 @@ router.put(
  *       200:
  *         description: Item removed
  */
-router.delete(
-    "/items/:productId", 
-    controller.removeItem.bind(controller)
-);
+router.delete("/items/:productId", controller.removeItem.bind(controller));
 
 /**
  * @swagger
@@ -131,9 +122,6 @@ router.delete(
  *       200:
  *         description: Cart cleared
  */
-router.delete(
-    "/", 
-    controller.clearCart.bind(controller)
-);
+router.delete("/", controller.clearCart.bind(controller));
 
 export { router as cartRoutes };

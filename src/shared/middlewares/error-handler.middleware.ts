@@ -19,9 +19,10 @@ export const errorHandler = (
   err: any,
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ) => {
-  const correlationId = req.headers["x-correlation-id"] || 
+  const correlationId =
+    req.headers["x-correlation-id"] ||
     `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
   logger.error("Error:", {
@@ -99,7 +100,7 @@ export const errorHandler = (
 export const notFoundHandler = (
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ) => {
   res.status(404).json({
     success: false,

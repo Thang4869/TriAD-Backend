@@ -5,9 +5,7 @@ import { OrderStatus } from "@prisma/client";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class OrdersController {
-  constructor(
-    private readonly service: OrdersService = new OrdersService(),
-  ) {}
+  constructor(private readonly service: OrdersService = new OrdersService()) {}
 
   getMyOrders = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;

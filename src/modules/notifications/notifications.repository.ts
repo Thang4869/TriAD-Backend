@@ -11,7 +11,11 @@ export interface CreateNotificationData {
 // ---------- Repository contract ----------
 
 export interface INotificationsRepository {
-  findByUser(userId: string, skip: number, take: number): Promise<Notification[]>;
+  findByUser(
+    userId: string,
+    skip: number,
+    take: number,
+  ): Promise<Notification[]>;
   countByUser(userId: string): Promise<number>;
   findByIdAndUser(id: string, userId: string): Promise<Notification | null>;
   markAsRead(id: string): Promise<Notification>;
@@ -21,8 +25,12 @@ export interface INotificationsRepository {
 
 // ---------- Prisma implementation ----------
 
-export class PrismaNotificationsRepository implements INotificationsRepository{
-  async findByUser(userId: string, skip: number, take: number): Promise<Notification[]> {
+export class PrismaNotificationsRepository implements INotificationsRepository {
+  async findByUser(
+    userId: string,
+    skip: number,
+    take: number,
+  ): Promise<Notification[]> {
     return prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -35,7 +43,10 @@ export class PrismaNotificationsRepository implements INotificationsRepository{
     return prisma.notification.count({ where: { userId } });
   }
 
-  async findByIdAndUser(id: string, userId: string): Promise<Notification | null> {
+  async findByIdAndUser(
+    id: string,
+    userId: string,
+  ): Promise<Notification | null> {
     return prisma.notification.findFirst({ where: { id, userId } });
   }
 

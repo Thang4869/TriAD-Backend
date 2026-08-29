@@ -1,10 +1,12 @@
+/* global Express */
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { Request } from "express";
 import { BadRequestError } from "@shared/utils/errors";
 
 const TEMP_UPLOAD_DIR = path.join(process.cwd(), "uploads", "tmp");
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 fs.mkdirSync(TEMP_UPLOAD_DIR, { recursive: true });
@@ -19,7 +21,7 @@ const storage = multer.diskStorage({
 });
 
 function fileFilter(
-  _req: Express.Request,
+  _req: Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback,
 ) {

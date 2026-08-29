@@ -11,10 +11,9 @@ import { swaggerSpec } from "@config/swagger";
 import config from "@config";
 
 import {rateLimiter, strictRateLimiter,} from "@shared/middlewares/rate-limit.middleware";
-
 import {errorHandler, notFoundHandler,} from "@shared/middlewares/error-handler.middleware";
-
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
+import { requestLogger } from '@shared/middlewares/logger.middleware';
 
 import { authRoutes } from "@modules/auth/auth.routes";
 import { userRoutes } from "@modules/users/users.routes";
@@ -27,7 +26,9 @@ import { notificationRoutes } from "@modules/notifications/notifications.routes"
 import { wishlistRoutes } from "@modules/wishlist/wishlist.routes";
 import { dashboardRoutes } from "@modules/admin/dashboard/dashboard.routes";
 
-import { requestLogger } from '@shared/middlewares/logger.middleware';
+import { healthRoutes } from "@core/health/health.routes";
+import { metricsMiddleware } from "@core/metrics/metrics.middleware";
+import { metricsRoutes } from "@core/metrics/metrics.routes";
 
 const app: Application = express();
 
@@ -80,6 +81,8 @@ app.use(
 app.use(compression());
 app.use(requestLogger);
 app.use(cookieParser());
+app.use(metricsMiddleware);
+
 app.use(json({ limit: "10mb" }));
 app.use(urlencoded({ extended: true, limit: "10mb" }));
 
@@ -113,6 +116,8 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/notifications", authMiddleware, notificationRoutes);
 app.use("/api/wishlist", authMiddleware, wishlistRoutes);
 app.use("/api/admin/dashboard", dashboardRoutes);
+app.use("/health", healthRoutes);
+app.use("/metrics", metricsRoutes);
 
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 

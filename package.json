@@ -5,17 +5,26 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc-alias",
+
     "start": "node dist/server.js",
+    
     "dev": "cross-env TS_NODE_BASEURL=./ kill-port 5000 && cross-env TS_NODE_BASEURL=./ nodemon --exec ts-node -r tsconfig-paths/register src/server.ts",
-    "test": "vitest --run --no-file-parallelism",
-    "test:watch": "vitest --no-file-parallelism",
-    "test:coverage": "vitest --coverage --no-file-parallelism",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio",
+
+    "vitest:test": "vitest --run --no-file-parallelism",
+    "vitest:test watch": "vitest --no-file-parallelism",
+    "vitest:test coverage": "vitest --coverage --no-file-parallelism",
+
     "seed": "ts-node scripts/seed.ts",
     "format": "prettier --write .",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint . --ext .ts",
+
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:generate types": "prisma generate && tsc-alias",
+    "prisma:reset db": "prisma migrate reset --force && ts-node scripts/seed.ts",
+    "prisma:generate db": "prisma generate",
+
+    "run seed": "run-seed"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

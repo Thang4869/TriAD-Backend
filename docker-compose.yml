@@ -59,6 +59,13 @@ services:
         condition: service_healthy
     command: ["npm", "run", "dev"]
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: triad-jaeger
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+
 volumes:
   postgres_data:
   redis_data:

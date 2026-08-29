@@ -1,45 +1,39 @@
-# ========== Stage 1: Development ==========
-FROM node:20-alpine AS development
-
+# ---------- Stage 1: dependencies ----------
+FROM node:20-alpine AS deps
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Copy package files and install dependencies
-COPY package*.json ./
-RUN npm ci --only=development
-
-# Copy source code
+# ---------- Stage 2: build ----------
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-
-# Generate Prisma client
 RUN npx prisma generate
-
-# Expose port
-EXPOSE 5000
-
-CMD ["npm", "run", "dev"]
-
-# ========== Stage 2: Build ==========
-FROM development AS builder
-
 RUN npm run build
 
-# ========== Stage 3: Production ==========
+# ---------- Stage 3: production runtime ----------
 FROM node:20-alpine AS production
-
 WORKDIR /app
+ENV NODE_ENV=production
 
-# Copy production dependencies
-COPY package*.json ./
-RUN npm ci --only=production
+# Chạy bằng non-root user — giảm rủi ro nếu container bị compromise
+RUN addgroup -g 1001 nodejs && adduser -S nodejs -u 1001
 
-# Copy built dist and Prisma schema
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Generate Prisma client in production
-RUN npx prisma generate
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 
-EXPOSE 5000
+RUN mkdir -p uploads/tmp uploads/products && chown -R nodejs:nodejs uploads
+
+USER nodejs
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/health/live', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
 
 CMD ["node", "dist/server.js"]

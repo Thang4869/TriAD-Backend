@@ -1,9 +1,10 @@
+import "@core/tracing/tracing";
 import "dotenv/config";
-import { config } from "./config";
 import app from "./app";
-import { logger } from "@core/logger/winston";
 import prisma from "@core/database/prisma";
 import redis from "@core/redis/client";
+import { config } from "./config";
+import { logger } from "@core/logger/winston";
 
 const PORT = config.PORT;
 

@@ -1,7 +1,9 @@
 import { Strategy, ExtractJwt, StrategyOptions } from "passport-jwt";
 import passport from "passport";
-import prisma from "@core/database/prisma";
+import { PrismaAuthRepository } from "../auth.repository";
 import { UnauthorizedError } from "@shared/utils/errors";
+
+const authRepository = new PrismaAuthRepository();
 
 const options: StrategyOptions = {
   jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -11,10 +13,7 @@ const options: StrategyOptions = {
 passport.use(
   new Strategy(options, async (payload, done) => {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: payload.sub },
-        select: { id: true, email: true, role: true, isVerified: true },
-      });
+      const user = await authRepository.findUserById(payload.sub);
 
       if (!user || !user.isVerified) {
         return done(

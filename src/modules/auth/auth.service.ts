@@ -1,19 +1,22 @@
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import speakeasy from "speakeasy";
-import { User } from "@prisma/client";
+import config from "@config";
 import redis from "@core/redis/client";
+
+import { User } from "@prisma/client";
+
 import { logger } from "@core/logger/winston";
 import { emailQueue } from "@core/queue/bull";
-import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
-import config from "@config";
-import {
-  IAuthRepository,
-  PrismaAuthRepository,
-  CreateUserData,
-} from "./auth.repository";
+
 import { toAuthUserResponse, AuthUserResponse } from "./auth.mapper";
+import { IAuthRepository, PrismaAuthRepository, CreateUserData} from "./auth.repository";
+
+import { SECURITY } from "@shared/constants/security.constant";
+import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
+import { signToken, verifyToken } from "@shared/utils/jwt";
+import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
+
+import { decodeToken as jwtDecode } from "@shared/utils/jwt";
 
 const BLACKLIST_PREFIX = "jwt:blacklist:";
 const EMAIL_VERIFY_PREFIX = "email-verify:";
@@ -60,7 +63,7 @@ export class AuthService {
       throw new BadRequestError("Email already registered");
     }
 
-    const hashedPassword = await bcrypt.hash(data.password, 10);
+    const hashedPassword = await hashPassword(data.password);
 
     const user = await this.repository.createUser({
       ...data,
@@ -121,12 +124,11 @@ export class AuthService {
 
   async login(email: string, password: string): Promise<AuthTokens | TwoFactorRequired> {
     const user = await this.repository.findUserByEmail(email);
-
     if (!user) {
       throw new UnauthorizedError("Invalid credentials");
     }
 
-    const isValid = await bcrypt.compare(password, user.password || "");
+    const isValid = await comparePassword(password, user.password || "");
     if (!isValid) {
       throw new UnauthorizedError("Invalid credentials");
     }
@@ -136,11 +138,7 @@ export class AuthService {
     }
 
     if (user.is2FAEnabled) {
-      return {
-        requires2FA: true,
-        userId: user.id,
-        message: "2FA required",
-      };
+      return { requires2FA: true, userId: user.id, message: "2FA required" };
     }
 
     return this.generateTokens(user);
@@ -210,29 +208,25 @@ export class AuthService {
   }
 
   public async generateTokens(user: User): Promise<AuthTokens> {
-    const accessToken = jwt.sign(
+    const accessToken = signToken(
       { sub: user.id, email: user.email, role: user.role },
-      Buffer.from(AuthService.ACCESS_SECRET, "utf-8"),
-      { expiresIn: AuthService.ACCESS_EXPIRY } as jwt.SignOptions,
+      AuthService.ACCESS_SECRET,
+      AuthService.ACCESS_EXPIRY,
     );
 
-    const refreshToken = jwt.sign(
+    const refreshToken = signToken(
       { sub: user.id },
-      Buffer.from(AuthService.REFRESH_SECRET, "utf-8"),
-      { expiresIn: AuthService.REFRESH_EXPIRY } as jwt.SignOptions,
+      AuthService.REFRESH_SECRET,
+      AuthService.REFRESH_EXPIRY,
     );
 
     await this.repository.createRefreshToken(
       refreshToken,
       user.id,
-      new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+      new Date(Date.now() + SECURITY.REFRESH_TOKEN_TTL_MS),
     );
 
-    return {
-      accessToken,
-      refreshToken,
-      user: toAuthUserResponse(user),
-    };
+    return { accessToken, refreshToken, user: toAuthUserResponse(user) };
   }
 
   async invalidateAllUserTokens(userId: string) {
@@ -241,7 +235,7 @@ export class AuthService {
 
   async refreshToken(refreshToken: string): Promise<AuthTokens> {
     try {
-      jwt.verify(refreshToken, AuthService.REFRESH_SECRET);
+      verifyToken(refreshToken, AuthService.REFRESH_SECRET);
 
       const tokenRecord =
         await this.repository.findRefreshTokenWithUser(refreshToken);
@@ -251,7 +245,6 @@ export class AuthService {
       }
 
       const user = tokenRecord.user;
-
       await this.repository.deleteRefreshTokenById(tokenRecord.id);
       await this.invalidateAllUserTokens(user.id);
 
@@ -283,11 +276,15 @@ export class AuthService {
 
   private async blacklistAccessToken(accessToken: string): Promise<void> {
     try {
-      const decoded = jwt.decode(accessToken) as { exp: number } | null;
+      const decoded = jwtDecode(accessToken) as { exp: number } | null;
       if (decoded?.exp) {
         const ttl = decoded.exp - Math.floor(Date.now() / 1000);
         if (ttl > 0) {
-          await redis.setex(`${BLACKLIST_PREFIX}${accessToken}`, ttl, "1");
+          await redis.setex(
+            `${SECURITY.BLACKLIST_KEY_PREFIX}${accessToken}`,
+            ttl,
+            "1",
+          );
         }
       }
     } catch (error) {

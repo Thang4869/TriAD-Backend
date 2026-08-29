@@ -1,70 +1,54 @@
-import prisma from "@core/database/prisma";
+import { NotFoundError } from "@shared/utils/errors";
+import { PAGINATION_DEFAULTS, resolvePagination } from "@shared/constants/pagination.constant";
+import { NotificationType } from "@shared/constants/notification-type.enum";
+import { INotificationsRepository, PrismaNotificationsRepository,} from "./notifications.repository";
 
-export class NotificationsService {
-  async getNotifications(userId: string, page: number = 1, limit: number = 10) {
-    const skip = (page - 1) * limit;
+export interface INotificationsService {
+  getNotifications(userId: string, page?: number, limit?: number): Promise<unknown>;
+  markAsRead(notificationId: string, userId: string): Promise<unknown>;
+  markAllAsRead(userId: string): Promise<{ count: number }>;
+  createNotification(userId: string, title: string, message: string, type?: NotificationType): Promise<unknown>;
+}
+
+export class NotificationsService implements INotificationsService {
+  constructor(
+    private readonly repository: INotificationsRepository = new PrismaNotificationsRepository(),
+  ) {}
+
+  async getNotifications(userId: string, page = PAGINATION_DEFAULTS.DEFAULT_PAGE, limit = PAGINATION_DEFAULTS.STANDARD_LIMIT) {
+    const { safeLimit, skip } = resolvePagination(page, limit);
+
     const [notifications, total] = await Promise.all([
-      prisma.notification.findMany({
-        where: { userId },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.notification.count({ where: { userId } }),
+      this.repository.findByUser(userId, skip, safeLimit),
+      this.repository.countByUser(userId),
     ]);
 
     return {
       notifications,
       total,
       page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
     };
   }
 
   async markAsRead(notificationId: string, userId: string) {
-    const notification = await prisma.notification.findFirst({
-      where: {
-        id: notificationId,
-        userId,
-      },
-    });
+    const notification = await this.repository.findByIdAndUser(
+      notificationId,
+      userId,
+    );
     if (!notification) {
-      throw new Error("Notification not found");
+      throw new NotFoundError("Notification not found");
     }
-
-    const updated = await prisma.notification.update({
-      where: { id: notificationId },
-      data: { read: true },
-    });
-    return updated;
+    return this.repository.markAsRead(notificationId);
   }
 
   async markAllAsRead(userId: string) {
-    const result = await prisma.notification.updateMany({
-      where: {
-        userId,
-        read: false,
-      },
-      data: { read: true },
-    });
-    return { count: result.count };
+    const count = await this.repository.markAllAsReadForUser(userId);
+    return { count };
   }
 
-  async createNotification(
-    userId: string,
-    title: string,
-    message: string,
-    type: string = "info",
-  ) {
-    return prisma.notification.create({
-      data: {
-        userId,
-        title,
-        message,
-        type,
-        read: false,
-      },
-    });
+  async createNotification(userId: string, title: string, message: string, type: NotificationType = NotificationType.INFO) {
+    return this.repository.create({ userId, title, message, type });
   }
 }

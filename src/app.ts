@@ -2,6 +2,7 @@ import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
+import path from "path/win32";
 import { json, urlencoded } from "body-parser";
 
 import cookieParser from "cookie-parser";
@@ -23,6 +24,8 @@ import { checkoutRoutes } from "@modules/checkout/checkout.routes";
 import { orderRoutes } from "@modules/orders/orders.routes";
 import { reviewRoutes } from "@modules/reviews/reviews.routes";
 import { notificationRoutes } from "@modules/notifications/notifications.routes";
+import { wishlistRoutes } from "@modules/wishlist/wishlist.routes";
+import { dashboardRoutes } from "@modules/admin/dashboard/dashboard.routes";
 
 import { requestLogger } from '@shared/middlewares/logger.middleware';
 
@@ -108,6 +111,10 @@ app.use("/api/checkout", authMiddleware, checkoutRoutes);
 app.use("/api/orders", authMiddleware, orderRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/notifications", authMiddleware, notificationRoutes);
+app.use("/api/wishlist", authMiddleware, wishlistRoutes);
+app.use("/api/admin/dashboard", dashboardRoutes);
+
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.use(notFoundHandler);
 app.use(errorHandler);

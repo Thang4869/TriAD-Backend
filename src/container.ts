@@ -28,6 +28,14 @@ import { UsersController } from "@modules/users/users.controller";
 
 import { EmailService } from "@shared/services/email.service";
 
+import { PrismaWishlistRepository } from "@modules/wishlist/wishlist.repository";
+import { WishlistService } from "@modules/wishlist/wishlist.service";
+import { WishlistController } from "@modules/wishlist/wishlist.controller";
+
+import { PrismaDashboardRepository } from "@modules/admin/dashboard/dashboard.repository";
+import { DashboardService } from "@modules/admin/dashboard/dashboard.service";
+import { DashboardController } from "@modules/admin/dashboard/dashboard.controller";
+
 // ---------- Repositories ----------
 const productsRepository = new PrismaProductsRepository();
 const authRepository = new PrismaAuthRepository();
@@ -36,6 +44,8 @@ const checkoutRepository = new PrismaCheckoutRepository();
 const ordersRepository = new PrismaOrdersRepository();
 const reviewsRepository = new PrismaReviewsRepository();
 const usersRepository = new PrismaUsersRepository();
+const wishlistRepository = new PrismaWishlistRepository();
+const dashboardRepository = new PrismaDashboardRepository();
 
 // ---------- Cross-cutting infra services ----------
 const emailService = new EmailService();
@@ -48,6 +58,8 @@ const checkoutService = new CheckoutService(checkoutRepository, emailService);
 const ordersService = new OrdersService(ordersRepository);
 const reviewsService = new ReviewsService(reviewsRepository);
 const usersService = new UsersService(usersRepository);
+const wishlistService = new WishlistService(wishlistRepository);
+const dashboardService = new DashboardService(dashboardRepository);
 
 // ---------- Controllers ----------
 export const productsController = new ProductsController(productsService);
@@ -57,3 +69,5 @@ export const checkoutController = new CheckoutController(checkoutService);
 export const ordersController = new OrdersController(ordersService);
 export const reviewsController = new ReviewsController(reviewsService);
 export const usersController = new UsersController(usersService);
+export const wishlistController = new WishlistController(wishlistService);
+export const dashboardController = new DashboardController(dashboardService);

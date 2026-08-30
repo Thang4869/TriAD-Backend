@@ -85,11 +85,14 @@ export class ProductsService implements IProductsService {
 
     const { safeLimit, skip } = buildPagination(page, limit);
 
+    const priceFilter: Prisma.ProductWhereInput["price"] = {};
+    if (minPrice !== undefined) priceFilter.gte = minPrice;
+    if (maxPrice !== undefined) priceFilter.lte = maxPrice;
+
     const where: Prisma.ProductWhereInput = {
       isActive: true,
       ...(category && { category }),
-      ...(minPrice !== undefined && { price: { gte: minPrice } }),
-      ...(maxPrice !== undefined && { price: { lte: maxPrice } }),
+      ...(Object.keys(priceFilter).length > 0 && { price: priceFilter }),
       ...(keyword && {
         OR: [
           { name: { contains: keyword, mode: "insensitive" } },

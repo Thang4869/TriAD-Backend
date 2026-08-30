@@ -108,4 +108,27 @@ describe("PrismaReviewsRepository (integration)", () => {
     expect(all.length).toBeGreaterThanOrEqual(1);
     expect(all[0].product).toBeDefined();
   });
+
+  it("count returns total number of reviews", async () => {
+    await repository.create({ userId, productId, rating: 5, comment: "Great" });
+    const product2 = await prisma.product.create({
+      data: {
+        name: "Review Product 2",
+        description: "d",
+        price: 30,
+        stock: 10,
+        category: "c",
+        slug: `review-p2-${Date.now()}`,
+        images: [],
+      },
+    });
+    await repository.create({
+      userId,
+      productId: product2.id,
+      rating: 4,
+      comment: "Good",
+    });
+    const total = await repository.count();
+    expect(total).toBeGreaterThanOrEqual(2);
+  });
 });

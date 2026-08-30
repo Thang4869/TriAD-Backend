@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import prisma from '@core/database/prisma';
-import { PrismaCartRepository } from '@modules/cart/cart.repository';
+import { describe, it, expect, beforeEach } from "vitest";
+import prisma from "@core/database/prisma";
+import { PrismaCartRepository } from "@modules/cart/cart.repository";
 
-describe('PrismaCartRepository (integration)', () => {
+describe("PrismaCartRepository (integration)", () => {
   const repository = new PrismaCartRepository();
   let userId: string;
   let productId: string;
@@ -11,20 +11,20 @@ describe('PrismaCartRepository (integration)', () => {
     const user = await prisma.user.create({
       data: {
         email: `cart-repo-${Date.now()}@test.com`,
-        password: 'h',
-        firstName: 'A',
-        lastName: 'B',
+        password: "h",
+        firstName: "A",
+        lastName: "B",
         isVerified: true,
       },
     });
     userId = user.id;
     const product = await prisma.product.create({
       data: {
-        name: 'Cart Product',
-        description: 'd',
+        name: "Cart Product",
+        description: "d",
         price: 50,
         stock: 20,
-        category: 'c',
+        category: "c",
         slug: `cart-p-${Date.now()}`,
         images: [],
       },
@@ -32,30 +32,32 @@ describe('PrismaCartRepository (integration)', () => {
     productId = product.id;
   });
 
-  it('createCart + findCartByUserId hoạt động đúng', async () => {
+  it("createCart + findCartByUserId hoạt động đúng", async () => {
     await repository.createCart(userId);
     await expect(repository.findCartByUserId(userId)).resolves.toMatchObject({
       userId,
     });
   });
 
-  it('findCartWithItems trả null khi user chưa có cart', async () => {
+  it("findCartWithItems trả null khi user chưa có cart", async () => {
     await expect(repository.findCartWithItems(userId)).resolves.toBeNull();
   });
 
-  it('createCartItem + findCartItem trả về đúng item kèm thông tin product', async () => {
+  it("createCartItem + findCartItem trả về đúng item kèm thông tin product", async () => {
     const cart = await repository.createCart(userId);
 
     const item = await repository.createCartItem(cart.id, productId, 3);
 
     expect(item.quantity).toBe(3);
     expect(item.product.id).toBe(productId);
-    await expect(repository.findCartItem(cart.id, productId)).resolves.toMatchObject({
+    await expect(
+      repository.findCartItem(cart.id, productId),
+    ).resolves.toMatchObject({
       id: item.id,
     });
   });
 
-  it('updateCartItemQuantity cập nhật đúng số lượng', async () => {
+  it("updateCartItemQuantity cập nhật đúng số lượng", async () => {
     const cart = await repository.createCart(userId);
     const item = await repository.createCartItem(cart.id, productId, 1);
 
@@ -64,16 +66,18 @@ describe('PrismaCartRepository (integration)', () => {
     expect(updated.quantity).toBe(5);
   });
 
-  it('deleteCartItem xoá đúng item', async () => {
+  it("deleteCartItem xoá đúng item", async () => {
     const cart = await repository.createCart(userId);
     const item = await repository.createCartItem(cart.id, productId, 1);
 
     await repository.deleteCartItem(item.id);
 
-    await expect(repository.findCartItem(cart.id, productId)).resolves.toBeNull();
+    await expect(
+      repository.findCartItem(cart.id, productId),
+    ).resolves.toBeNull();
   });
 
-  it('deleteCartItemsByCartId trả về đúng count đã xoá', async () => {
+  it("deleteCartItemsByCartId trả về đúng count đã xoá", async () => {
     const cart = await repository.createCart(userId);
     await repository.createCartItem(cart.id, productId, 1);
 
@@ -82,7 +86,7 @@ describe('PrismaCartRepository (integration)', () => {
     expect(count).toBe(1);
   });
 
-  it('findProductStockInfo trả đúng stock hiện tại', async () => {
+  it("findProductStockInfo trả đúng stock hiện tại", async () => {
     const info = await repository.findProductStockInfo(productId);
     expect(info?.stock).toBe(20);
   });

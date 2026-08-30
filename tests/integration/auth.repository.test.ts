@@ -1,28 +1,28 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import prisma from '@core/database/prisma';
-import { PrismaAuthRepository } from '@modules/auth/auth.repository';
+import { describe, it, expect, beforeEach } from "vitest";
+import prisma from "@core/database/prisma";
+import { PrismaAuthRepository } from "@modules/auth/auth.repository";
 
-describe('PrismaAuthRepository (integration)', () => {
+describe("PrismaAuthRepository (integration)", () => {
   const repository = new PrismaAuthRepository();
 
-  it('createUser tạo user với isVerified=false mặc định', async () => {
+  it("createUser tạo user với isVerified=false mặc định", async () => {
     const user = await repository.createUser({
       email: `auth-repo-${Date.now()}@test.com`,
-      password: 'hashed',
-      firstName: 'A',
-      lastName: 'B',
+      password: "hashed",
+      firstName: "A",
+      lastName: "B",
     });
 
     expect(user.isVerified).toBe(false);
   });
 
-  it('findUserByEmail/findUserById trả về đúng user vừa tạo', async () => {
+  it("findUserByEmail/findUserById trả về đúng user vừa tạo", async () => {
     const email = `auth-repo-find-${Date.now()}@test.com`;
     const created = await repository.createUser({
       email,
-      password: 'h',
-      firstName: 'A',
-      lastName: 'B',
+      password: "h",
+      firstName: "A",
+      lastName: "B",
     });
 
     await expect(repository.findUserByEmail(email)).resolves.toMatchObject({
@@ -33,12 +33,12 @@ describe('PrismaAuthRepository (integration)', () => {
     });
   });
 
-  it('createCartForUser tạo đúng 1 cart gắn với userId', async () => {
+  it("createCartForUser tạo đúng 1 cart gắn với userId", async () => {
     const user = await repository.createUser({
       email: `auth-repo-cart-${Date.now()}@test.com`,
-      password: 'h',
-      firstName: 'A',
-      lastName: 'B',
+      password: "h",
+      firstName: "A",
+      lastName: "B",
     });
 
     await repository.createCartForUser(user.id);
@@ -47,12 +47,12 @@ describe('PrismaAuthRepository (integration)', () => {
     expect(cart).not.toBeNull();
   });
 
-  it('updateUser cập nhật đúng field truyền vào', async () => {
+  it("updateUser cập nhật đúng field truyền vào", async () => {
     const user = await repository.createUser({
       email: `auth-repo-update-${Date.now()}@test.com`,
-      password: 'h',
-      firstName: 'A',
-      lastName: 'B',
+      password: "h",
+      firstName: "A",
+      lastName: "B",
     });
 
     const updated = await repository.updateUser(user.id, { isVerified: true });
@@ -60,29 +60,33 @@ describe('PrismaAuthRepository (integration)', () => {
     expect(updated.isVerified).toBe(true);
   });
 
-  describe('refresh token lifecycle', () => {
+  describe("refresh token lifecycle", () => {
     let userId: string;
 
     beforeEach(async () => {
       const user = await repository.createUser({
         email: `auth-repo-rt-${Date.now()}@test.com`,
-        password: 'h',
-        firstName: 'A',
-        lastName: 'B',
+        password: "h",
+        firstName: "A",
+        lastName: "B",
       });
       userId = user.id;
     });
 
-    it('createRefreshToken + findRefreshTokenWithUser trả kèm user đầy đủ', async () => {
+    it("createRefreshToken + findRefreshTokenWithUser trả kèm user đầy đủ", async () => {
       const token = `rt-${Date.now()}`;
-      await repository.createRefreshToken(token, userId, new Date(Date.now() + 100000));
+      await repository.createRefreshToken(
+        token,
+        userId,
+        new Date(Date.now() + 100000),
+      );
 
       const record = await repository.findRefreshTokenWithUser(token);
 
       expect(record?.user.id).toBe(userId);
     });
 
-    it('deleteRefreshTokenById xoá đúng bản ghi theo id', async () => {
+    it("deleteRefreshTokenById xoá đúng bản ghi theo id", async () => {
       const token = `rt-del-${Date.now()}`;
       const created = await repository.createRefreshToken(
         token,
@@ -92,15 +96,17 @@ describe('PrismaAuthRepository (integration)', () => {
 
       await repository.deleteRefreshTokenById(created.id);
 
-      await expect(repository.findRefreshTokenWithUser(token)).resolves.toBeNull();
+      await expect(
+        repository.findRefreshTokenWithUser(token),
+      ).resolves.toBeNull();
     });
 
-    it('deleteRefreshTokensByUserId xoá tất cả token của user, không ảnh hưởng user khác', async () => {
+    it("deleteRefreshTokensByUserId xoá tất cả token của user, không ảnh hưởng user khác", async () => {
       const otherUser = await repository.createUser({
         email: `auth-repo-other-${Date.now()}@test.com`,
-        password: 'h',
-        firstName: 'C',
-        lastName: 'D',
+        password: "h",
+        firstName: "C",
+        lastName: "D",
       });
       await repository.createRefreshToken(
         `rt-a-${Date.now()}`,

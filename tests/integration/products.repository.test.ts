@@ -1,17 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import prisma from '@core/database/prisma';
-import { PrismaProductsRepository } from '@modules/products/products.repository';
+import { describe, it, expect, beforeEach } from "vitest";
+import prisma from "@core/database/prisma";
+import { PrismaProductsRepository } from "@modules/products/products.repository";
 
-describe('PrismaProductsRepository (integration)', () => {
+describe("PrismaProductsRepository (integration)", () => {
   const repository = new PrismaProductsRepository();
 
-  it('create + findById + update + setActive hoạt động end-to-end', async () => {
+  it("create + findById + update + setActive hoạt động end-to-end", async () => {
     const product = await repository.create({
-      name: 'Repo CRUD Product',
-      description: 'd',
+      name: "Repo CRUD Product",
+      description: "d",
       price: 10,
       stock: 5,
-      category: 'c',
+      category: "c",
       images: [],
       slug: `crud-${Date.now()}`,
     });
@@ -28,23 +28,25 @@ describe('PrismaProductsRepository (integration)', () => {
     expect(deactivated.isActive).toBe(false);
   });
 
-  it('existsAndActive trả false cho id không tồn tại', async () => {
-    await expect(repository.existsAndActive('00000000-0000-0000-0000-000000000000')).resolves.toBe(
-      false,
-    );
+  it("existsAndActive trả false cho id không tồn tại", async () => {
+    await expect(
+      repository.existsAndActive("00000000-0000-0000-0000-000000000000"),
+    ).resolves.toBe(false);
   });
 
-  it('findBySlugId trả null khi slug chưa tồn tại', async () => {
-    await expect(repository.findBySlugId(`no-such-slug-${Date.now()}`)).resolves.toBeNull();
+  it("findBySlugId trả null khi slug chưa tồn tại", async () => {
+    await expect(
+      repository.findBySlugId(`no-such-slug-${Date.now()}`),
+    ).resolves.toBeNull();
   });
 
-  it('groupByCategory chỉ đếm sản phẩm active', async () => {
+  it("groupByCategory chỉ đếm sản phẩm active", async () => {
     const suffix = Date.now();
     await prisma.product.createMany({
       data: [
         {
-          name: 'GC1',
-          description: 'd',
+          name: "GC1",
+          description: "d",
           price: 1,
           stock: 1,
           category: `cat-${suffix}`,
@@ -53,8 +55,8 @@ describe('PrismaProductsRepository (integration)', () => {
           isActive: true,
         },
         {
-          name: 'GC2',
-          description: 'd',
+          name: "GC2",
+          description: "d",
           price: 1,
           stock: 1,
           category: `cat-${suffix}`,
@@ -71,7 +73,7 @@ describe('PrismaProductsRepository (integration)', () => {
     expect(target?.count).toBe(1);
   });
 
-  describe('searchFullText', () => {
+  describe("searchFullText", () => {
     beforeEach(async () => {
       const suffix = Date.now();
       await prisma.product.createMany({
@@ -79,19 +81,28 @@ describe('PrismaProductsRepository (integration)', () => {
           {
             name: "Wireless Mouse",
             description: "Ergonomic wireless mouse for office use",
-            price: 15, stock: 10, category: "electronics", images: [],
+            price: 15,
+            stock: 10,
+            category: "electronics",
+            images: [],
             slug: `search-mouse-${suffix}`,
           },
           {
             name: "Mechanical Keyboard",
             description: "RGB mechanical keyboard",
-            price: 60, stock: 5, category: "electronics", images: [],
+            price: 60,
+            stock: 5,
+            category: "electronics",
+            images: [],
             slug: `search-keyboard-${suffix}`,
           },
           {
             name: "Office Chair",
             description: "Comfortable ergonomic chair",
-            price: 120, stock: 3, category: "furniture", images: [],
+            price: 120,
+            stock: 3,
+            category: "furniture",
+            images: [],
             slug: `search-chair-${suffix}`,
           },
         ],
@@ -121,7 +132,11 @@ describe('PrismaProductsRepository (integration)', () => {
     });
 
     it("trả mảng rỗng khi không có sản phẩm nào khớp", async () => {
-      const results = await repository.searchFullText("nonexistent-keyword-xyz", 0, 10);
+      const results = await repository.searchFullText(
+        "nonexistent-keyword-xyz",
+        0,
+        10,
+      );
       expect(results).toHaveLength(0);
     });
   });

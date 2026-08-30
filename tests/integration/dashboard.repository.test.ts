@@ -21,7 +21,7 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
   });
 
   it("getTotalRevenue() cộng đúng total các order chưa bị huỷ, bỏ qua CANCELLED", async () => {
-    const product = await prisma.product.create({
+    const _product = await prisma.product.create({
       data: {
         name: "Dashboard Product",
         description: "test",

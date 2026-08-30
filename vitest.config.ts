@@ -21,5 +21,7 @@ export default defineConfig({
       "@shared": "/src/shared",
       "@config": "/src/config",
     },
+    pool: "forks",
+    maxWorkers: 1,
   },
 });

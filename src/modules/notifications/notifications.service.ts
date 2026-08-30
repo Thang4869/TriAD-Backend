@@ -32,8 +32,8 @@ export class NotificationsService implements INotificationsService {
 
   async getNotifications(
     userId: string,
-    page = PAGINATION_DEFAULTS.DEFAULT_PAGE,
-    limit = PAGINATION_DEFAULTS.STANDARD_LIMIT,
+    page: number = PAGINATION_DEFAULTS.DEFAULT_PAGE,
+    limit: number = PAGINATION_DEFAULTS.STANDARD_LIMIT,
   ) {
     const { safeLimit, skip } = resolvePagination(page, limit);
 

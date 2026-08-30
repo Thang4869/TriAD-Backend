@@ -21,8 +21,8 @@ export class WishlistService implements IWishlistService {
 
   async getWishlist(
     userId: string,
-    page = PAGINATION_DEFAULTS.DEFAULT_PAGE,
-    limit = PAGINATION_DEFAULTS.ADMIN_PRODUCT_LIMIT,
+    page: number = PAGINATION_DEFAULTS.DEFAULT_PAGE,
+    limit: number = PAGINATION_DEFAULTS.ADMIN_PRODUCT_LIMIT,
   ) {
     const { safeLimit, skip } = resolvePagination(page, limit);
 

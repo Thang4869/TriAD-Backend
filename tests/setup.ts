@@ -32,3 +32,21 @@ afterEach(async () => {
     await tx.$executeRaw`DELETE FROM "products";`;
   });
 });
+
+afterEach(async () => {
+  const tables = [
+    "wishlist_items",
+    "cart_items",
+    "carts",
+    "order_items",
+    "orders",
+    "reviews",
+    "notifications",
+    "refresh_tokens",
+    "users",
+    "products",
+  ];
+  for (const table of tables) {
+    await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);
+  }
+});

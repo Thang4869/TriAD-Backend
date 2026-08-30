@@ -222,7 +222,7 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
   });
 
   it("getRevenueByDay returns correct data", async () => {
-    const product = await prisma.product.create({
+    const _product = await prisma.product.create({
       data: {
         name: "Dash Product",
         description: "test",

@@ -18,7 +18,9 @@ afterAll(async () => {
     const { emailWorker, imageWorker } = await import("../src/core/queue/bull");
     await emailWorker.close();
     await imageWorker.close();
-  } catch {}
+  } catch {
+    // Workers may not have been initialised in this run; ignore close errors.
+  }
 });
 
 afterEach(async () => {

@@ -45,6 +45,10 @@ CREATE TABLE "products" (
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "searchVector" tsvector GENERATED ALWAYS AS (
+        setweight(to_tsvector('simple', coalesce(name, '')), 'A') ||
+        setweight(to_tsvector('simple', coalesce(description, '')), 'B')
+    ) STORED,
 
     CONSTRAINT "products_pkey" PRIMARY KEY ("id")
 );
@@ -176,33 +180,18 @@ CREATE TABLE "wishlist_items" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
-
--- CreateIndex
 CREATE UNIQUE INDEX "products_slug_key" ON "products"("slug");
-
--- CreateIndex
 CREATE UNIQUE INDEX "carts_userId_key" ON "carts"("userId");
-
--- CreateIndex
 CREATE UNIQUE INDEX "cart_items_cartId_productId_key" ON "cart_items"("cartId", "productId");
-
--- CreateIndex
 CREATE UNIQUE INDEX "orders_orderNumber_key" ON "orders"("orderNumber");
-
--- CreateIndex
 CREATE UNIQUE INDEX "orders_idempotencyKey_key" ON "orders"("idempotencyKey");
-
--- CreateIndex
 CREATE UNIQUE INDEX "reviews_userId_productId_key" ON "reviews"("userId", "productId");
-
--- CreateIndex
 CREATE UNIQUE INDEX "refresh_tokens_token_key" ON "refresh_tokens"("token");
-
--- CreateIndex
 CREATE UNIQUE INDEX "discounts_code_key" ON "discounts"("code");
-
--- CreateIndex
 CREATE UNIQUE INDEX "wishlist_items_userId_productId_key" ON "wishlist_items"("userId", "productId");
+
+-- Index cho Full-Text Search
+CREATE INDEX "products_searchVector_idx" ON "products" USING GIN ("searchVector");
 
 -- AddForeignKey
 ALTER TABLE "carts" ADD CONSTRAINT "carts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -239,7 +228,3 @@ ALTER TABLE "wishlist_items" ADD CONSTRAINT "wishlist_items_userId_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "wishlist_items" ADD CONSTRAINT "wishlist_items_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "searchVector" tsvector;
-CREATE INDEX IF NOT EXISTS "products_searchVector_idx" ON "products" USING GIN ("searchVector");

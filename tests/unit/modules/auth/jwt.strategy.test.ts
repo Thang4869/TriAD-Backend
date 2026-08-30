@@ -1,7 +1,6 @@
 // tests/unit/modules/auth/jwt.strategy.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { User } from "@prisma/client";
-import { UnauthorizedError } from "@shared/utils/errors";
 
 // -------- MOCK REPOSITORY: class with vi.fn() --------
 const mockFindUserById = vi.fn();

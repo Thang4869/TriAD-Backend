@@ -90,4 +90,13 @@ describe("PrismaCartRepository (integration)", () => {
     const info = await repository.findProductStockInfo(productId);
     expect(info?.stock).toBe(20);
   });
+
+  it("findCartWithItems returns cart with product details", async () => {
+    const cart = await repository.createCart(userId);
+    await repository.createCartItem(cart.id, productId, 3);
+    const result = await repository.findCartWithItems(userId);
+    expect(result).not.toBeNull();
+    expect(result?.items).toHaveLength(1);
+    expect(result?.items[0].product).toHaveProperty("name", "Cart Product");
+  });
 });

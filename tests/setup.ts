@@ -5,7 +5,6 @@ dotenv.config({ path: ".env.test" });
 
 import prisma from "../src/core/database/prisma";
 import redis from "../src/core/redis/client";
-import { emailWorker, imageWorker } from "../src/core/queue/bull";
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -15,8 +14,11 @@ beforeAll(async () => {
 afterAll(async () => {
   await prisma.$disconnect();
   await redis.quit();
-  await emailWorker.close();
-  await imageWorker.close();
+  try {
+    const { emailWorker, imageWorker } = await import("../src/core/queue/bull");
+    await emailWorker.close();
+    await imageWorker.close();
+  } catch {}
 });
 
 afterEach(async () => {
@@ -31,9 +33,7 @@ afterEach(async () => {
     await tx.$executeRaw`DELETE FROM "users";`;
     await tx.$executeRaw`DELETE FROM "products";`;
   });
-});
 
-afterEach(async () => {
   const tables = [
     "wishlist_items",
     "cart_items",

@@ -28,6 +28,219 @@ describe("PrismaProductsRepository (integration)", () => {
     expect(deactivated.isActive).toBe(false);
   });
 
+  it("findManyWithRatings trả về sản phẩm kèm reviews, hỗ trợ where/orderBy/skip/take", async () => {
+    const suffix = Date.now();
+    const product = await prisma.product.create({
+      data: {
+        name: "Rated Product",
+        description: "d",
+        price: 50,
+        stock: 10,
+        category: `rated-${suffix}`,
+        images: [],
+        slug: `rated-product-${suffix}`,
+      },
+    });
+
+    await repository.create({
+      name: "Other Product",
+      description: "d",
+      price: 60,
+      stock: 10,
+      category: `rated-${suffix}`,
+      images: [],
+      slug: `other-product-${suffix}`,
+    });
+
+    const user = await prisma.user.create({
+      data: {
+        email: `products-repo-${suffix}@test.com`,
+        password: "h",
+        firstName: "A",
+        lastName: "B",
+        isVerified: true,
+      },
+    });
+    await prisma.review.create({
+      data: {
+        productId: product.id,
+        userId: user.id,
+        rating: 5,
+        comment: "great",
+      },
+    });
+
+    const results = await repository.findManyWithRatings({
+      where: { category: `rated-${suffix}` },
+      orderBy: { createdAt: "asc" },
+      skip: 0,
+      take: 1,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].reviews).toEqual([{ rating: 5 }]);
+  });
+
+  it("count trả đúng số lượng sản phẩm khớp điều kiện where", async () => {
+    const suffix = Date.now();
+    await prisma.product.createMany({
+      data: [
+        {
+          name: "Count A",
+          description: "d",
+          price: 1,
+          stock: 1,
+          category: `count-${suffix}`,
+          images: [],
+          slug: `count-a-${suffix}`,
+        },
+        {
+          name: "Count B",
+          description: "d",
+          price: 1,
+          stock: 1,
+          category: `count-${suffix}`,
+          images: [],
+          slug: `count-b-${suffix}`,
+        },
+      ],
+    });
+
+    const total = await repository.count({ category: `count-${suffix}` });
+    expect(total).toBe(2);
+  });
+
+  it("findByIdWithReviews trả product kèm reviews đầy đủ thông tin user (bao gồm email)", async () => {
+    const suffix = Date.now();
+    const product = await prisma.product.create({
+      data: {
+        name: "Detail Product",
+        description: "d",
+        price: 10,
+        stock: 5,
+        category: "c",
+        images: [],
+        slug: `detail-product-${suffix}`,
+      },
+    });
+    const user = await prisma.user.create({
+      data: {
+        email: `detail-repo-${suffix}@test.com`,
+        password: "h",
+        firstName: "Jane",
+        lastName: "Doe",
+        isVerified: true,
+      },
+    });
+    await prisma.review.create({
+      data: {
+        productId: product.id,
+        userId: user.id,
+        rating: 4,
+        comment: "nice",
+      },
+    });
+
+    const result = await repository.findByIdWithReviews(product.id);
+
+    expect(result?.reviews).toHaveLength(1);
+    expect(result?.reviews[0].user).toMatchObject({
+      firstName: "Jane",
+      lastName: "Doe",
+      email: `detail-repo-${suffix}@test.com`,
+    });
+  });
+
+  it("findByIdWithReviews trả null khi sản phẩm không tồn tại", async () => {
+    await expect(
+      repository.findByIdWithReviews("00000000-0000-0000-0000-000000000000"),
+    ).resolves.toBeNull();
+  });
+
+  it("findBySlugWithReviews trả product kèm reviews nhưng KHÔNG bao gồm email của user", async () => {
+    const suffix = Date.now();
+    const product = await prisma.product.create({
+      data: {
+        name: "Slug Detail Product",
+        description: "d",
+        price: 10,
+        stock: 5,
+        category: "c",
+        images: [],
+        slug: `slug-detail-${suffix}`,
+      },
+    });
+    const user = await prisma.user.create({
+      data: {
+        email: `slug-detail-${suffix}@test.com`,
+        password: "h",
+        firstName: "John",
+        lastName: "Smith",
+        isVerified: true,
+      },
+    });
+    await prisma.review.create({
+      data: {
+        productId: product.id,
+        userId: user.id,
+        rating: 3,
+        comment: "ok",
+      },
+    });
+
+    const result = await repository.findBySlugWithReviews(product.slug);
+
+    expect(result?.reviews).toHaveLength(1);
+    expect(result?.reviews[0].user).toMatchObject({
+      firstName: "John",
+      lastName: "Smith",
+    });
+    expect((result?.reviews[0].user as any).email).toBeUndefined();
+  });
+
+  it("findBySlugWithReviews trả null khi slug không tồn tại", async () => {
+    await expect(
+      repository.findBySlugWithReviews(`no-such-slug-${Date.now()}`),
+    ).resolves.toBeNull();
+  });
+
+  it("findManyAdmin trả về TẤT CẢ sản phẩm khớp điều kiện, kể cả sản phẩm inactive", async () => {
+    const suffix = Date.now();
+    await prisma.product.createMany({
+      data: [
+        {
+          name: "Admin Active",
+          description: "d",
+          price: 1,
+          stock: 1,
+          category: `admin-${suffix}`,
+          images: [],
+          slug: `admin-active-${suffix}`,
+          isActive: true,
+        },
+        {
+          name: "Admin Inactive",
+          description: "d",
+          price: 1,
+          stock: 1,
+          category: `admin-${suffix}`,
+          images: [],
+          slug: `admin-inactive-${suffix}`,
+          isActive: false,
+        },
+      ],
+    });
+
+    const results = await repository.findManyAdmin({
+      where: { category: `admin-${suffix}` },
+      orderBy: { createdAt: "asc" },
+      skip: 0,
+      take: 10,
+    });
+
+    expect(results).toHaveLength(2);
+  });
+
   it("existsAndActive trả false cho id không tồn tại", async () => {
     await expect(
       repository.existsAndActive("00000000-0000-0000-0000-000000000000"),

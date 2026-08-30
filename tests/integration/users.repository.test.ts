@@ -57,4 +57,18 @@ describe("PrismaUsersRepository (integration)", () => {
     const raw = await prisma.user.findUnique({ where: { id: user.id } });
     expect(raw?.password).toBe("new-hash");
   });
+
+  it("findById returns full user including password", async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: `users-repo-find-${Date.now()}@test.com`,
+        password: "secret-hash",
+        firstName: "A",
+        lastName: "B",
+        isVerified: true,
+      },
+    });
+    const found = await repository.findById(user.id);
+    expect(found).toHaveProperty("password", "secret-hash");
+  });
 });

@@ -106,4 +106,10 @@ describe("PrismaWishlistRepository (integration, real DB)", () => {
       repository.productExists("00000000-0000-0000-0000-000000000000"),
     ).resolves.toBe(false);
   });
+
+  it("countByUser returns correct count", async () => {
+    await repository.create(userId, productId);
+    const count = await repository.countByUser(userId);
+    expect(count).toBe(1);
+  });
 });

@@ -20,18 +20,15 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  const tables = [
-    "cart_items",
-    "carts",
-    "order_items",
-    "orders",
-    "reviews",
-    "notifications",
-    "refresh_tokens",
-    "users",
-    "products",
-  ];
-  for (const table of tables) {
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);
-  }
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`DELETE FROM "order_items";`;
+    await tx.$executeRaw`DELETE FROM "orders";`;
+    await tx.$executeRaw`DELETE FROM "cart_items";`;
+    await tx.$executeRaw`DELETE FROM "carts";`;
+    await tx.$executeRaw`DELETE FROM "reviews";`;
+    await tx.$executeRaw`DELETE FROM "notifications";`;
+    await tx.$executeRaw`DELETE FROM "refresh_tokens";`;
+    await tx.$executeRaw`DELETE FROM "users";`;
+    await tx.$executeRaw`DELETE FROM "products";`;
+  });
 });

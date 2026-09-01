@@ -78,6 +78,13 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
     expect(total).toBe(500);
   });
 
+  it("getTotalRevenue() trả về 0 khi không có order nào trong khoảng thời gian", async () => {
+    const sinceDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const total = await repository.getTotalRevenue(sinceDate);
+
+    expect(total).toBe(0);
+  });
+
   it("getLowStockProducts() chỉ trả sản phẩm active có stock <= threshold, sắp xếp tăng dần", async () => {
     await prisma.product.createMany({
       data: [

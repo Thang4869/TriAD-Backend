@@ -91,6 +91,16 @@ describe("PrismaCartRepository (integration)", () => {
     expect(info?.stock).toBe(20);
   });
 
+  it("createCartWithItems tạo cart mới và trả về kèm mảng items rỗng", async () => {
+    const cart = await repository.createCartWithItems(userId);
+
+    expect(cart.userId).toBe(userId);
+    expect(cart.items).toEqual([]);
+
+    const persisted = await prisma.cart.findUnique({ where: { userId } });
+    expect(persisted).not.toBeNull();
+  });
+
   it("findCartWithItems returns cart with product details", async () => {
     const cart = await repository.createCart(userId);
     await repository.createCartItem(cart.id, productId, 3);

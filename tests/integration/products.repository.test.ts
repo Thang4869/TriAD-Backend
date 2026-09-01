@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import prisma from "@core/database/prisma";
 import { PrismaProductsRepository } from "@modules/products/products.repository";
 
@@ -286,6 +286,12 @@ describe("PrismaProductsRepository (integration)", () => {
     expect(target?.count).toBe(1);
   });
 
+  it("findById should return null when product does not exist", async () => {
+    const nonExistentId = "00000000-0000-0000-0000-000000000000";
+    const result = await repository.findById(nonExistentId);
+    expect(result).toBeNull();
+  });
+
   describe("searchFullText", () => {
     beforeEach(async () => {
       const suffix = Date.now();
@@ -322,6 +328,11 @@ describe("PrismaProductsRepository (integration)", () => {
       });
     });
 
+    it("countFullTextSearch returns 0 when no products match", async () => {
+      const count = await repository.countFullTextSearch("nonexistent-keyword");
+      expect(count).toBe(0);
+    });
+
     it("trả về sản phẩm khớp keyword trong name hoặc description", async () => {
       const results = await repository.searchFullText("wireless", 0, 10);
 
@@ -338,6 +349,7 @@ describe("PrismaProductsRepository (integration)", () => {
 
     it("countFullTextSearch trả về số đếm khớp với độ dài mảng searchFullText không phân trang", async () => {
       const count = await repository.countFullTextSearch("ergonomic");
+      console.log("count =", count);
       const results = await repository.searchFullText("ergonomic", 0, 50);
 
       expect(count).toBe(results.length);
@@ -351,6 +363,27 @@ describe("PrismaProductsRepository (integration)", () => {
         10,
       );
       expect(results).toHaveLength(0);
+    });
+    it("trả về 0 khi tham số search là chuỗi rỗng", async () => {
+      const countEmpty = await repository.countFullTextSearch("");
+
+      expect(countEmpty).toBe(0);
+    });
+
+    it("trả về mảng rỗng khi searchFullText với chuỗi rỗng và đủ tham số pagination", async () => {
+      const results = await repository.searchFullText("", 0, 10);
+
+      expect(results).toEqual([]);
+    });
+
+    it("countFullTextSearch returns 0 when $queryRaw returns empty array (edge case for ?? operator)", async () => {
+      const originalQueryRaw = prisma.$queryRaw;
+      (prisma as any).$queryRaw = vi.fn().mockResolvedValue([]);
+
+      const count = await repository.countFullTextSearch("anything");
+      expect(count).toBe(0);
+
+      (prisma as any).$queryRaw = originalQueryRaw;
     });
   });
 });

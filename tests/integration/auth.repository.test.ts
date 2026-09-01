@@ -101,6 +101,21 @@ describe("PrismaAuthRepository (integration)", () => {
       ).resolves.toBeNull();
     });
 
+    it("deleteRefreshTokenByToken xoá đúng bản ghi theo token", async () => {
+      const token = `rt-del-by-token-${Date.now()}`;
+      await repository.createRefreshToken(
+        token,
+        userId,
+        new Date(Date.now() + 100000),
+      );
+
+      await repository.deleteRefreshTokenByToken(token);
+
+      await expect(
+        repository.findRefreshTokenWithUser(token),
+      ).resolves.toBeNull();
+    });
+
     it("deleteRefreshTokensByUserId xoá tất cả token của user, không ảnh hưởng user khác", async () => {
       const otherUser = await repository.createUser({
         email: `auth-repo-other-${Date.now()}@test.com`,

@@ -12,7 +12,6 @@ import {
   CreateOrderData,
 } from "./checkout.repository";
 
-const IDEMPOTENCY_TTL = parseInt(process.env.IDEMPOTENCY_TTL || "86400", 10);
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 100;
 const FREE_SHIPPING_THRESHOLD = 500_000;
@@ -29,6 +28,9 @@ export interface CheckoutInput {
 }
 
 export class CheckoutService {
+  private static getIdempotencyTTL(): number {
+    return parseInt(process.env.IDEMPOTENCY_TTL || "86400", 10);
+  }
   constructor(
     private readonly repository: ICheckoutRepository = new PrismaCheckoutRepository(),
     private readonly emailService: EmailService = new EmailService(),
@@ -108,7 +110,7 @@ export class CheckoutService {
       await this.repository.cacheOrderId(
         input.idempotencyKey,
         order.id,
-        IDEMPOTENCY_TTL,
+        CheckoutService.getIdempotencyTTL(),
       );
     }
 

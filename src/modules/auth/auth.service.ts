@@ -54,10 +54,12 @@ export class AuthService {
     return secret;
   }
 
-  private static readonly ACCESS_EXPIRY =
-    process.env.JWT_ACCESS_EXPIRY || "15m";
-  private static readonly REFRESH_EXPIRY =
-    process.env.JWT_REFRESH_EXPIRY || "7d";
+  private static get ACCESS_EXPIRY(): string {
+    return process.env.JWT_ACCESS_EXPIRY || "15m";
+  }
+  private static get REFRESH_EXPIRY(): string {
+    return process.env.JWT_REFRESH_EXPIRY || "7d";
+  }
 
   async register(data: CreateUserData) {
     const existing = await this.repository.findUserByEmail(data.email);

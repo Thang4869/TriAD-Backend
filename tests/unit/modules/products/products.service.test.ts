@@ -185,6 +185,25 @@ describe("ProductsService - Admin CRUD", () => {
         }),
       );
     });
+
+    it("maps returned products with computed avgRating and reviewCount", async () => {
+      const repository = createFakeRepository({
+        findManyWithRatings: vi.fn().mockResolvedValue([
+          {
+            ...baseProduct,
+            reviews: [{ rating: 4 }, { rating: 2 }],
+          },
+        ]),
+        count: vi.fn().mockResolvedValue(1),
+      });
+      const service = new ProductsService(repository);
+
+      const result: any = await service.findAll({});
+
+      expect(result.products[0].avgRating).toBe(3);
+      expect(result.products[0].reviewCount).toBe(2);
+      expect(result.total).toBe(1);
+    });
   });
 
   describe("ProductsService - getBySlug", () => {

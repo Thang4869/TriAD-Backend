@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import bcrypt from "bcrypt";
 import { User } from "@prisma/client";
 import { AuthService } from "@modules/auth/auth.service";
@@ -184,6 +184,20 @@ describe("AuthService", () => {
         message: "2FA required",
       });
     });
+
+    it("uses empty string as password when user.password is null (OAuth user)", async () => {
+      (bcrypt.compare as any).mockResolvedValueOnce(false);
+      const oauthUser: User = { ...baseUser, password: null as any };
+      const repository = createFakeRepository({
+        findUserByEmail: vi.fn().mockResolvedValue(oauthUser),
+      });
+      const service = new AuthService(repository);
+
+      await expect(
+        service.login("test@test.com", "anything"),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
+      expect(bcrypt.compare).toHaveBeenCalledWith("anything", "");
+    });
   });
 
   describe("resendVerificationEmail", () => {
@@ -247,6 +261,19 @@ describe("AuthService", () => {
         "user-1",
       );
     });
+
+    it("does not attempt to blacklist anything when no accessToken is provided", async () => {
+      const repository = createFakeRepository();
+      const service = new AuthService(repository);
+      const spy = vi.spyOn(service as any, "blacklistAccessToken");
+
+      await service.logout("user-1", undefined, "some.refresh.token");
+
+      expect(spy).not.toHaveBeenCalled();
+      expect(repository.deleteRefreshTokenByToken).toHaveBeenCalledWith(
+        "some.refresh.token",
+      );
+    });
   });
 
   describe("enable2FA", () => {
@@ -272,6 +299,37 @@ describe("AuthService", () => {
       });
       expect(result).toHaveProperty("otpauthUrl");
       expect(result).toHaveProperty("secret");
+    });
+
+    it("uses TOTP_ISSUER from env when provided instead of the default", async () => {
+      const originalIssuer = process.env.TOTP_ISSUER;
+      process.env.TOTP_ISSUER = "CustomIssuer";
+      try {
+        const repository = createFakeRepository({
+          findUserById: vi.fn().mockResolvedValue(baseUser),
+        });
+        const service = new AuthService(repository);
+        const result = await service.enable2FA("user-1");
+        expect(result.otpauthUrl).toContain("CustomIssuer");
+      } finally {
+        process.env.TOTP_ISSUER = originalIssuer;
+      }
+    });
+
+    it("enable2FA uses default issuer 'TriAD' when TOTP_ISSUER is not set", async () => {
+      const originalIssuer = process.env.TOTP_ISSUER;
+      delete process.env.TOTP_ISSUER;
+      try {
+        const repository = createFakeRepository({
+          findUserById: vi.fn().mockResolvedValue(baseUser),
+        });
+        const service = new AuthService(repository);
+        const result = await service.enable2FA("user-1");
+        expect(result.otpauthUrl).toContain("TriAD");
+        expect(result.secret).toBeDefined();
+      } finally {
+        process.env.TOTP_ISSUER = originalIssuer;
+      }
     });
   });
 
@@ -616,6 +674,20 @@ describe("AuthService", () => {
       expect(redis.setex).not.toHaveBeenCalled();
     });
 
+    it("does not blacklist a token whose exp is already in the past", async () => {
+      const accessToken = signToken(
+        { sub: baseUser.id },
+        process.env.JWT_ACCESS_SECRET as string,
+        -10,
+      );
+      const repository = createFakeRepository();
+      const service = new AuthService(repository);
+
+      await service.logout(baseUser.id, accessToken);
+
+      expect(redis.setex).not.toHaveBeenCalled();
+    });
+
     it("logs a warning and swallows the error if decoding the access token throws", async () => {
       const { logger } = await import("@core/logger/winston");
       (decodeToken as any).mockImplementationOnce(() => {
@@ -634,6 +706,37 @@ describe("AuthService", () => {
         expect.objectContaining({ error: expect.any(Error) }),
       );
       expect(redis.setex).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("AuthService - JWT expiry config", () => {
+    afterEach(() => {
+      delete process.env.JWT_ACCESS_EXPIRY;
+      delete process.env.JWT_REFRESH_EXPIRY;
+    });
+
+    it("falls back to default 15m/7d expiry when unset", async () => {
+      delete process.env.JWT_ACCESS_EXPIRY;
+      delete process.env.JWT_REFRESH_EXPIRY;
+
+      const repository = createFakeRepository();
+      const service = new AuthService(repository);
+      const result = await service.generateTokens(baseUser);
+
+      expect(typeof result.accessToken).toBe("string");
+      expect(typeof result.refreshToken).toBe("string");
+    });
+
+    it("uses JWT_ACCESS_EXPIRY/JWT_REFRESH_EXPIRY from env when explicitly provided", async () => {
+      process.env.JWT_ACCESS_EXPIRY = "30m";
+      process.env.JWT_REFRESH_EXPIRY = "30d";
+
+      const repository = createFakeRepository();
+      const service = new AuthService(repository);
+      const result = await service.generateTokens(baseUser);
+
+      expect(typeof result.accessToken).toBe("string");
+      expect(typeof result.refreshToken).toBe("string");
     });
   });
 });

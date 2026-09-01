@@ -19,7 +19,7 @@ afterAll(async () => {
     await emailWorker.close();
     await imageWorker.close();
   } catch {
-    // Workers may not have been initialised in this run; ignore close errors.
+    // If the workers haven't been initialized, we can ignore the error.
   }
 });
 

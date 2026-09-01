@@ -189,6 +189,42 @@ describe("CartService", () => {
         service.updateItem("user-1", "product-1", 5),
       ).rejects.toBeInstanceOf(BadRequestError);
     });
+
+    it("ném BadRequestError với Available: 0 khi sản phẩm không còn tồn tại", async () => {
+      const repository = createFakeRepository({
+        findCartWithItems: vi.fn().mockResolvedValue({
+          id: "cart-1",
+          items: [{ id: "ci1", productId: "product-1" }],
+        }),
+        // findProductStockInfo mặc định trả về null trong createFakeRepository
+      });
+      const service = new CartService(repository);
+
+      await expect(
+        service.updateItem("user-1", "product-1", 5),
+      ).rejects.toThrow("Not enough stock. Available: 0");
+      expect(repository.updateCartItemQuantity).not.toHaveBeenCalled();
+    });
+
+    it("cập nhật thành công quantity mới khi còn đủ tồn kho", async () => {
+      const updatedItem = { id: "ci1", productId: "product-1", quantity: 5 };
+      const repository = createFakeRepository({
+        findCartWithItems: vi.fn().mockResolvedValue({
+          id: "cart-1",
+          items: [{ id: "ci1", productId: "product-1" }],
+        }),
+        findProductStockInfo: vi
+          .fn()
+          .mockResolvedValue({ id: "product-1", stock: 10, name: "P" }),
+        updateCartItemQuantity: vi.fn().mockResolvedValue(updatedItem),
+      });
+      const service = new CartService(repository);
+
+      const result = await service.updateItem("user-1", "product-1", 5);
+
+      expect(repository.updateCartItemQuantity).toHaveBeenCalledWith("ci1", 5);
+      expect(result).toEqual(updatedItem);
+    });
   });
 
   describe("removeItem", () => {
@@ -201,6 +237,20 @@ describe("CartService", () => {
       await expect(
         service.removeItem("user-1", "product-1"),
       ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it("ném NotFoundError khi item không có trong giỏ", async () => {
+      const repository = createFakeRepository({
+        findCartWithItems: vi
+          .fn()
+          .mockResolvedValue({ id: "cart-1", items: [] }),
+      });
+      const service = new CartService(repository);
+
+      await expect(
+        service.removeItem("user-1", "product-x"),
+      ).rejects.toBeInstanceOf(NotFoundError);
+      expect(repository.deleteCartItem).not.toHaveBeenCalled();
     });
 
     it("xoá đúng item khỏi giỏ theo productId", async () => {

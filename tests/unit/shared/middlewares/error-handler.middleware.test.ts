@@ -166,6 +166,33 @@ describe("errorHandler", () => {
       expect.objectContaining({ correlationId: "given-id-123" }),
     );
   });
+
+  it("should include stack trace in development", () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+    const err = new AppError("Test error", 500, false);
+    const res = createMockResponse();
+    errorHandler(err, createMockRequest(), res, vi.fn());
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ stack: expect.any(String) }),
+    );
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it("should NOT include stack trace in production", () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const err = new AppError("Test error", 500, false);
+    const res = createMockResponse();
+    errorHandler(err, createMockRequest(), res, vi.fn());
+    expect(res.json).not.toHaveBeenCalledWith(
+      expect.objectContaining({ stack: expect.any(String) }),
+    );
+    expect(res.json).toHaveBeenCalledWith(
+      expect.not.objectContaining({ stack: expect.any(String) }),
+    );
+    process.env.NODE_ENV = originalEnv;
+  });
 });
 
 describe("notFoundHandler", () => {

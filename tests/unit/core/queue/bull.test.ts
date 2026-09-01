@@ -240,4 +240,28 @@ describe("Bull queue setup", () => {
       vi.useRealTimers();
     }
   });
+
+  it("falls back to 0 waiting count when getJobCounts omits the waiting field", async () => {
+    vi.useFakeTimers();
+    mockGetJobCounts.mockResolvedValueOnce({ failed: 0 });
+    mockGetJobCounts.mockResolvedValueOnce({ failed: 0 });
+    try {
+      const { queueJobsWaiting } =
+        await import("@core/metrics/metrics.registry");
+      await import("@core/queue/bull");
+
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(queueJobsWaiting.set).toHaveBeenCalledWith(
+        { queue_name: "image" },
+        0,
+      );
+      expect(queueJobsWaiting.set).toHaveBeenCalledWith(
+        { queue_name: "email" },
+        0,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

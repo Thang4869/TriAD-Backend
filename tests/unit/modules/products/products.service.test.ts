@@ -431,7 +431,7 @@ describe("ProductsService - Admin CRUD", () => {
       const service = new ProductsService(repository);
 
       await expect(
-        service.uploadImage("missing-id", "/tmp/upload.png"),
+        service.uploadImage("missing-id", Buffer.from("fake-image-content")),
       ).rejects.toBeInstanceOf(NotFoundError);
       expect(imageQueue.add).not.toHaveBeenCalled();
     });
@@ -442,11 +442,14 @@ describe("ProductsService - Admin CRUD", () => {
       });
       const service = new ProductsService(repository);
 
-      const result = await service.uploadImage("prod-1", "/tmp/upload.png");
+      const result = await service.uploadImage(
+        "prod-1",
+        Buffer.from("fake-image-content"),
+      );
 
       expect(imageQueue.add).toHaveBeenCalledWith("process-product-image", {
         productId: "prod-1",
-        localFilePath: "/tmp/upload.png",
+        imageBuffer: "ZmFrZS1pbWFnZS1jb250ZW50",
       });
       expect(result).toEqual({ queued: true });
     });

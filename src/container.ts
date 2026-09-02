@@ -26,8 +26,6 @@ import { PrismaUsersRepository } from "@modules/users/users.repository";
 import { UsersService } from "@modules/users/users.service";
 import { UsersController } from "@modules/users/users.controller";
 
-import { EmailService } from "@shared/services/email.service";
-
 import { PrismaWishlistRepository } from "@modules/wishlist/wishlist.repository";
 import { WishlistService } from "@modules/wishlist/wishlist.service";
 import { WishlistController } from "@modules/wishlist/wishlist.controller";
@@ -35,6 +33,12 @@ import { WishlistController } from "@modules/wishlist/wishlist.controller";
 import { PrismaDashboardRepository } from "@modules/admin/dashboard/dashboard.repository";
 import { DashboardService } from "@modules/admin/dashboard/dashboard.service";
 import { DashboardController } from "@modules/admin/dashboard/dashboard.controller";
+
+import { PrismaNotificationsRepository } from "@modules/notifications/notifications.repository";
+import { NotificationsService } from "@modules/notifications/notifications.service";
+import { NotificationsController } from "@modules/notifications/notifications.controller";
+
+import { EmailService } from "@shared/services/email.service";
 
 // ---------- Repositories ----------
 const productsRepository = new PrismaProductsRepository();
@@ -46,6 +50,7 @@ const reviewsRepository = new PrismaReviewsRepository();
 const usersRepository = new PrismaUsersRepository();
 const wishlistRepository = new PrismaWishlistRepository();
 const dashboardRepository = new PrismaDashboardRepository();
+const notificationsRepository = new PrismaNotificationsRepository();
 
 // ---------- Cross-cutting infra services ----------
 const emailService = new EmailService();
@@ -60,6 +65,7 @@ const reviewsService = new ReviewsService(reviewsRepository);
 const usersService = new UsersService(usersRepository);
 const wishlistService = new WishlistService(wishlistRepository);
 const dashboardService = new DashboardService(dashboardRepository);
+const notificationsService = new NotificationsService(notificationsRepository);
 
 // ---------- Controllers ----------
 export const productsController = new ProductsController(productsService);
@@ -71,3 +77,6 @@ export const reviewsController = new ReviewsController(reviewsService);
 export const usersController = new UsersController(usersService);
 export const wishlistController = new WishlistController(wishlistService);
 export const dashboardController = new DashboardController(dashboardService);
+export const notificationsController = new NotificationsController(
+  notificationsService,
+);

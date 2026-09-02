@@ -4,10 +4,28 @@ import {
   PrismaReviewsRepository,
 } from "./reviews.repository";
 
-export class ReviewsService {
-  constructor(
-    private readonly repository: IReviewsRepository = new PrismaReviewsRepository(),
-  ) {}
+export interface IReviewsService {
+  getReviewsByProduct(
+    productId: string,
+    page?: number,
+    limit?: number,
+  ): Promise<unknown>;
+  createReview(
+    userId: string,
+    productId: string,
+    rating: number,
+    content: string,
+  ): Promise<unknown>;
+  deleteReview(
+    reviewId: string,
+    userId: string,
+    isAdmin?: boolean,
+  ): Promise<{ deleted: true }>;
+  adminGetAll(page?: number, limit?: number): Promise<unknown>;
+}
+
+export class ReviewsService implements IReviewsService {
+  constructor(private readonly repository: IReviewsRepository) {}
 
   async getReviewsByProduct(productId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;

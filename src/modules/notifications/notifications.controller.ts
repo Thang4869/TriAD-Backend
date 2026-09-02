@@ -6,9 +6,7 @@ import {
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class NotificationsController {
-  constructor(
-    private readonly service: INotificationsService = new NotificationsService(),
-  ) {}
+  constructor(private readonly service: INotificationsService) {}
 
   getNotifications = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;

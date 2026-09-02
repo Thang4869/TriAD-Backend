@@ -4,9 +4,7 @@ import { asyncHandler } from "@shared/utils/async-handler";
 import { BadRequestError } from "@shared/utils/errors";
 
 export class ProductsController {
-  constructor(
-    private readonly service: IProductsService = new ProductsService(),
-  ) {}
+  constructor(private readonly service: IProductsService) {}
 
   getAll = asyncHandler(async (req: Request, res: Response) => {
     const {
@@ -120,7 +118,7 @@ export class ProductsController {
     if (!req.file) {
       throw new BadRequestError("Image file is required (field name: 'image')");
     }
-    const result = await this.service.uploadImage(id, req.file.path);
+    const result = await this.service.uploadImage(id, req.file.buffer);
     res.status(202).json({
       success: true,
       message: "Image queued for processing",

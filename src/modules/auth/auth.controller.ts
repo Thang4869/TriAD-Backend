@@ -24,7 +24,7 @@ function is2FAResult(result: unknown): result is TwoFactorRequired {
 }
 
 export class AuthController {
-  constructor(private readonly service: AuthService = new AuthService()) {}
+  constructor(private readonly service: IAuthService) {}
 
   register = asyncHandler(async (req: Request, res: Response) => {
     const result = await this.service.register(req.body);

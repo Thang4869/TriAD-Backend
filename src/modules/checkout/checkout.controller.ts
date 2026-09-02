@@ -3,9 +3,7 @@ import { CheckoutService } from "./checkout.service";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class CheckoutController {
-  constructor(
-    private readonly service: CheckoutService = new CheckoutService(),
-  ) {}
+  constructor(private readonly service: CheckoutService) {}
 
   checkout = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;

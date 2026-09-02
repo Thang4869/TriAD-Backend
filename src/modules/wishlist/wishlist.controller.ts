@@ -3,9 +3,7 @@ import { IWishlistService, WishlistService } from "./wishlist.service";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class WishlistController {
-  constructor(
-    private readonly service: IWishlistService = new WishlistService(),
-  ) {}
+  constructor(private readonly service: IWishlistService) {}
 
   getWishlist = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;

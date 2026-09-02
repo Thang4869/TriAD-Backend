@@ -26,9 +26,7 @@ export interface INotificationsService {
 }
 
 export class NotificationsService implements INotificationsService {
-  constructor(
-    private readonly repository: INotificationsRepository = new PrismaNotificationsRepository(),
-  ) {}
+  constructor(private readonly repository: INotificationsRepository) {}
 
   async getNotifications(
     userId: string,

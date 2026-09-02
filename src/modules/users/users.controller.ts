@@ -4,7 +4,7 @@ import { BadRequestError } from "@shared/utils/errors";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class UsersController {
-  constructor(private readonly service: UsersService = new UsersService()) {}
+  constructor(private readonly service: IUsersService) {}
 
   getProfile = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;

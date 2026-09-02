@@ -18,22 +18,22 @@ const FREE_SHIPPING_THRESHOLD = 500_000;
 const SHIPPING_FEE = 30_000;
 const TAX_RATE = 0.1;
 
-export interface CheckoutInput {
-  idempotencyKey: string;
-  paymentMethod: "COD" | "CARD" | "BANKING";
-  address: string;
-  phone: string;
-  notes?: string;
-  discountCode?: string;
+export interface ICheckoutService {
+  checkout(
+    userId: string,
+    input: CheckoutInput,
+  ): Promise<{ order: unknown; idempotent: boolean }>;
+  getOrder(orderId: string, userId: string): Promise<unknown>;
+  getOrders(userId: string, page?: number, limit?: number): Promise<unknown>;
 }
 
-export class CheckoutService {
+export class CheckoutService implements ICheckoutService {
   private static getIdempotencyTTL(): number {
     return parseInt(process.env.IDEMPOTENCY_TTL || "86400", 10);
   }
   constructor(
-    private readonly repository: ICheckoutRepository = new PrismaCheckoutRepository(),
-    private readonly emailService: EmailService = new EmailService(),
+    private readonly repository: ICheckoutRepository,
+    private readonly emailService: EmailService,
   ) {}
 
   async checkout(userId: string, input: CheckoutInput) {

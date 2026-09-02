@@ -64,6 +64,9 @@ const configSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
     SMTP_FROM: z.string().email().optional(),
+    CLOUDINARY_CLOUD_NAME: z.string().optional(),
+    CLOUDINARY_API_KEY: z.string().optional(),
+    CLOUDINARY_API_SECRET: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
@@ -90,6 +93,21 @@ const configSchema = z
           path: ["REDIS_URL"],
           message: "REDIS_URL is required",
         });
+      }
+
+      const cloudVars = [
+        "CLOUDINARY_CLOUD_NAME",
+        "CLOUDINARY_API_KEY",
+        "CLOUDINARY_API_SECRET",
+      ];
+      for (const v of cloudVars) {
+        if (!data[v as keyof typeof data]) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [v],
+            message: `${v} is required in production`,
+          });
+        }
       }
     }
   });

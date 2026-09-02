@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { OrdersService } from "./orders.service";
+import { IOrdersService } from "./orders.service";
 import { ForbiddenError } from "@shared/utils/errors";
 import { OrderStatus } from "@prisma/client";
 import { asyncHandler } from "@shared/utils/async-handler";

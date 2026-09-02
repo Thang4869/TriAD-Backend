@@ -1,27 +1,36 @@
 import { NotFoundError } from "@shared/utils/errors";
 import { OrderStatus } from "@prisma/client";
-import {
-  IOrdersRepository,
-  PrismaOrdersRepository,
-  AdminOrderFilters,
-} from "./orders.repository";
+import { IOrdersRepository, AdminOrderFilters } from "./orders.repository";
 
-export interface ICheckoutService {
-  checkout(userId: string, orderData: any): Promise<any>;
-  getOrders(userId: string, page?: number, limit?: number): Promise<any>;
+export interface IOrdersService {
+  getOrders(
+    userId: string,
+    page?: number,
+    limit?: number,
+  ): Promise<{
+    orders: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>;
   getOrderById(orderId: string, userId: string): Promise<any>;
   adminGetOrders(
     filters: AdminOrderFilters,
     page?: number,
     limit?: number,
-  ): Promise<any>;
+  ): Promise<{
+    orders: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>;
   updateOrderStatus(orderId: string, status: OrderStatus): Promise<any>;
 }
 
-export class OrdersService {
-  constructor(
-    private readonly repository: IOrdersRepository = new PrismaOrdersRepository(),
-  ) {}
+export class OrdersService implements IOrdersService {
+  constructor(private readonly repository: IOrdersRepository) {}
 
   async getOrders(userId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;

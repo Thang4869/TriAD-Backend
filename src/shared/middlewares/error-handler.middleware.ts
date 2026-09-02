@@ -16,7 +16,7 @@ export class AppError extends Error {
 }
 
 export const errorHandler = (
-  err: any,
+  err: unknown,
   req: Request,
   res: Response,
   _next: NextFunction,
@@ -25,10 +25,28 @@ export const errorHandler = (
     req.headers["x-correlation-id"] ||
     `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
+  let statusCode = 500;
+  let message = "Internal server error";
+  let isOperational = false;
+
+  if (err instanceof AppError) {
+    statusCode = err.statusCode;
+    message = err.isOperational ? err.message : "Internal server error";
+    isOperational = err.isOperational;
+  } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    // ... xử lý Prisma
+  } else if (err instanceof ZodError) {
+    // ...
+  } else if (err instanceof Error) {
+    // lỗi thường
+    message = err.message;
+  }
+
+  // log
   logger.error("Error:", {
-    message: err.message,
-    stack: err.stack,
-    statusCode: err.statusCode || 500,
+    message: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+    statusCode,
     path: req.path,
     method: req.method,
     ip: req.ip,
@@ -36,64 +54,14 @@ export const errorHandler = (
     correlationId,
   });
 
-  if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    if (err.code === "P2002") {
-      return res.status(409).json({
-        success: false,
-        error: "Duplicate entry",
-        correlationId,
-      });
-    }
-    if (err.code === "P2025") {
-      return res.status(404).json({
-        success: false,
-        error: "Record not found",
-        correlationId,
-      });
-    }
-    return res.status(400).json({
-      success: false,
-      error: "Database error",
-      correlationId,
-    });
-  }
-
-  if (err instanceof Prisma.PrismaClientValidationError) {
-    return res.status(400).json({
-      success: false,
-      error: "Invalid data provided",
-      correlationId,
-    });
-  }
-
-  if (err instanceof ZodError) {
-    return res.status(400).json({
-      success: false,
-      error: "Validation failed",
-      details: err.errors.map((e) => ({
-        field: e.path.join("."),
-        message: e.message,
-      })),
-      correlationId,
-    });
-  }
-
-  if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
-    return res.status(401).json({
-      success: false,
-      error: "Invalid or expired token",
-      correlationId,
-    });
-  }
-
-  const statusCode = err.statusCode || 500;
-  const message = err.isOperational ? err.message : "Internal server error";
-
+  // response
   res.status(statusCode).json({
     success: false,
     error: message,
     correlationId,
-    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+    ...(process.env.NODE_ENV === "development" && {
+      stack: err instanceof Error ? err.stack : undefined,
+    }),
   });
 };
 

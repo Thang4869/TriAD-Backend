@@ -1,8 +1,5 @@
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
-import {
-  IReviewsRepository,
-  PrismaReviewsRepository,
-} from "./reviews.repository";
+import { IReviewsRepository } from "./reviews.repository";
 
 export interface IReviewsService {
   getReviewsByProduct(
@@ -81,7 +78,7 @@ export class ReviewsService implements IReviewsService {
     }
 
     await this.repository.delete(reviewId);
-    return { deleted: true };
+    return { deleted: true } as const;
   }
 
   async adminGetAll(page = 1, limit = 10) {

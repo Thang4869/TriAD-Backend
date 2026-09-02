@@ -193,6 +193,26 @@ describe("errorHandler", () => {
     );
     process.env.NODE_ENV = originalEnv;
   });
+
+  it("trả 500 và message mặc định khi lỗi không phải Error (ví dụ string)", () => {
+    const err = "this is a string error";
+    const res = createMockResponse();
+    errorHandler(err, createMockRequest(), res, vi.fn());
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: "Internal server error" }),
+    );
+  });
+
+  it("trả 500 và message mặc định khi lỗi là null", () => {
+    const err = null;
+    const res = createMockResponse();
+    errorHandler(err, createMockRequest(), res, vi.fn());
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: "Internal server error" }),
+    );
+  });
 });
 
 describe("notFoundHandler", () => {

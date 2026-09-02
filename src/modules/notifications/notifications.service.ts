@@ -4,10 +4,7 @@ import {
   resolvePagination,
 } from "@shared/constants/pagination.constant";
 import { NotificationType } from "@shared/constants/notification-type.enum";
-import {
-  INotificationsRepository,
-  PrismaNotificationsRepository,
-} from "./notifications.repository";
+import { INotificationsRepository } from "./notifications.repository";
 
 export interface INotificationsService {
   getNotifications(

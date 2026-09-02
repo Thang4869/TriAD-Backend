@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { UsersService } from "./users.service";
+import { IUsersService } from "./users.service";
 import { BadRequestError } from "@shared/utils/errors";
 import { asyncHandler } from "@shared/utils/async-handler";
 

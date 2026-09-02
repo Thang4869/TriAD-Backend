@@ -1,15 +1,22 @@
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 import {
   IUsersRepository,
-  PrismaUsersRepository,
   UpdateProfileData,
 } from "@modules/users/users.repository";
 import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
 
-export class UsersService {
-  constructor(
-    private readonly repository: IUsersRepository = new PrismaUsersRepository(),
-  ) {}
+export interface IUsersService {
+  getProfile(userId: string): Promise<any>;
+  updateProfile(userId: string, data: UpdateProfileData): Promise<any>;
+  changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ success: boolean }>;
+}
+
+export class UsersService implements IUsersService {
+  constructor(private readonly repository: IUsersRepository) {}
 
   async getProfile(userId: string) {
     const user = await this.repository.findProfileById(userId);

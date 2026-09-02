@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { IProductsService, ProductsService } from "./products.service";
+import { IProductsService } from "./products.service";
 import { asyncHandler } from "@shared/utils/async-handler";
 import { BadRequestError } from "@shared/utils/errors";
 

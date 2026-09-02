@@ -9,11 +9,7 @@ import { logger } from "@core/logger/winston";
 import { emailQueue } from "@core/queue/bull";
 
 import { toAuthUserResponse, AuthUserResponse } from "./auth.mapper";
-import {
-  IAuthRepository,
-  PrismaAuthRepository,
-  CreateUserData,
-} from "./auth.repository";
+import { IAuthRepository, CreateUserData } from "./auth.repository";
 
 import { SECURITY } from "@shared/constants/security.constant";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
@@ -21,6 +17,7 @@ import { signToken, verifyToken } from "@shared/utils/jwt";
 import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
 
 import { decodeToken as jwtDecode } from "@shared/utils/jwt";
+import { EmailService } from "@shared/services/email.service";
 
 const EMAIL_VERIFY_PREFIX = "email-verify:";
 const EMAIL_VERIFY_TTL_SECONDS = 15 * 60;
@@ -38,27 +35,30 @@ export interface TwoFactorRequired {
 }
 
 export interface IAuthService {
-  register(dto: RegisterDto): Promise<{ user: PublicUser; message: string }>;
-  login(dto: LoginDto): Promise<AuthResult | TwoFactorRequired>;
-  verifyEmail(token: string): Promise<AuthResult>;
-  refreshTokens(refreshToken: string): Promise<AuthResult>;
-
+  register(
+    data: CreateUserData,
+  ): Promise<{ user: AuthUserResponse; message: string }>;
+  verifyEmail(token: string): Promise<AuthTokens>;
   resendVerificationEmail(email: string): Promise<{ message: string }>;
+  login(
+    email: string,
+    password: string,
+  ): Promise<AuthTokens | TwoFactorRequired>;
   logout(
     userId: string,
     accessToken?: string,
     refreshToken?: string,
   ): Promise<void>;
-
   enable2FA(userId: string): Promise<{ otpauthUrl: string; secret: string }>;
   verify2FA(userId: string, token: string): Promise<{ enabled: boolean }>;
-  verifyTOTP(userId: string, token: string): Promise<AuthResult>;
+  verifyTOTP(userId: string, token: string): Promise<AuthTokens>;
+  refreshToken(refreshToken: string): Promise<AuthTokens>;
 }
 
 export class AuthService implements IAuthService {
   constructor(
     private readonly repository: IAuthRepository,
-    private readonly emailService: IEmailService,
+    private readonly emailService: EmailService,
   ) {}
 
   private static get ACCESS_SECRET(): string {
@@ -97,12 +97,7 @@ export class AuthService implements IAuthService {
     await this.sendVerificationEmail(user);
 
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      },
+      user: toAuthUserResponse(user),
       message:
         "Registered successfully. Please check your email to verify your account.",
     };
@@ -201,7 +196,7 @@ export class AuthService implements IAuthService {
     });
 
     return {
-      otpauthUrl: secret.otpauth_url,
+      otpauthUrl: secret.otpauth_url ?? "",
       secret: secret.base32,
     };
   }

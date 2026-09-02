@@ -3,10 +3,7 @@ import {
   PAGINATION_DEFAULTS,
   resolvePagination,
 } from "@shared/constants/pagination.constant";
-import {
-  IWishlistRepository,
-  PrismaWishlistRepository,
-} from "./wishlist.repository";
+import { IWishlistRepository } from "./wishlist.repository";
 
 export interface IWishlistService {
   getWishlist(userId: string, page?: number, limit?: number): Promise<unknown>;

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { IWishlistService, WishlistService } from "./wishlist.service";
+import { IWishlistService } from "./wishlist.service";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class WishlistController {

@@ -57,7 +57,7 @@ const emailService = new EmailService();
 
 // ---------- Domain services ----------
 const productsService = new ProductsService(productsRepository);
-const authService = new AuthService(authRepository);
+const authService = new AuthService(authRepository, emailService);
 const cartService = new CartService(cartRepository);
 const checkoutService = new CheckoutService(checkoutRepository, emailService);
 const ordersService = new OrdersService(ordersRepository);

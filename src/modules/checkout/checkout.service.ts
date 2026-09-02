@@ -7,7 +7,6 @@ import {
 } from "@shared/utils/errors";
 import {
   ICheckoutRepository,
-  PrismaCheckoutRepository,
   TxClient,
   CreateOrderData,
 } from "./checkout.repository";
@@ -18,13 +17,35 @@ const FREE_SHIPPING_THRESHOLD = 500_000;
 const SHIPPING_FEE = 30_000;
 const TAX_RATE = 0.1;
 
+export interface CheckoutInput {
+  idempotencyKey: string;
+  paymentMethod: "COD" | "CARD" | "BANKING";
+  address: string;
+  phone: string;
+  notes?: string;
+  discountCode?: string;
+}
+
 export interface ICheckoutService {
   checkout(
     userId: string,
     input: CheckoutInput,
-  ): Promise<{ order: unknown; idempotent: boolean }>;
-  getOrder(orderId: string, userId: string): Promise<unknown>;
-  getOrders(userId: string, page?: number, limit?: number): Promise<unknown>;
+  ): Promise<{
+    order: any;
+    idempotent: boolean;
+  }>;
+  getOrder(orderId: string, userId: string): Promise<any>;
+  getOrders(
+    userId: string,
+    page?: number,
+    limit?: number,
+  ): Promise<{
+    orders: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>;
 }
 
 export class CheckoutService implements ICheckoutService {

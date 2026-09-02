@@ -23,9 +23,7 @@ export interface ICartService {
 }
 
 export class CartService implements ICartService {
-  constructor(
-    private readonly repository: ICartRepository = new PrismaCartRepository(),
-  ) {}
+  constructor(private readonly repository: ICartRepository) {}
 
   async getCart(userId: string): Promise<CartWithItems> {
     const cart = await this.repository.findCartWithItems(userId);

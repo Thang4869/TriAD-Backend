@@ -19,9 +19,7 @@ export interface IDashboardService {
 }
 
 export class DashboardService implements IDashboardService {
-  constructor(
-    private readonly repository: IDashboardRepository = new PrismaDashboardRepository(),
-  ) {}
+  constructor(private readonly repository: IDashboardRepository) {}
 
   async getStats(): Promise<DashboardStats> {
     const since30Days = this.daysAgo(DEFAULT_REVENUE_WINDOW_DAYS);

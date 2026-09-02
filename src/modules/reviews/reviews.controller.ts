@@ -4,9 +4,7 @@ import { BadRequestError } from "@shared/utils/errors";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class ReviewsController {
-  constructor(
-    private readonly service: ReviewsService = new ReviewsService(),
-  ) {}
+  constructor(private readonly service: ReviewsService) {}
 
   getByProduct = asyncHandler(async (req: Request, res: Response) => {
     const { productId } = req.params;

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { IDashboardService, DashboardService } from "./dashboard.service";
+import { IDashboardService } from "./dashboard.service";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class DashboardController {

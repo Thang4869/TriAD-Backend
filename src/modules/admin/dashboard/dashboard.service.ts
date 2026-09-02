@@ -1,7 +1,4 @@
-import {
-  IDashboardRepository,
-  PrismaDashboardRepository,
-} from "./dashboard.repository";
+import { IDashboardRepository } from "./dashboard.repository";
 
 const DEFAULT_LOW_STOCK_THRESHOLD = 10;
 const DEFAULT_TOP_PRODUCTS_LIMIT = 5;

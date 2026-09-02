@@ -37,9 +37,28 @@ export interface TwoFactorRequired {
   message: string;
 }
 
-export class AuthService {
+export interface IAuthService {
+  register(dto: RegisterDto): Promise<{ user: PublicUser; message: string }>;
+  login(dto: LoginDto): Promise<AuthResult | TwoFactorRequired>;
+  verifyEmail(token: string): Promise<AuthResult>;
+  refreshTokens(refreshToken: string): Promise<AuthResult>;
+
+  resendVerificationEmail(email: string): Promise<{ message: string }>;
+  logout(
+    userId: string,
+    accessToken?: string,
+    refreshToken?: string,
+  ): Promise<void>;
+
+  enable2FA(userId: string): Promise<{ otpauthUrl: string; secret: string }>;
+  verify2FA(userId: string, token: string): Promise<{ enabled: boolean }>;
+  verifyTOTP(userId: string, token: string): Promise<AuthResult>;
+}
+
+export class AuthService implements IAuthService {
   constructor(
-    private readonly repository: IAuthRepository = new PrismaAuthRepository(),
+    private readonly repository: IAuthRepository,
+    private readonly emailService: IEmailService,
   ) {}
 
   private static get ACCESS_SECRET(): string {

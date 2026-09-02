@@ -1,7 +1,6 @@
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 import {
   ICartRepository,
-  PrismaCartRepository,
   CartWithItems,
   CartItemWithProduct,
 } from "./cart.repository";

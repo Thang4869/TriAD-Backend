@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { CartService, ICartService } from "./cart.service";
+import { ICartService } from "./cart.service";
 import { BadRequestError } from "@shared/utils/errors";
 import { asyncHandler } from "@shared/utils/async-handler";
 

@@ -117,7 +117,9 @@ describe("Config validation", () => {
     process.env.NODE_ENV = "production";
     process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/db";
     process.env.REDIS_URL = "redis://localhost:6379";
-    // SMTP_HOST/USER/PASS/FROM đã được set sẵn trong beforeEach
+    process.env.CLOUDINARY_CLOUD_NAME = "test-cloud";
+    process.env.CLOUDINARY_API_KEY = "test-key";
+    process.env.CLOUDINARY_API_SECRET = "test-secret";
 
     const { config } = await import("@config");
 

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { AuthService, TwoFactorRequired } from "./auth.service";
+import { IAuthService, TwoFactorRequired } from "./auth.service";
 import { logger } from "@core/logger/winston";
 import { BadRequestError } from "@shared/utils/errors";
 import config from "@config";

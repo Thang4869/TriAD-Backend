@@ -8,6 +8,12 @@ import { emailQueue } from "@core/queue/bull";
 import redis from "@core/redis/client";
 import speakeasy from "speakeasy";
 import { signToken, decodeToken } from "@shared/utils/jwt";
+import { toAuthUserResponse } from "@/modules/auth/auth.mapper";
+
+const mockEmailService = {
+  sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
+  sendOrderConfirmation: vi.fn().mockResolvedValue(undefined),
+};
 
 vi.mock("@core/redis/client", () => ({
   default: {
@@ -82,7 +88,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserByEmail: vi.fn().mockResolvedValue({ id: "existing" }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await expect(
         service.register({
@@ -103,7 +109,7 @@ describe("AuthService", () => {
         findUserByEmail: vi.fn().mockResolvedValue(null),
         createUser: vi.fn().mockResolvedValue(baseUser),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       const result = await service.register({
         email: "test@test.com",
@@ -127,7 +133,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserByEmail: vi.fn().mockResolvedValue(null),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await expect(
         service.login("notfound@test.com", "pass"),
@@ -139,7 +145,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserByEmail: vi.fn().mockResolvedValue(baseUser),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await expect(
         service.login("test@test.com", "wrong"),
@@ -151,7 +157,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserByEmail: vi.fn().mockResolvedValue(baseUser),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       vi.spyOn(service, "generateTokens").mockResolvedValueOnce({
         accessToken: "at",
         refreshToken: "rt",
@@ -175,7 +181,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserByEmail: vi.fn().mockResolvedValue(twoFactorUser),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       const result = await service.login("test@test.com", "pass");
       expect(result).toEqual({
@@ -191,7 +197,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserByEmail: vi.fn().mockResolvedValue(oauthUser),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await expect(
         service.login("test@test.com", "anything"),
@@ -205,7 +211,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserByEmail: vi.fn().mockResolvedValue(null),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       const result = await service.resendVerificationEmail("notexist@test.com");
       expect(emailQueue.add).not.toHaveBeenCalled();
       expect(result.message).toContain("If that account exists");
@@ -217,7 +223,7 @@ describe("AuthService", () => {
           .fn()
           .mockResolvedValue({ ...baseUser, isVerified: true }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       await service.resendVerificationEmail("test@test.com");
       expect(emailQueue.add).not.toHaveBeenCalled();
     });
@@ -228,7 +234,7 @@ describe("AuthService", () => {
           .fn()
           .mockResolvedValue({ ...baseUser, isVerified: false }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       await service.resendVerificationEmail("test@test.com");
       expect(emailQueue.add).toHaveBeenCalledWith(
         "verify-email",
@@ -240,7 +246,7 @@ describe("AuthService", () => {
   describe("logout", () => {
     it("deletes refresh token and blacklists access token", async () => {
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       const accessToken = "some.access.token";
       const refreshToken = "some.refresh.token";
       vi.spyOn(service as any, "blacklistAccessToken").mockResolvedValue(
@@ -255,7 +261,7 @@ describe("AuthService", () => {
 
     it("deletes all refresh tokens for user if no refreshToken provided", async () => {
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       await service.logout("user-1", "atoken");
       expect(repository.deleteRefreshTokensByUserId).toHaveBeenCalledWith(
         "user-1",
@@ -264,7 +270,7 @@ describe("AuthService", () => {
 
     it("does not attempt to blacklist anything when no accessToken is provided", async () => {
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       const spy = vi.spyOn(service as any, "blacklistAccessToken");
 
       await service.logout("user-1", undefined, "some.refresh.token");
@@ -281,7 +287,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserById: vi.fn().mockResolvedValue(null),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       await expect(service.enable2FA("user-x")).rejects.toThrow(
         BadRequestError,
       );
@@ -291,7 +297,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserById: vi.fn().mockResolvedValue(baseUser),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       const result = await service.enable2FA("user-1");
       expect(repository.updateUser).toHaveBeenCalledWith("user-1", {
         totpSecret: expect.any(String),
@@ -308,7 +314,7 @@ describe("AuthService", () => {
         const repository = createFakeRepository({
           findUserById: vi.fn().mockResolvedValue(baseUser),
         });
-        const service = new AuthService(repository);
+        const service = new AuthService(repository, mockEmailService);
         const result = await service.enable2FA("user-1");
         expect(result.otpauthUrl).toContain("CustomIssuer");
       } finally {
@@ -323,13 +329,29 @@ describe("AuthService", () => {
         const repository = createFakeRepository({
           findUserById: vi.fn().mockResolvedValue(baseUser),
         });
-        const service = new AuthService(repository);
+        const service = new AuthService(repository, mockEmailService);
         const result = await service.enable2FA("user-1");
         expect(result.otpauthUrl).toContain("TriAD");
         expect(result.secret).toBeDefined();
       } finally {
         process.env.TOTP_ISSUER = originalIssuer;
       }
+    });
+
+    it("handles case where otpauth_url is undefined (uses fallback empty string)", async () => {
+      const repository = createFakeRepository({
+        findUserById: vi.fn().mockResolvedValue(baseUser),
+      });
+      const service = new AuthService(repository, mockEmailService);
+
+      // Mock speakeasy.generateSecret để trả về object không có otpauth_url
+      const mockSecret = { base32: "mocked-base32", otpauth_url: undefined };
+      vi.spyOn(speakeasy, "generateSecret").mockReturnValue(mockSecret as any);
+
+      const result = await service.enable2FA("user-1");
+
+      expect(result.otpauthUrl).toBe("");
+      expect(result.secret).toBe("mocked-base32");
     });
   });
 
@@ -338,7 +360,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserById: vi.fn().mockResolvedValue(null),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       await expect(service.verify2FA("user-x", "123456")).rejects.toThrow(
         BadRequestError,
       );
@@ -350,7 +372,7 @@ describe("AuthService", () => {
           .fn()
           .mockResolvedValue({ ...baseUser, totpSecret: "secret" }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       vi.spyOn(service as any, "verifyTotpToken").mockReturnValue(false);
       await expect(service.verify2FA("user-1", "wrong")).rejects.toThrow(
         BadRequestError,
@@ -363,7 +385,7 @@ describe("AuthService", () => {
           .fn()
           .mockResolvedValue({ ...baseUser, totpSecret: "secret" }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       vi.spyOn(service as any, "verifyTotpToken").mockReturnValue(true);
       const result = await service.verify2FA("user-1", "123456");
       expect(repository.updateUser).toHaveBeenCalledWith("user-1", {
@@ -388,7 +410,7 @@ describe("AuthService", () => {
           is2FAEnabled: true,
         }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       const result = await service.verifyTOTP("user-1", validToken);
       expect(result).toHaveProperty("accessToken");
@@ -404,7 +426,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserById: vi.fn().mockResolvedValue(null),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       await expect(service.verifyTOTP("user-x", "123456")).rejects.toThrow(
         BadRequestError,
       );
@@ -418,7 +440,7 @@ describe("AuthService", () => {
           is2FAEnabled: true,
         }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       vi.spyOn(service as any, "verifyTotpToken").mockReturnValue(false);
       await expect(service.verifyTOTP("user-1", "wrong")).rejects.toThrow(
         BadRequestError,
@@ -433,7 +455,7 @@ describe("AuthService", () => {
           is2FAEnabled: true,
         }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       vi.spyOn(service as any, "verifyTotpToken").mockReturnValue(true);
       vi.spyOn(service, "generateTokens").mockResolvedValue({
         accessToken: "at",
@@ -457,7 +479,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findRefreshTokenWithUser: vi.fn().mockResolvedValue(null),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       await expect(service.refreshToken("bad")).rejects.toThrow(
         UnauthorizedError,
       );
@@ -477,7 +499,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findRefreshTokenWithUser: vi.fn().mockResolvedValue(record),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       await expect(service.refreshToken(expiredRefreshToken)).rejects.toThrow(
         UnauthorizedError,
       );
@@ -498,7 +520,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findRefreshTokenWithUser: vi.fn().mockResolvedValue(record),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       const result = await service.refreshToken(validRefreshToken);
 
@@ -517,7 +539,7 @@ describe("AuthService", () => {
     it("throws BadRequestError when the token is invalid or expired in Redis", async () => {
       (redis.get as any).mockResolvedValueOnce(null);
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await expect(service.verifyEmail("bad-token")).rejects.toBeInstanceOf(
         BadRequestError,
@@ -530,7 +552,7 @@ describe("AuthService", () => {
       const repository = createFakeRepository({
         findUserById: vi.fn().mockResolvedValue(null),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await expect(service.verifyEmail("token")).rejects.toBeInstanceOf(
         BadRequestError,
@@ -544,7 +566,7 @@ describe("AuthService", () => {
           .fn()
           .mockResolvedValue({ ...baseUser, isVerified: true }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       const result = await service.verifyEmail("token");
 
@@ -562,7 +584,7 @@ describe("AuthService", () => {
           .fn()
           .mockResolvedValue({ ...unverifiedUser, isVerified: true }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       const result = await service.verifyEmail("token");
 
@@ -570,6 +592,22 @@ describe("AuthService", () => {
         isVerified: true,
       });
       expect(result).toHaveProperty("accessToken");
+    });
+
+    it("returns tokens directly if user is already verified (real generateTokens)", async () => {
+      (redis.get as any).mockResolvedValueOnce("user-id");
+      const verifiedUser = { ...baseUser, isVerified: true };
+      const repository = createFakeRepository({
+        findUserById: vi.fn().mockResolvedValue(verifiedUser),
+        createRefreshToken: vi.fn().mockResolvedValue({}), // đảm bảo mock
+      });
+      const service = new AuthService(repository, mockEmailService);
+
+      const result = await service.verifyEmail("token");
+
+      expect(result.accessToken).toBeDefined();
+      expect(repository.updateUser).not.toHaveBeenCalled();
+      expect(redis.del).toHaveBeenCalledWith("email-verify:token");
     });
   });
 
@@ -581,7 +619,7 @@ describe("AuthService", () => {
           .fn()
           .mockResolvedValue({ ...baseUser, isVerified: false }),
       });
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await expect(service.login("test@test.com", "pass")).rejects.toThrow(
         UnauthorizedError,
@@ -592,7 +630,7 @@ describe("AuthService", () => {
   describe("generateTokens", () => {
     it("signs access/refresh tokens, persists the refresh token, and maps the user", async () => {
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       const result = await service.generateTokens(baseUser);
 
@@ -618,7 +656,7 @@ describe("AuthService", () => {
       delete process.env.JWT_ACCESS_SECRET;
 
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await expect(service.generateTokens(baseUser)).rejects.toThrow(
         "JWT_ACCESS_SECRET is not defined",
@@ -632,7 +670,7 @@ describe("AuthService", () => {
       delete process.env.JWT_REFRESH_SECRET;
 
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await expect(service.generateTokens(baseUser)).rejects.toThrow(
         "JWT_REFRESH_SECRET is not defined",
@@ -650,7 +688,7 @@ describe("AuthService", () => {
         "15m",
       );
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await service.logout(baseUser.id, accessToken);
 
@@ -667,7 +705,7 @@ describe("AuthService", () => {
     it("does not blacklist a token that has no exp claim", async () => {
       const accessToken = "not-a-real-jwt-token";
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await service.logout(baseUser.id, accessToken);
 
@@ -681,7 +719,7 @@ describe("AuthService", () => {
         -10,
       );
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await service.logout(baseUser.id, accessToken);
 
@@ -695,7 +733,7 @@ describe("AuthService", () => {
       });
 
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
 
       await expect(
         service.logout(baseUser.id, "any-token"),
@@ -720,7 +758,7 @@ describe("AuthService", () => {
       delete process.env.JWT_REFRESH_EXPIRY;
 
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       const result = await service.generateTokens(baseUser);
 
       expect(typeof result.accessToken).toBe("string");
@@ -732,7 +770,7 @@ describe("AuthService", () => {
       process.env.JWT_REFRESH_EXPIRY = "30d";
 
       const repository = createFakeRepository();
-      const service = new AuthService(repository);
+      const service = new AuthService(repository, mockEmailService);
       const result = await service.generateTokens(baseUser);
 
       expect(typeof result.accessToken).toBe("string");

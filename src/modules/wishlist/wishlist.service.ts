@@ -15,9 +15,7 @@ export interface IWishlistService {
 }
 
 export class WishlistService implements IWishlistService {
-  constructor(
-    private readonly repository: IWishlistRepository = new PrismaWishlistRepository(),
-  ) {}
+  constructor(private readonly repository: IWishlistRepository) {}
 
   async getWishlist(
     userId: string,

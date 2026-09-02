@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { logger } from "@core/logger/winston";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
+import { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
 
 export class AppError extends Error {
   public statusCode: number;
@@ -27,18 +28,49 @@ export const errorHandler = (
 
   let statusCode = 500;
   let message = "Internal server error";
-  let isOperational = false;
+  let details: unknown = undefined;
 
   if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.isOperational ? err.message : "Internal server error";
-    isOperational = err.isOperational;
   } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    // ... xử lý Prisma
+    // Prisma known request errors
+    switch (err.code) {
+      case "P2002":
+        statusCode = 409;
+        message = "Duplicate entry";
+        break;
+      case "P2025":
+        statusCode = 404;
+        message = "Record not found";
+        break;
+      default:
+        statusCode = 400;
+        message = "Database error";
+        break;
+    }
+  } else if (err instanceof Prisma.PrismaClientValidationError) {
+    statusCode = 400;
+    message = "Invalid data provided";
   } else if (err instanceof ZodError) {
-    // ...
+    statusCode = 400;
+    message = "Validation failed";
+    details = err.errors.map((e) => ({
+      field: e.path.join("."),
+      message: e.message,
+    }));
+  } else if (
+    err instanceof JsonWebTokenError ||
+    err instanceof TokenExpiredError ||
+    (err &&
+      typeof err === "object" &&
+      "name" in err &&
+      (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError"))
+  ) {
+    statusCode = 401;
+    message = "Invalid or expired token";
   } else if (err instanceof Error) {
-    // lỗi thường
+    // other standard errors
     message = err.message;
   }
 
@@ -50,19 +82,24 @@ export const errorHandler = (
     path: req.path,
     method: req.method,
     ip: req.ip,
-    userId: req.user?.id,
+    userId: (req as any).user?.id,
     correlationId,
   });
 
   // response
-  res.status(statusCode).json({
+  const responsePayload: any = {
     success: false,
     error: message,
     correlationId,
-    ...(process.env.NODE_ENV === "development" && {
-      stack: err instanceof Error ? err.stack : undefined,
-    }),
-  });
+  };
+  if (details) {
+    responsePayload.details = details;
+  }
+  if (process.env.NODE_ENV === "development" && err instanceof Error) {
+    responsePayload.stack = err.stack;
+  }
+
+  res.status(statusCode).json(responsePayload);
 };
 
 export const notFoundHandler = (

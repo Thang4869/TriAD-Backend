@@ -47,10 +47,7 @@ export interface IProductsService {
   update(id: string, data: UpdateProductData): Promise<unknown>;
   delete(id: string): Promise<unknown>;
   restore(id: string): Promise<unknown>;
-  uploadImage(
-    productId: string,
-    localFilePath: string,
-  ): Promise<{ queued: true }>;
+  uploadImage(productId: string, buffer: Buffer): Promise<{ queued: true }>;
   search(query: string, page?: number, limit?: number): Promise<unknown>;
 }
 
@@ -251,7 +248,10 @@ export class ProductsService implements IProductsService {
     return this.repository.setActive(id, true);
   }
 
-  async uploadImage(productId: string, localFilePath: string) {
+  async uploadImage(
+    productId: string,
+    buffer: Buffer,
+  ): Promise<{ queued: true }> {
     const exists = await this.repository.existsAndActive(productId);
     if (!exists) {
       throw new NotFoundError("Product not found");
@@ -259,10 +259,10 @@ export class ProductsService implements IProductsService {
 
     await imageQueue.add("process-product-image", {
       productId,
-      localFilePath,
+      imageBuffer: buffer.toString("base64"),
     });
 
-    return { queued: true as const };
+    return { queued: true };
   }
 
   async search(query: string, page = 1, limit = DEFAULT_PUBLIC_LIMIT) {

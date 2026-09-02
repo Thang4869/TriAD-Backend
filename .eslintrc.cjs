@@ -19,6 +19,10 @@ module.exports = {
 
   ignorePatterns: ["node_modules/", "dist/", "coverage/", "logs/", "uploads/"],
 
+  globals: {
+    Express: "readonly",
+  },
+
   rules: {
     "no-unused-vars": "off",
 

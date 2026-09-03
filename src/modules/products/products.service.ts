@@ -1,8 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import { Rating } from "@shared/value-objects/rating";
 import {
   IProductsRepository,
-  PrismaProductsRepository,
   CreateProductData,
   UpdateProductData,
 } from "./products.repository";
@@ -51,12 +51,6 @@ export interface IProductsService {
   search(query: string, page?: number, limit?: number): Promise<unknown>;
 }
 
-function calculateAvgRating(reviews: { rating: number }[]): number {
-  if (reviews.length === 0) return 0;
-  const sum = reviews.reduce((total, review) => total + review.rating, 0);
-  return sum / reviews.length;
-}
-
 function buildPagination(page: number, limit: number, cap = MAX_PAGE_LIMIT) {
   const safeLimit = Math.min(limit, cap);
   const skip = (page - 1) * safeLimit;
@@ -64,9 +58,7 @@ function buildPagination(page: number, limit: number, cap = MAX_PAGE_LIMIT) {
 }
 
 export class ProductsService implements IProductsService {
-  constructor(
-    private readonly repository: IProductsRepository = new PrismaProductsRepository(),
-  ) {}
+  constructor(private readonly repository: IProductsRepository) {}
 
   async findAll(params: FindProductsParams) {
     const {
@@ -112,11 +104,14 @@ export class ProductsService implements IProductsService {
       this.repository.count(where),
     ]);
 
-    const productsWithRating = products.map((product) => ({
-      ...product,
-      avgRating: calculateAvgRating(product.reviews),
-      reviewCount: product.reviews.length,
-    }));
+    const productsWithRating = products.map((product) => {
+      const rating = Rating.fromReviews(product.reviews);
+      return {
+        ...product,
+        avgRating: rating.getAverage(),
+        reviewCount: rating.getCount(),
+      };
+    });
 
     return {
       products: toProductListResponse(productsWithRating),
@@ -129,27 +124,25 @@ export class ProductsService implements IProductsService {
 
   async findById(id: string) {
     const product = await this.repository.findByIdWithReviews(id);
-    if (!product) {
-      throw new NotFoundError("Product not found");
-    }
+    if (!product) throw new NotFoundError("Product not found");
 
+    const rating = Rating.fromReviews(product.reviews);
     return toProductDetailResponse({
       ...product,
-      avgRating: calculateAvgRating(product.reviews),
-      reviewCount: product.reviews.length,
+      avgRating: rating.getAverage(),
+      reviewCount: rating.getCount(),
     });
   }
 
   async getBySlug(slug: string) {
     const product = await this.repository.findBySlugWithReviews(slug);
-    if (!product) {
-      throw new NotFoundError("Product not found");
-    }
+    if (!product) throw new NotFoundError("Product not found");
 
+    const rating = Rating.fromReviews(product.reviews);
     return toProductDetailResponse({
       ...product,
-      avgRating: calculateAvgRating(product.reviews),
-      reviewCount: product.reviews.length,
+      avgRating: rating.getAverage(),
+      reviewCount: rating.getCount(),
     });
   }
 

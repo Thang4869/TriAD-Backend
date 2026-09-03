@@ -33,4 +33,9 @@ export class Money {
   toString(): string {
     return `${this.amount.toLocaleString("vi-VN")} ${this.currency}`;
   }
+
+  lessThan(other: Money): boolean {
+    if (this.currency !== other.currency) throw new Error("Currency mismatch");
+    return this.amount < other.amount;
+  }
 }

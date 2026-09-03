@@ -1,5 +1,6 @@
 import { emailQueue } from "@core/queue/bull";
 import { EmailService } from "@shared/services/email.service";
+import { Money } from "@shared/value-objects/money";
 import {
   NotFoundError,
   BadRequestError,
@@ -71,23 +72,31 @@ export class CheckoutService implements ICheckoutService {
     }
 
     const cartItems = user.cart.items;
-    const subtotal = cartItems.reduce(
-      (sum, item) => sum + item.product.price * item.quantity,
-      0,
+    const subtotalMoney = cartItems.reduce(
+      (sum, item) =>
+        sum.add(new Money(item.product.price).multiply(item.quantity)),
+      new Money(0),
     );
 
     const order = await this.executeWithRetry(async (tx) => {
       await this.reserveStock(tx, cartItems);
 
-      const discountAmount = await this.applyDiscount(
+      const discountMoney = await this.applyDiscount(
         tx,
         input.discountCode,
-        subtotal,
+        subtotalMoney,
+      );
+      const taxMoney = subtotalMoney.multiply(TAX_RATE);
+      const shippingMoney = new Money(
+        subtotalMoney.getValue() > FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE,
       );
 
-      const tax = subtotal * TAX_RATE;
-      const shippingFee = subtotal > FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE;
-      const total = Math.max(0, subtotal + tax + shippingFee - discountAmount);
+      const rawTotal =
+        subtotalMoney.getValue() +
+        taxMoney.getValue() +
+        shippingMoney.getValue() -
+        discountMoney.getValue();
+      const totalMoney = new Money(Math.max(0, rawTotal));
 
       const orderData: CreateOrderData = {
         orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
@@ -95,12 +104,13 @@ export class CheckoutService implements ICheckoutService {
         status: "PENDING",
         paymentMethod: input.paymentMethod,
         paymentStatus: "PENDING",
-        subtotal,
-        tax,
-        shippingFee,
-        total,
-        discountAmount,
-        discountCode: discountAmount > 0 ? input.discountCode : undefined,
+        subtotal: subtotalMoney.getValue(),
+        tax: taxMoney.getValue(),
+        shippingFee: shippingMoney.getValue(),
+        total: totalMoney.getValue(),
+        discountAmount: discountMoney.getValue(),
+        discountCode:
+          discountMoney.getValue() > 0 ? input.discountCode : undefined,
         customerName: `${user.firstName} ${user.lastName}`,
         customerEmail: user.email,
         customerPhone: input.phone || user.phone || "",
@@ -118,15 +128,15 @@ export class CheckoutService implements ICheckoutService {
           productId: item.productId,
           quantity: item.quantity,
           price: item.product.price,
-          total: item.product.price * item.quantity,
+          total: new Money(item.product.price)
+            .multiply(item.quantity)
+            .getValue(),
         })),
       );
 
       await this.repository.clearCartItems(tx, user.cart!.id);
-
       return newOrder;
     });
-
     if (input.idempotencyKey) {
       await this.repository.cacheOrderId(
         input.idempotencyKey,
@@ -136,7 +146,6 @@ export class CheckoutService implements ICheckoutService {
     }
 
     await this.notifyOrderConfirmation(user.email, order, cartItems);
-
     return { order, idempotent: false };
   }
 
@@ -220,10 +229,10 @@ export class CheckoutService implements ICheckoutService {
   private async applyDiscount(
     tx: TxClient,
     discountCode: string | undefined,
-    subtotal: number,
-  ): Promise<number> {
+    subtotal: Money,
+  ): Promise<Money> {
     if (!discountCode) {
-      return 0;
+      return new Money(0);
     }
 
     const discount = await this.repository.findDiscountByCode(tx, discountCode);
@@ -236,7 +245,10 @@ export class CheckoutService implements ICheckoutService {
       throw new BadRequestError("Discount code has expired");
     }
 
-    if (discount.minOrderAmount != null && subtotal < discount.minOrderAmount) {
+    if (
+      discount.minOrderAmount != null &&
+      subtotal.getValue() < discount.minOrderAmount
+    ) {
       throw new BadRequestError(
         `Order must be at least ${discount.minOrderAmount} to use this discount code`,
       );
@@ -255,10 +267,10 @@ export class CheckoutService implements ICheckoutService {
 
     const rawAmount =
       discount.type === "PERCENTAGE"
-        ? subtotal * (discount.value / 100)
-        : discount.value;
+        ? subtotal.multiply(discount.value / 100)
+        : new Money(discount.value);
 
-    return Math.min(rawAmount, subtotal);
+    return subtotal.lessThan(rawAmount) ? subtotal : rawAmount;
   }
 
   private async executeWithRetry<T>(

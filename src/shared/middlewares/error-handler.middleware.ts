@@ -4,6 +4,14 @@ import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
 
+interface ErrorResponsePayload {
+  success: false;
+  error: string;
+  correlationId: string | string[];
+  details?: unknown;
+  stack?: string;
+}
+
 export class AppError extends Error {
   public statusCode: number;
   public isOperational: boolean;
@@ -34,7 +42,6 @@ export const errorHandler = (
     statusCode = err.statusCode;
     message = err.isOperational ? err.message : "Internal server error";
   } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    // Prisma known request errors
     switch (err.code) {
       case "P2002":
         statusCode = 409;
@@ -70,7 +77,6 @@ export const errorHandler = (
     statusCode = 401;
     message = "Invalid or expired token";
   } else if (err instanceof Error) {
-    // other standard errors
     message = err.message;
   }
 
@@ -82,12 +88,12 @@ export const errorHandler = (
     path: req.path,
     method: req.method,
     ip: req.ip,
-    userId: (req as any).user?.id,
+    userId: req.user?.id,
     correlationId,
   });
 
   // response
-  const responsePayload: any = {
+  const responsePayload: ErrorResponsePayload = {
     success: false,
     error: message,
     correlationId,

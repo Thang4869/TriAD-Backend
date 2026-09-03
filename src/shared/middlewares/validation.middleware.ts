@@ -16,11 +16,12 @@ export const validate = (schema: ZodSchema<any>) => {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        throw new BadRequestError(
-          error.errors.map((e) => e.message).join(", "),
+        next(
+          new BadRequestError(error.errors.map((e) => e.message).join(", ")),
         );
+      } else {
+        next(error);
       }
-      next(error);
     }
   };
 };

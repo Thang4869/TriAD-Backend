@@ -1,8 +1,7 @@
-// tests/unit/modules/auth/jwt.strategy.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { User } from "@prisma/client";
 
-// -------- MOCK REPOSITORY: class with vi.fn() --------
+// -------- MOCK REPOSITORY --------
 const mockFindUserById = vi.fn();
 
 vi.mock("@modules/auth/auth.repository", () => ({
@@ -61,7 +60,6 @@ describe("jwt.strategy", () => {
     mockFindUserById.mockResolvedValueOnce(null);
     const done = vi.fn();
     await capturedVerifyCallback({ sub: "missing-id" }, done);
-    // Kiểm tra error có message chính xác
     expect(done).toHaveBeenCalledWith(
       expect.objectContaining({ message: "User not found or not verified" }),
       false,

@@ -8,7 +8,6 @@ import { emailQueue } from "@core/queue/bull";
 import redis from "@core/redis/client";
 import speakeasy from "speakeasy";
 import { signToken, decodeToken } from "@shared/utils/jwt";
-import { toAuthUserResponse } from "@/modules/auth/auth.mapper";
 
 const mockEmailService = {
   sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
@@ -344,7 +343,6 @@ describe("AuthService", () => {
       });
       const service = new AuthService(repository, mockEmailService);
 
-      // Mock speakeasy.generateSecret để trả về object không có otpauth_url
       const mockSecret = { base32: "mocked-base32", otpauth_url: undefined };
       vi.spyOn(speakeasy, "generateSecret").mockReturnValue(mockSecret as any);
 
@@ -599,7 +597,7 @@ describe("AuthService", () => {
       const verifiedUser = { ...baseUser, isVerified: true };
       const repository = createFakeRepository({
         findUserById: vi.fn().mockResolvedValue(verifiedUser),
-        createRefreshToken: vi.fn().mockResolvedValue({}), // đảm bảo mock
+        createRefreshToken: vi.fn().mockResolvedValue({}),
       });
       const service = new AuthService(repository, mockEmailService);
 

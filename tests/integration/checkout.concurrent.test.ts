@@ -86,6 +86,12 @@ describe("Checkout Concurrency", () => {
   afterAll(async () => {});
 
   it("should prevent overselling with concurrent requests", async () => {
+    // Mock order retrieval to succeed after creation
+    mockRepository.findOrderWithItems = vi.fn().mockResolvedValue({
+      id: "order-1",
+      items: [],
+    });
+
     const requests = [
       checkoutService.checkout("user-a", {
         idempotencyKey: "idem-a",
@@ -111,6 +117,7 @@ describe("Checkout Concurrency", () => {
     const results = await Promise.allSettled(requests);
 
     const successCount = results.filter((r) => r.status === "fulfilled").length;
+
     const failCount = results.filter((r) => r.status === "rejected").length;
 
     expect(successCount).toBe(1);

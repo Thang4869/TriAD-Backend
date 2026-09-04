@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { ZodSchema, ZodError } from "zod";
 import { BadRequestError } from "@shared/utils/errors";
 
-export const validate = (schema: ZodSchema<any>) => {
+export const validate = (schema: ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
       const validated = schema.parse({

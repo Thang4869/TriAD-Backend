@@ -88,7 +88,7 @@ export const errorHandler = (
     path: req.path,
     method: req.method,
     ip: req.ip,
-    userId: req.user?.id,
+    userId: (req.user as { id: string })?.id,
     correlationId,
   });
 

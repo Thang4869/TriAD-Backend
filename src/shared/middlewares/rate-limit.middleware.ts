@@ -1,11 +1,12 @@
 import rateLimit from "express-rate-limit";
-import { RedisStore } from "rate-limit-redis";
+import { RedisReply, RedisStore } from "rate-limit-redis";
+import { Request } from "express";
 import redis from "@core/redis/client";
 
 export const rateLimiter = (options?: {
   windowMs?: number;
   max?: number;
-  keyGenerator?: (req: any) => string;
+  keyGenerator?: (req: Request) => string;
 }) => {
   const {
     windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || "60000", 10),
@@ -16,7 +17,10 @@ export const rateLimiter = (options?: {
   return rateLimit({
     store: new RedisStore({
       sendCommand: (...args: string[]) =>
-        redis.call(args[0], ...args.slice(1)) as Promise<any>,
+        redis.call(
+          args[0],
+          ...args.slice(1),
+        ) as Promise<unknown> as Promise<RedisReply>,
     }),
     windowMs,
     max,
@@ -34,7 +38,10 @@ export const rateLimiter = (options?: {
       error: "Too many requests, please try again later.",
     },
     skip: (req) => {
-      return req.path === "/health" || req.user?.role === "ADMIN";
+      return (
+        req.path === "/health" ||
+        (req.user as { role?: string })?.role === "ADMIN"
+      );
     },
   });
 };

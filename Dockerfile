@@ -30,7 +30,7 @@ ENV NODE_ENV=production
 RUN addgroup -g 1001 nodejs && adduser -S nodejs -u 1001
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN HUSKY=0 npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma

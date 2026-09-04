@@ -1,6 +1,13 @@
 import nodemailer from "nodemailer";
 import { logger } from "@core/logger/winston";
 
+interface EmailJobData {
+  to: string;
+  subject: string;
+  template?: string;
+  data?: Record<string, unknown>;
+}
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: Number(process.env.SMTP_PORT) || 587,
@@ -11,7 +18,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export const processEmail = async (job: any) => {
+export const processEmail = async (job: { data: EmailJobData }) => {
   const { to, subject, template, data } = job.data;
   logger.info(`Sending email to ${to} with subject "${subject}"`);
 

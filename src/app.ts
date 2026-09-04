@@ -4,6 +4,7 @@ import helmet from "helmet";
 import compression from "compression";
 import path from "path";
 import { json, urlencoded } from "body-parser";
+import { Request } from "express";
 
 import cookieParser from "cookie-parser";
 import swaggerUi from "swagger-ui-express";
@@ -94,12 +95,13 @@ app.use(metricsMiddleware);
 app.use(json({ limit: "10mb" }));
 app.use(urlencoded({ extended: true, limit: "10mb" }));
 
+type AppRequest = Request & { requestId?: string };
+
 app.use((req, res, next) => {
   const requestId =
-    req.headers["x-request-id"] ||
+    (req.headers["x-request-id"] as string) ||
     `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  res.setHeader("x-request-id", requestId);
-  (req as any).requestId = requestId;
+  (req as AppRequest).requestId = requestId;
   next();
 });
 

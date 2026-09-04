@@ -7,13 +7,13 @@ export class UsersController {
   constructor(private readonly service: IUsersService) {}
 
   getProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const profile = await this.service.getProfile(userId);
     res.json({ success: true, data: profile });
   });
 
   updateProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const { firstName, lastName, phone } = req.body;
     const updated = await this.service.updateProfile(userId, {
       firstName,
@@ -24,7 +24,7 @@ export class UsersController {
   });
 
   changePassword = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
       throw new BadRequestError("currentPassword and newPassword are required");

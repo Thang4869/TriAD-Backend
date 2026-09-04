@@ -4,6 +4,12 @@ import { logger } from "@core/logger/winston";
 import { BadRequestError } from "@shared/utils/errors";
 import config from "@config";
 import { asyncHandler } from "@shared/utils/async-handler";
+import { User } from "@prisma/client";
+
+interface OAuthCallbackUser {
+  user: User;
+  tokens: { accessToken: string; refreshToken: string };
+}
 
 const cookieOptions = (maxAge: number) => ({
   httpOnly: true,
@@ -86,7 +92,7 @@ export class AuthController {
   });
 
   logout = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const accessToken = req.headers.authorization?.split(" ")[1];
     const refreshToken = req.cookies?.refreshToken;
     await this.service.logout(userId, accessToken, refreshToken);
@@ -98,13 +104,13 @@ export class AuthController {
   });
 
   enable2FA = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const result = await this.service.enable2FA(userId);
     res.json({ success: true, data: result });
   });
 
   verify2FA = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const { token } = req.body;
     if (!token) {
       throw new BadRequestError("Token is required");
@@ -125,7 +131,7 @@ export class AuthController {
 
   googleCallback = async (req: Request, res: Response) => {
     try {
-      const { tokens } = req.user as any;
+      const { tokens } = req.user as unknown as OAuthCallbackUser;
       this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
       res.redirect(config.FRONTEND_URL);
     } catch (error) {
@@ -136,7 +142,7 @@ export class AuthController {
 
   facebookCallback = async (req: Request, res: Response) => {
     try {
-      const { tokens } = req.user as any;
+      const { tokens } = req.user as unknown as OAuthCallbackUser;
       this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
       res.redirect(config.FRONTEND_URL);
     } catch (error) {

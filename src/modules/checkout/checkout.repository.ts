@@ -208,7 +208,7 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     tx: TxClient,
     code: string,
   ): Promise<DiscountRecord | null> {
-    return (tx as any).discount.findUnique({ where: { code } });
+    return tx.discount.findUnique({ where: { code } });
   }
 
   async incrementDiscountUsage(
@@ -216,7 +216,7 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     discountId: string,
     maxUses: number | null,
   ): Promise<boolean> {
-    const result = await (tx as any).discount.updateMany({
+    const result = await tx.discount.updateMany({
       where: {
         id: discountId,
         ...(maxUses != null ? { usedCount: { lt: maxUses } } : {}),

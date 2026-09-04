@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
 declare global {
+  // eslint-disable-next-line no-var -- TS yêu cầu bắt buộc dùng "var" cho global declaration merging
   var prisma: PrismaClient | undefined;
 }
 

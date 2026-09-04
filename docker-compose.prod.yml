@@ -8,14 +8,13 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - PORT=3000
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - ENABLE_TRACING=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
-    volumes:
-      - product-images:/app/uploads
     depends_on:
       - otel-collector
 

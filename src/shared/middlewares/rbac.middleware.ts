@@ -7,7 +7,7 @@ export const requireRole = (...roles: string[]) => {
       return next(new ForbiddenError("Authentication required"));
     }
 
-    if (!roles.includes(req.user.role)) {
+    if (!roles.includes((req.user as { role: string }).role)) {
       return next(new ForbiddenError("Insufficient permissions"));
     }
 

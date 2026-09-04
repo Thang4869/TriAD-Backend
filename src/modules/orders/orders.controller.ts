@@ -8,7 +8,7 @@ export class OrdersController {
   constructor(private readonly service: IOrdersService) {}
 
   getMyOrders = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const page = req.query.page ? Number(req.query.page) : 1;
     const limit = req.query.limit ? Number(req.query.limit) : 10;
     const result = await this.service.getOrders(userId, page, limit);
@@ -16,14 +16,14 @@ export class OrdersController {
   });
 
   getMyOrder = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const { orderId } = req.params;
     const order = await this.service.getOrderById(orderId, userId);
     res.json({ success: true, data: order });
   });
 
   adminGetOrders = asyncHandler(async (req: Request, res: Response) => {
-    if (req.user?.role !== "ADMIN") {
+    if ((req.user as { role?: string })?.role !== "ADMIN") {
       throw new ForbiddenError("Admin access required");
     }
     const { status, userId } = req.query as {
@@ -41,7 +41,7 @@ export class OrdersController {
   });
 
   adminUpdateStatus = asyncHandler(async (req: Request, res: Response) => {
-    if (req.user?.role !== "ADMIN") {
+    if ((req.user as { role?: string })?.role !== "ADMIN") {
       throw new ForbiddenError("Admin access required");
     }
     const { orderId } = req.params;

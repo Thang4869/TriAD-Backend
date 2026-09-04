@@ -19,7 +19,7 @@ export class ReviewsController {
   });
 
   create = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const { productId, rating, content } = req.body;
     if (!productId || !rating || !content) {
       throw new BadRequestError("productId, rating and content are required");
@@ -37,15 +37,15 @@ export class ReviewsController {
   });
 
   delete = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const isAdmin = req.user!.role === "ADMIN";
+    const userId = (req.user as { id: string }).id;
+    const isAdmin = (req.user as { role?: string })?.role === "ADMIN";
     const { reviewId } = req.params;
     const result = await this.service.deleteReview(reviewId, userId, isAdmin);
     res.json({ success: true, data: result });
   });
 
   adminGetAll = asyncHandler(async (req: Request, res: Response) => {
-    if (req.user?.role !== "ADMIN") {
+    if ((req.user as { role?: string })?.role !== "ADMIN") {
       throw new BadRequestError("Admin access required");
     }
     const page = req.query.page ? Number(req.query.page) : 1;

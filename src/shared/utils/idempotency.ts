@@ -5,7 +5,7 @@ const DEFAULT_TTL = parseInt(process.env.IDEMPOTENCY_TTL || "86400", 10);
 
 export const cacheIdempotentResponse = async (
   key: string,
-  response: any,
+  response: unknown,
   ttl: number = DEFAULT_TTL,
 ): Promise<void> => {
   await redis.setex(
@@ -15,9 +15,9 @@ export const cacheIdempotentResponse = async (
   );
 };
 
-export const getCachedIdempotentResponse = async (
+export const getCachedIdempotentResponse = async <T = unknown>(
   key: string,
-): Promise<any | null> => {
+): Promise<T | null> => {
   const data = await redis.get(`${IDEMPOTENCY_PREFIX}${key}`);
-  return data ? JSON.parse(data) : null;
+  return data ? (JSON.parse(data) as T) : null;
 };

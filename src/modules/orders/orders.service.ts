@@ -1,6 +1,11 @@
 import { NotFoundError } from "@shared/utils/errors";
 import { OrderStatus } from "@prisma/client";
-import { IOrdersRepository, AdminOrderFilters } from "./orders.repository";
+import {
+  IOrdersRepository,
+  AdminOrderFilters,
+  OrderWithItems,
+  AdminOrderWithRelations,
+} from "./orders.repository";
 
 export interface IOrdersService {
   getOrders(
@@ -8,25 +13,28 @@ export interface IOrdersService {
     page?: number,
     limit?: number,
   ): Promise<{
-    orders: any[];
+    orders: OrderWithItems[];
     total: number;
     page: number;
     limit: number;
     totalPages: number;
   }>;
-  getOrderById(orderId: string, userId: string): Promise<any>;
+  getOrderById(orderId: string, userId: string): Promise<OrderWithItems>;
   adminGetOrders(
     filters: AdminOrderFilters,
     page?: number,
     limit?: number,
   ): Promise<{
-    orders: any[];
+    orders: AdminOrderWithRelations[];
     total: number;
     page: number;
     limit: number;
     totalPages: number;
   }>;
-  updateOrderStatus(orderId: string, status: OrderStatus): Promise<any>;
+  updateOrderStatus(
+    orderId: string,
+    status: OrderStatus,
+  ): Promise<OrderWithItems>;
 }
 
 export class OrdersService implements IOrdersService {

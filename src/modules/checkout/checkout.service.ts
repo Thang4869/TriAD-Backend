@@ -10,6 +10,7 @@ import {
   ICheckoutRepository,
   TxClient,
   CreateOrderData,
+  OrderWithItems,
 } from "./checkout.repository";
 
 const MAX_RETRIES = 5;
@@ -32,16 +33,16 @@ export interface ICheckoutService {
     userId: string,
     input: CheckoutInput,
   ): Promise<{
-    order: any;
+    order: OrderWithItems;
     idempotent: boolean;
   }>;
-  getOrder(orderId: string, userId: string): Promise<any>;
+  getOrder(orderId: string, userId: string): Promise<OrderWithItems>;
   getOrders(
     userId: string,
     page?: number,
     limit?: number,
   ): Promise<{
-    orders: any[];
+    orders: OrderWithItems[];
     total: number;
     page: number;
     limit: number;
@@ -137,6 +138,11 @@ export class CheckoutService implements ICheckoutService {
       await this.repository.clearCartItems(tx, user.cart!.id);
       return newOrder;
     });
+
+    const fullOrder = await this.repository.findOrderWithItems(order.id);
+    if (!fullOrder) {
+      throw new Error("Failed to retrieve created order with items");
+    }
     if (input.idempotencyKey) {
       await this.repository.cacheOrderId(
         input.idempotencyKey,
@@ -146,7 +152,7 @@ export class CheckoutService implements ICheckoutService {
     }
 
     await this.notifyOrderConfirmation(user.email, order, cartItems);
-    return { order, idempotent: false };
+    return { order: fullOrder, idempotent: false };
   }
 
   async getOrder(orderId: string, userId: string) {

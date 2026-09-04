@@ -28,7 +28,7 @@ export const idempotencyMiddleware = (
     }
 
     const originalJson = res.json.bind(res);
-    res.json = function (body: any) {
+    res.json = function (body: unknown) {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const cacheData = {
           status: res.statusCode,

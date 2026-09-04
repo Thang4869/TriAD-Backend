@@ -4,18 +4,6 @@ import prisma from "@core/database/prisma";
 import redis from "@core/redis/client";
 import { UnauthorizedError } from "@shared/utils/errors";
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        id: string;
-        email: string;
-        role: string;
-      };
-    }
-  }
-}
-
 const BLACKLIST_PREFIX = "jwt:blacklist:";
 
 export const authMiddleware = async (

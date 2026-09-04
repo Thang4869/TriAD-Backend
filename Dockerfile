@@ -12,6 +12,15 @@ COPY . .
 RUN npx prisma generate
 RUN npm run build
 
+# ---------- Stage 4: development  ----------
+FROM node:20-alpine AS development
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npx prisma generate
+EXPOSE 5000
+CMD ["npm", "run", "dev"]
+
 # ---------- Stage 3: production runtime ----------
 FROM node:20-alpine AS production
 WORKDIR /app
@@ -26,8 +35,6 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
-
-RUN mkdir -p uploads/tmp uploads/products && chown -R nodejs:nodejs uploads
 
 USER nodejs
 

@@ -2,12 +2,13 @@ import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 import {
   IUsersRepository,
   UpdateProfileData,
+  UserProfile,
 } from "@modules/users/users.repository";
 import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
 
 export interface IUsersService {
-  getProfile(userId: string): Promise<any>;
-  updateProfile(userId: string, data: UpdateProfileData): Promise<any>;
+  getProfile(userId: string): Promise<UserProfile>;
+  updateProfile(userId: string, data: UpdateProfileData): Promise<UserProfile>;
   changePassword(
     userId: string,
     currentPassword: string,

@@ -9,14 +9,20 @@ const sensitiveFields = [
   "refreshToken",
 ];
 
-const sanitizeBody = (body: any): any => {
+const sanitizeBody = (body: unknown): unknown => {
   if (!body || typeof body !== "object") return body;
-  const sanitized = { ...body };
+  const sanitized: Record<string, unknown> = {
+    ...(body as Record<string, unknown>),
+  };
   for (const field of sensitiveFields) {
-    if (field in sanitized) sanitized[field] = "***REDACTED***";
+    if (field in sanitized) {
+      sanitized[field] = "***REDACTED***";
+    }
   }
   return sanitized;
 };
+
+type AppRequest = Request & { requestId?: string };
 
 export const requestLogger = (
   req: Request,
@@ -25,7 +31,7 @@ export const requestLogger = (
 ) => {
   const start = Date.now();
   const { method, url, query, body, ip, headers } = req;
-  const requestId = (req as any).requestId || "N/A";
+  const requestId = (req as AppRequest).requestId || "N/A";
 
   logger.info(`Incoming ${method} ${url}`, {
     requestId,
@@ -37,18 +43,14 @@ export const requestLogger = (
     userAgent: headers["user-agent"],
   });
 
-  const originalEnd = res.end;
-  res.end = function (chunk: any, encoding?: any, callback?: any) {
+  res.on("finish", () => {
     const duration = Date.now() - start;
-    const status = res.statusCode;
-    logger.info(`Response ${method} ${url} - ${status}`, {
+    logger.info(`Response ${method} ${url} - ${res.statusCode}`, {
       requestId,
-      status,
+      status: res.statusCode,
       duration: `${duration}ms`,
     });
-    const _responseBody = chunk?.toString() || "";
-    return originalEnd.call(this, chunk, encoding, callback);
-  };
+  });
 
   next();
 };

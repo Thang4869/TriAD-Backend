@@ -49,9 +49,18 @@ describe("rate-limit middleware", () => {
     expect(skipFn).toBeDefined();
 
     const mockRes = {} as Response;
-    const healthReq = { path: "/health", user: { role: "USER" } } as Request;
-    const adminReq = { path: "/api", user: { role: "ADMIN" } } as Request;
-    const normalReq = { path: "/api", user: { role: "USER" } } as Request;
+    const healthReq = {
+      path: "/health",
+      user: { role: "USER" },
+    } as unknown as Request;
+    const adminReq = {
+      path: "/api",
+      user: { role: "ADMIN" },
+    } as unknown as Request;
+    const normalReq = {
+      path: "/api",
+      user: { role: "USER" },
+    } as unknown as Request;
 
     expect(skipFn?.(healthReq, mockRes)).toBe(true);
     expect(skipFn?.(adminReq, mockRes)).toBe(true);

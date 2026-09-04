@@ -24,8 +24,22 @@ describe("requestLogger middleware", () => {
     };
     res = {
       statusCode: 200,
-      end: vi.fn().mockReturnThis(),
-    };
+      on: vi.fn().mockImplementation(function (
+        this: any,
+        event: string,
+        cb: () => void,
+      ) {
+        if (event === "finish") {
+          this._finishCb = cb;
+        }
+        return this;
+      }),
+      end: vi.fn().mockImplementation(function (this: any) {
+        if (this._finishCb) {
+          this._finishCb();
+        }
+      }),
+    } as any;
     next = vi.fn();
   });
 

@@ -14,6 +14,6 @@ export const verifyToken = <T>(token: string, secret: string): T => {
   return jwt.verify(token, Buffer.from(secret, "utf-8")) as T;
 };
 
-export const decodeToken = (token: string): any => {
-  return jwt.decode(token);
+export const decodeToken = <T = jwt.JwtPayload>(token: string): T | null => {
+  return jwt.decode(token) as T | null;
 };

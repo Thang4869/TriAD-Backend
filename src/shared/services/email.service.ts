@@ -1,11 +1,17 @@
 import { emailQueue } from "@core/queue/bull";
 import { logger } from "@core/logger/winston";
 
+interface OrderConfirmationItem {
+  product: { name: string };
+  quantity: number;
+  price: number;
+}
+
 export class EmailService {
   async sendOrderConfirmation(
     user: { email: string },
     order: { orderNumber: string; total: number },
-    items: any[],
+    items: OrderConfirmationItem[],
   ) {
     try {
       await emailQueue.add("order-confirmation", {

@@ -7,13 +7,13 @@ export class CartController {
   constructor(private readonly service: ICartService) {}
 
   getCart = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const cart = await this.service.getCart(userId);
     res.json({ success: true, data: cart });
   });
 
   addItem = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const { productId, quantity } = req.body;
 
     if (!productId) {
@@ -28,7 +28,7 @@ export class CartController {
   });
 
   updateItem = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const { productId } = req.params;
     const { quantity } = req.body;
 
@@ -41,14 +41,14 @@ export class CartController {
   });
 
   removeItem = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const { productId } = req.params;
     await this.service.removeItem(userId, productId);
     res.json({ success: true, data: null });
   });
 
   clearCart = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+    const userId = (req.user as { id: string }).id;
     const result = await this.service.clearCart(userId);
     res.json({ success: true, data: result });
   });

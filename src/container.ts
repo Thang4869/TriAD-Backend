@@ -40,6 +40,14 @@ import { NotificationsController } from "@modules/notifications/notifications.co
 
 import { EmailService } from "@shared/services/email.service";
 
+import { EventBus } from "@shared/domain/event-bus/event-bus";
+import { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-placed.handler";
+import { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
+import { OrderPlacedEvent } from "@shared/domain/events/order-events";
+import { OrderStatusChangedEvent } from "@shared/domain/events/order-events";
+
+const eventBus = EventBus.getInstance();
+
 // ---------- Repositories ----------
 const productsRepository = new PrismaProductsRepository();
 const authRepository = new PrismaAuthRepository();
@@ -66,6 +74,12 @@ const usersService = new UsersService(usersRepository);
 const wishlistService = new WishlistService(wishlistRepository);
 const dashboardService = new DashboardService(dashboardRepository);
 const notificationsService = new NotificationsService(notificationsRepository);
+const orderPlacedHandler = new OrderPlacedHandler(emailService);
+const orderStatusChangedHandler = new OrderStatusChangedHandler(
+  notificationsService,
+);
+
+export { eventBus };
 
 // ---------- Controllers ----------
 export const productsController = new ProductsController(productsService);
@@ -79,4 +93,14 @@ export const wishlistController = new WishlistController(wishlistService);
 export const dashboardController = new DashboardController(dashboardService);
 export const notificationsController = new NotificationsController(
   notificationsService,
+);
+
+eventBus.subscribe(
+  OrderPlacedEvent.name,
+  orderPlacedHandler.handle.bind(orderPlacedHandler),
+);
+
+eventBus.subscribe(
+  OrderStatusChangedEvent.name,
+  orderStatusChangedHandler.handle.bind(orderStatusChangedHandler),
 );

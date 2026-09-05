@@ -12,6 +12,7 @@ import {
   CreateOrderData,
   OrderWithItems,
 } from "./checkout.repository";
+import { EventBus } from "@shared/domain/event-bus/event-bus";
 
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 100;
@@ -57,6 +58,7 @@ export class CheckoutService implements ICheckoutService {
   constructor(
     private readonly repository: ICheckoutRepository,
     private readonly emailService: EmailService,
+    private readonly eventBus: EventBus = EventBus.getInstance(),
   ) {}
 
   async checkout(userId: string, input: CheckoutInput) {

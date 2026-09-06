@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
-import { CheckoutService } from "./checkout.service";
+import { ICheckoutService } from "./checkout.service";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class CheckoutController {
-  constructor(private readonly service: CheckoutService) {}
+  constructor(private readonly service: ICheckoutService) {}
 
   checkout = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;

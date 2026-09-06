@@ -8,12 +8,12 @@ export class OrderPlacedHandler {
   async handle(event: OrderPlacedEvent): Promise<void> {
     try {
       await this.emailService.sendOrderConfirmation(
-        { email: "user@example.com" },
-        { orderNumber: event.aggregateId, total: event.total },
+        { email: event.customerEmail },
+        { orderNumber: event.orderNumber, total: event.total },
         event.items.map((item) => ({
-          product: { name: "Product" },
+          productName: item.productName,
           quantity: item.quantity,
-          price: item.price,
+          price: item.unitPrice,
         })),
       );
       logger.info(`Order ${event.aggregateId} placed, notifications sent.`);

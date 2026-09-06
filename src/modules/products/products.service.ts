@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 import { Rating } from "@shared/value-objects/rating";
+import { Money } from "@shared/value-objects/money";
 import {
   IProductsRepository,
   CreateProductData,
@@ -11,6 +12,10 @@ import {
   toProductDetailResponse,
 } from "./products.mapper";
 import { imageQueue } from "@core/queue/bull";
+import { Product } from "./domain/product.entity";
+import { ProductSpecificationBuilder } from "./domain/specifications/product-specification";
+import { EventBus } from "@shared/domain/event-bus/event-bus";
+import { logger } from "@core/logger/winston";
 
 const MAX_PAGE_LIMIT = 50;
 const DEFAULT_PUBLIC_LIMIT = 12;
@@ -74,21 +79,13 @@ export class ProductsService implements IProductsService {
 
     const { safeLimit, skip } = buildPagination(page, limit);
 
-    const priceFilter: Prisma.ProductWhereInput["price"] = {};
-    if (minPrice !== undefined) priceFilter.gte = minPrice;
-    if (maxPrice !== undefined) priceFilter.lte = maxPrice;
-
-    const where: Prisma.ProductWhereInput = {
-      isActive: true,
-      ...(category && { category }),
-      ...(Object.keys(priceFilter).length > 0 && { price: priceFilter }),
-      ...(keyword && {
-        OR: [
-          { name: { contains: keyword, mode: "insensitive" } },
-          { description: { contains: keyword, mode: "insensitive" } },
-        ],
-      }),
-    };
+    const where = new ProductSpecificationBuilder()
+      .activeOnly()
+      .withCategory(category)
+      .withPriceRange(minPrice, maxPrice)
+      .withKeyword(keyword)
+      .build()
+      .toPrismaWhere();
 
     const orderBy: Prisma.ProductOrderByWithRelationInput = {
       [sortBy]: sortOrder,
@@ -166,16 +163,12 @@ export class ProductsService implements IProductsService {
 
     const { safeLimit, skip } = buildPagination(page, limit);
 
-    const where: Prisma.ProductWhereInput = {
-      ...(isActive !== undefined && { isActive }),
-      ...(category && { category }),
-      ...(keyword && {
-        OR: [
-          { name: { contains: keyword, mode: "insensitive" } },
-          { description: { contains: keyword, mode: "insensitive" } },
-        ],
-      }),
-    };
+    const where = new ProductSpecificationBuilder()
+      .withIsActive(isActive)
+      .withCategory(category)
+      .withKeyword(keyword)
+      .build()
+      .toPrismaWhere();
 
     const orderBy: Prisma.ProductOrderByWithRelationInput = {
       [sortBy]: sortOrder,
@@ -216,6 +209,12 @@ export class ProductsService implements IProductsService {
       }
     }
 
+    if (data.price !== undefined && data.price !== product.price) {
+      const entity = Product.hydrate(product);
+      this.applyInvariant(() => entity.changePrice(new Money(data.price!)));
+      await this.publishEvents(entity);
+    }
+
     return this.repository.update(id, data);
   }
 
@@ -224,9 +223,9 @@ export class ProductsService implements IProductsService {
     if (!product) {
       throw new NotFoundError("Product not found");
     }
-    if (!product.isActive) {
-      throw new BadRequestError("Product is already deactivated");
-    }
+    const entity = Product.hydrate(product);
+    this.applyInvariant(() => entity.deactivate());
+    await this.publishEvents(entity);
     return this.repository.setActive(id, false);
   }
 
@@ -235,9 +234,9 @@ export class ProductsService implements IProductsService {
     if (!product) {
       throw new NotFoundError("Product not found");
     }
-    if (product.isActive) {
-      throw new BadRequestError("Product is already active");
-    }
+    const entity = Product.hydrate(product);
+    this.applyInvariant(() => entity.activate());
+    await this.publishEvents(entity);
     return this.repository.setActive(id, true);
   }
 
@@ -273,5 +272,28 @@ export class ProductsService implements IProductsService {
       limit: safeLimit,
       totalPages: Math.ceil(total / safeLimit),
     };
+  }
+
+  // ---------- Private helpers ----------
+
+  private applyInvariant(fn: () => void): void {
+    try {
+      fn();
+    } catch (error) {
+      throw new BadRequestError(
+        error instanceof Error ? error.message : "Invalid operation",
+      );
+    }
+  }
+
+  private async publishEvents(entity: Product): Promise<void> {
+    const events = entity.pullEvents();
+    for (const event of events) {
+      try {
+        await EventBus.getInstance().publish(event);
+      } catch (error) {
+        logger.error(`Failed to publish ${event.eventName}`, { error });
+      }
+    }
   }
 }

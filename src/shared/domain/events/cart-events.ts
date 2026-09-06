@@ -1,6 +1,8 @@
 import { BaseDomainEvent } from "./domain-event";
 
 export class CartItemAddedEvent extends BaseDomainEvent {
+  static readonly eventName = "CartItemAdded";
+
   constructor(
     public readonly cartId: string,
     public readonly userId: string,
@@ -12,6 +14,8 @@ export class CartItemAddedEvent extends BaseDomainEvent {
 }
 
 export class CartItemRemovedEvent extends BaseDomainEvent {
+  static readonly eventName = "CartItemRemoved";
+
   constructor(
     public readonly cartId: string,
     public readonly userId: string,
@@ -22,6 +26,8 @@ export class CartItemRemovedEvent extends BaseDomainEvent {
 }
 
 export class CartClearedEvent extends BaseDomainEvent {
+  static readonly eventName = "CartCleared";
+
   constructor(
     public readonly cartId: string,
     public readonly userId: string,

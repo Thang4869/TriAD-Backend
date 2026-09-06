@@ -5,6 +5,7 @@ import prisma from "@core/database/prisma";
 import redis from "@core/redis/client";
 import { config } from "./config";
 import { logger } from "@core/logger/winston";
+import { outboxRelay } from "@core/outbox/outbox-relay";
 
 const PORT = config.PORT;
 
@@ -28,8 +29,11 @@ const startServer = async () => {
       logger.info(`API Docs: http://localhost:${PORT}/api/docs`);
     });
 
+    outboxRelay.start();
+
     const shutdown = async (signal: string) => {
       logger.info(`Received ${signal}, shutting down gracefully...`);
+      outboxRelay.stop();
       server.close(async () => {
         logger.info("HTTP server closed");
         await prisma.$disconnect();

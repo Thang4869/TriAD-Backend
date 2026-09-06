@@ -61,7 +61,8 @@ describe("EmailService", () => {
   describe("sendVerificationEmail", () => {
     it("enqueue job verify-email với đúng data", async () => {
       vi.mock("@core/circuit-breaker/circuit-breaker", () => ({
-        withRetry: vi.fn((fn) => fn()),
+        withCircuitBreaker: (fn: any) => fn,
+        withRetry: (fn: any) => fn(),
       }));
       vi.mocked(emailQueue.add).mockResolvedValueOnce(undefined as never);
       const service = new EmailService();

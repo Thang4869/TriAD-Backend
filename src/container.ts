@@ -1,3 +1,6 @@
+import { Container, Lifetime } from "@core/di/container";
+import { TOKENS } from "@core/di/tokens";
+
 import { PrismaProductsRepository } from "@modules/products/products.repository";
 import { ProductsService } from "@modules/products/products.service";
 import { ProductsController } from "@modules/products/products.controller";
@@ -39,68 +42,190 @@ import { NotificationsService } from "@modules/notifications/notifications.servi
 import { NotificationsController } from "@modules/notifications/notifications.controller";
 
 import { EmailService } from "@shared/services/email.service";
+import { CloudinaryImageStorage } from "@core/storage/cloudinary";
 
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-placed.handler";
 import { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
-import { OrderPlacedEvent } from "@shared/domain/events/order-events";
-import { OrderStatusChangedEvent } from "@shared/domain/events/order-events";
+import {
+  OrderPlacedEvent,
+  OrderStatusChangedEvent,
+} from "@shared/domain/events/order-events";
 
-const eventBus = EventBus.getInstance();
+export const container = new Container();
+
+// ---------- Cross-cutting infra ----------
+container.register(TOKENS.EventBus, () => EventBus.getInstance());
+container.register(TOKENS.EmailService, () => new EmailService());
+container.register(TOKENS.ImageStorage, () => new CloudinaryImageStorage());
 
 // ---------- Repositories ----------
-const productsRepository = new PrismaProductsRepository();
-const authRepository = new PrismaAuthRepository();
-const cartRepository = new PrismaCartRepository();
-const checkoutRepository = new PrismaCheckoutRepository();
-const ordersRepository = new PrismaOrdersRepository();
-const reviewsRepository = new PrismaReviewsRepository();
-const usersRepository = new PrismaUsersRepository();
-const wishlistRepository = new PrismaWishlistRepository();
-const dashboardRepository = new PrismaDashboardRepository();
-const notificationsRepository = new PrismaNotificationsRepository();
-
-// ---------- Cross-cutting infra services ----------
-const emailService = new EmailService();
+container.register(
+  TOKENS.ProductsRepository,
+  () => new PrismaProductsRepository(),
+);
+container.register(TOKENS.AuthRepository, () => new PrismaAuthRepository());
+container.register(TOKENS.CartRepository, () => new PrismaCartRepository());
+container.register(
+  TOKENS.CheckoutRepository,
+  () => new PrismaCheckoutRepository(),
+);
+container.register(TOKENS.OrdersRepository, () => new PrismaOrdersRepository());
+container.register(
+  TOKENS.ReviewsRepository,
+  () => new PrismaReviewsRepository(),
+);
+container.register(TOKENS.UsersRepository, () => new PrismaUsersRepository());
+container.register(
+  TOKENS.WishlistRepository,
+  () => new PrismaWishlistRepository(),
+);
+container.register(
+  TOKENS.DashboardRepository,
+  () => new PrismaDashboardRepository(),
+);
+container.register(
+  TOKENS.NotificationsRepository,
+  () => new PrismaNotificationsRepository(),
+);
 
 // ---------- Domain services ----------
-const productsService = new ProductsService(productsRepository);
-const authService = new AuthService(authRepository, emailService);
-const cartService = new CartService(cartRepository);
-const checkoutService = new CheckoutService(checkoutRepository, emailService);
-const ordersService = new OrdersService(ordersRepository);
-const reviewsService = new ReviewsService(reviewsRepository);
-const usersService = new UsersService(usersRepository);
-const wishlistService = new WishlistService(wishlistRepository);
-const dashboardService = new DashboardService(dashboardRepository);
-const notificationsService = new NotificationsService(notificationsRepository);
-const orderPlacedHandler = new OrderPlacedHandler(emailService);
-const orderStatusChangedHandler = new OrderStatusChangedHandler(
-  notificationsService,
+container.register(
+  TOKENS.ProductsService,
+  (c) => new ProductsService(c.resolve(TOKENS.ProductsRepository)),
 );
-
-export { eventBus };
+container.register(
+  TOKENS.AuthService,
+  (c) =>
+    new AuthService(
+      c.resolve(TOKENS.AuthRepository),
+      c.resolve(TOKENS.EmailService),
+    ),
+);
+container.register(
+  TOKENS.CartService,
+  (c) => new CartService(c.resolve(TOKENS.CartRepository)),
+);
+container.register(
+  TOKENS.CheckoutService,
+  (c) => new CheckoutService(c.resolve(TOKENS.CheckoutRepository)),
+);
+container.register(
+  TOKENS.OrdersService,
+  (c) => new OrdersService(c.resolve(TOKENS.OrdersRepository)),
+);
+container.register(
+  TOKENS.ReviewsService,
+  (c) => new ReviewsService(c.resolve(TOKENS.ReviewsRepository)),
+);
+container.register(
+  TOKENS.UsersService,
+  (c) => new UsersService(c.resolve(TOKENS.UsersRepository)),
+);
+container.register(
+  TOKENS.WishlistService,
+  (c) => new WishlistService(c.resolve(TOKENS.WishlistRepository)),
+);
+container.register(
+  TOKENS.DashboardService,
+  (c) => new DashboardService(c.resolve(TOKENS.DashboardRepository)),
+);
+container.register(
+  TOKENS.NotificationsService,
+  (c) => new NotificationsService(c.resolve(TOKENS.NotificationsRepository)),
+);
 
 // ---------- Controllers ----------
-export const productsController = new ProductsController(productsService);
-export const authController = new AuthController(authService);
-export const cartController = new CartController(cartService);
-export const checkoutController = new CheckoutController(checkoutService);
-export const ordersController = new OrdersController(ordersService);
-export const reviewsController = new ReviewsController(reviewsService);
-export const usersController = new UsersController(usersService);
-export const wishlistController = new WishlistController(wishlistService);
-export const dashboardController = new DashboardController(dashboardService);
-export const notificationsController = new NotificationsController(
-  notificationsService,
+container.register(
+  TOKENS.ProductsController,
+  (c) => new ProductsController(c.resolve(TOKENS.ProductsService)),
+  Lifetime.Transient,
+);
+container.register(
+  TOKENS.AuthController,
+  (c) => new AuthController(c.resolve(TOKENS.AuthService)),
+  Lifetime.Transient,
+);
+container.register(
+  TOKENS.CartController,
+  (c) => new CartController(c.resolve(TOKENS.CartService)),
+  Lifetime.Transient,
+);
+container.register(
+  TOKENS.CheckoutController,
+  (c) => new CheckoutController(c.resolve(TOKENS.CheckoutService)),
+  Lifetime.Transient,
+);
+container.register(
+  TOKENS.OrdersController,
+  (c) => new OrdersController(c.resolve(TOKENS.OrdersService)),
+  Lifetime.Transient,
+);
+container.register(
+  TOKENS.ReviewsController,
+  (c) => new ReviewsController(c.resolve(TOKENS.ReviewsService)),
+  Lifetime.Transient,
+);
+container.register(
+  TOKENS.UsersController,
+  (c) => new UsersController(c.resolve(TOKENS.UsersService)),
+  Lifetime.Transient,
+);
+container.register(
+  TOKENS.WishlistController,
+  (c) => new WishlistController(c.resolve(TOKENS.WishlistService)),
+  Lifetime.Transient,
+);
+container.register(
+  TOKENS.DashboardController,
+  (c) => new DashboardController(c.resolve(TOKENS.DashboardService)),
+  Lifetime.Transient,
+);
+container.register(
+  TOKENS.NotificationsController,
+  (c) => new NotificationsController(c.resolve(TOKENS.NotificationsService)),
+  Lifetime.Transient,
+);
+
+// ---------- Domain event handlers ----------
+container.register(
+  TOKENS.OrderPlacedHandler,
+  (c) => new OrderPlacedHandler(c.resolve(TOKENS.EmailService)),
+);
+container.register(
+  TOKENS.OrderStatusChangedHandler,
+  (c) => new OrderStatusChangedHandler(c.resolve(TOKENS.NotificationsService)),
+);
+
+// ---------- Wire domain events to their handlers ----------
+const eventBus = container.resolve(TOKENS.EventBus);
+const orderPlacedHandler = container.resolve(TOKENS.OrderPlacedHandler);
+const orderStatusChangedHandler = container.resolve(
+  TOKENS.OrderStatusChangedHandler,
 );
 
 eventBus.subscribe(
-  OrderPlacedEvent.name,
+  OrderPlacedEvent.eventName,
   orderPlacedHandler.handle.bind(orderPlacedHandler),
 );
-
 eventBus.subscribe(
-  OrderStatusChangedEvent.name,
+  OrderStatusChangedEvent.eventName,
   orderStatusChangedHandler.handle.bind(orderStatusChangedHandler),
+);
+
+// ---------- Named exports ----------
+export { eventBus };
+export const productsController = container.resolve(TOKENS.ProductsController);
+export const authController = container.resolve(TOKENS.AuthController);
+export const cartController = container.resolve(TOKENS.CartController);
+export const checkoutController = container.resolve(TOKENS.CheckoutController);
+export const ordersController = container.resolve(TOKENS.OrdersController);
+export const reviewsController = container.resolve(TOKENS.ReviewsController);
+export const usersController = container.resolve(TOKENS.UsersController);
+export const wishlistController = container.resolve(TOKENS.WishlistController);
+export const dashboardController = container.resolve(
+  TOKENS.DashboardController,
+);
+export const notificationsController = container.resolve(
+  TOKENS.NotificationsController,
 );

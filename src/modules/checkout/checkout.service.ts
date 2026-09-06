@@ -81,6 +81,7 @@ export class CheckoutService implements ICheckoutService {
         customerPhone: input.phone || user.phone || "",
         customerAddress: input.address,
         paymentMethod: input.paymentMethod,
+        notes: input.notes,
       });
 
       for (const item of cartItems) {

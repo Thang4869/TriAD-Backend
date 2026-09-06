@@ -64,6 +64,7 @@ export class Order extends AggregateRoot {
     customerPhone: string;
     customerAddress: string;
     paymentMethod: string;
+    notes?: string;
   }): Order {
     return new Order(
       props.id,
@@ -80,6 +81,7 @@ export class Order extends AggregateRoot {
       new Money(0),
       new Money(0),
       new Money(0),
+      props.notes,
     );
   }
 

@@ -141,7 +141,11 @@ describe("ProductsService - Admin CRUD", () => {
       await service.findAll({ category: "glass" });
       expect(repository.findManyWithRatings).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ category: "glass" }),
+          where: expect.objectContaining({
+            AND: expect.arrayContaining([
+              expect.objectContaining({ category: "glass" }),
+            ]),
+          }),
         }),
       );
     });
@@ -153,7 +157,9 @@ describe("ProductsService - Admin CRUD", () => {
       expect(repository.findManyWithRatings).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            price: { gte: 100, lte: 200 },
+            AND: expect.arrayContaining([
+              expect.objectContaining({ price: { gte: 100, lte: 200 } }),
+            ]),
           }),
         }),
       );
@@ -166,10 +172,16 @@ describe("ProductsService - Admin CRUD", () => {
       expect(repository.findManyWithRatings).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            OR: [
-              { name: { contains: "container", mode: "insensitive" } },
-              { description: { contains: "container", mode: "insensitive" } },
-            ],
+            AND: expect.arrayContaining([
+              expect.objectContaining({
+                OR: [
+                  { name: { contains: "container", mode: "insensitive" } },
+                  {
+                    description: { contains: "container", mode: "insensitive" },
+                  },
+                ],
+              }),
+            ]),
           }),
         }),
       );
@@ -254,7 +266,11 @@ describe("ProductsService - Admin CRUD", () => {
       await service.adminFindAll({ isActive: false });
       expect(repository.findManyAdmin).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ isActive: false }),
+          where: expect.objectContaining({
+            AND: expect.arrayContaining([
+              expect.objectContaining({ isActive: false }),
+            ]),
+          }),
         }),
       );
     });
@@ -265,7 +281,11 @@ describe("ProductsService - Admin CRUD", () => {
       await service.adminFindAll({ category: "glass" });
       expect(repository.findManyAdmin).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ category: "glass" }),
+          where: expect.objectContaining({
+            AND: expect.arrayContaining([
+              expect.objectContaining({ category: "glass" }),
+            ]),
+          }),
         }),
       );
     });
@@ -277,10 +297,16 @@ describe("ProductsService - Admin CRUD", () => {
       expect(repository.findManyAdmin).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            OR: [
-              { name: { contains: "container", mode: "insensitive" } },
-              { description: { contains: "container", mode: "insensitive" } },
-            ],
+            AND: expect.arrayContaining([
+              expect.objectContaining({
+                OR: [
+                  { name: { contains: "container", mode: "insensitive" } },
+                  {
+                    description: { contains: "container", mode: "insensitive" },
+                  },
+                ],
+              }),
+            ]),
           }),
         }),
       );

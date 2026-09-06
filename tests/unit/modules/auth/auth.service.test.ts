@@ -8,11 +8,14 @@ import { emailQueue } from "@core/queue/bull";
 import redis from "@core/redis/client";
 import speakeasy from "speakeasy";
 import { signToken, decodeToken } from "@shared/utils/jwt";
+import { EmailService } from "@/shared/services/email.service";
 
 const mockEmailService = {
   sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
   sendOrderConfirmation: vi.fn().mockResolvedValue(undefined),
-};
+  enqueue: vi.fn().mockResolvedValue(undefined),
+  enqueueWithRetry: vi.fn().mockResolvedValue(undefined),
+} as unknown as EmailService;
 
 vi.mock("@core/redis/client", () => ({
   default: {
@@ -120,9 +123,9 @@ describe("AuthService", () => {
       expect(result.user).toMatchObject({ email: "test@test.com" });
       expect(result.message).toContain("check your email");
       expect(repository.createCartForUser).toHaveBeenCalledWith(baseUser.id);
-      expect(emailQueue.add).toHaveBeenCalledWith(
-        "verify-email",
-        expect.objectContaining({ to: "test@test.com" }),
+      expect(mockEmailService.sendVerificationEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ email: "test@test.com" }),
+        expect.any(String),
       );
     });
   });
@@ -212,7 +215,7 @@ describe("AuthService", () => {
       });
       const service = new AuthService(repository, mockEmailService);
       const result = await service.resendVerificationEmail("notexist@test.com");
-      expect(emailQueue.add).not.toHaveBeenCalled();
+      expect(mockEmailService.sendVerificationEmail).not.toHaveBeenCalled();
       expect(result.message).toContain("If that account exists");
     });
 
@@ -235,9 +238,9 @@ describe("AuthService", () => {
       });
       const service = new AuthService(repository, mockEmailService);
       await service.resendVerificationEmail("test@test.com");
-      expect(emailQueue.add).toHaveBeenCalledWith(
-        "verify-email",
-        expect.objectContaining({ to: "test@test.com" }),
+      expect(mockEmailService.sendVerificationEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ email: "test@test.com" }),
+        expect.any(String),
       );
     });
   });

@@ -1,12 +1,19 @@
 import { Money } from "@shared/value-objects/money";
+import { AggregateRoot } from "@shared/domain/aggregate-root";
+import {
+  ProductStockDepletedEvent,
+  ProductRestockedEvent,
+  ProductPriceChangedEvent,
+  ProductActivatedEvent,
+  ProductDeactivatedEvent,
+} from "@shared/domain/events/product-events";
 
-export class Product {
+export class Product extends AggregateRoot {
   private _stock: number;
   private _isActive: boolean;
-  private _version: number = 0;
 
   private constructor(
-    public readonly id: string,
+    id: string,
     public readonly name: string,
     public readonly description: string | null,
     private _price: Money,
@@ -16,6 +23,7 @@ export class Product {
     public readonly slug: string,
     isActive: boolean,
   ) {
+    super(id);
     this._stock = stock;
     this._isActive = isActive;
   }
@@ -32,14 +40,14 @@ export class Product {
     return this._isActive;
   }
 
-  get version(): number {
-    return this._version;
-  }
-
   changePrice(newPrice: Money): void {
     if (newPrice.getValue() < 0) throw new Error("Price cannot be negative");
+    if (newPrice.getValue() === this._price.getValue()) return;
+    const oldPrice = this._price.getValue();
     this._price = newPrice;
-    this._version++;
+    this.raise(
+      new ProductPriceChangedEvent(this.id, oldPrice, newPrice.getValue()),
+    );
   }
 
   reduceStock(quantity: number): void {
@@ -47,25 +55,27 @@ export class Product {
     if (this._stock < quantity)
       throw new Error(`Insufficient stock. Available: ${this._stock}`);
     this._stock -= quantity;
-    this._version++;
+    if (this._stock === 0) {
+      this.raise(new ProductStockDepletedEvent(this.id, this.name));
+    }
   }
 
   increaseStock(quantity: number): void {
     if (quantity <= 0) throw new Error("Quantity must be positive");
     this._stock += quantity;
-    this._version++;
+    this.raise(new ProductRestockedEvent(this.id, quantity, this._stock));
   }
 
   activate(): void {
     if (this._isActive) throw new Error("Product already active");
     this._isActive = true;
-    this._version++;
+    this.raise(new ProductActivatedEvent(this.id));
   }
 
   deactivate(): void {
     if (!this._isActive) throw new Error("Product already inactive");
     this._isActive = false;
-    this._version++;
+    this.raise(new ProductDeactivatedEvent(this.id));
   }
 
   static hydrate(data: {
@@ -92,7 +102,7 @@ export class Product {
       data.isActive,
     );
     if (data.version !== undefined) {
-      product._version = data.version;
+      product.setVersionFromPersistence(data.version);
     }
     return product;
   }

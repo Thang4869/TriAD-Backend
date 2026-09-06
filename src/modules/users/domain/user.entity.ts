@@ -1,6 +1,15 @@
 import { Role } from "@shared/types/roles";
+import { AggregateRoot } from "@shared/domain/aggregate-root";
+import {
+  UserRegisteredEvent,
+  UserEmailVerifiedEvent,
+  UserTwoFactorEnabledEvent,
+  UserTwoFactorDisabledEvent,
+} from "@shared/domain/events/user-events";
 
-export class User {
+const MIN_PASSWORD_LENGTH = 6;
+
+export class User extends AggregateRoot {
   private _password: string | null;
   private _isVerified: boolean;
   private _is2FAEnabled: boolean;
@@ -8,7 +17,7 @@ export class User {
   private _phone: string | null;
 
   private constructor(
-    public readonly id: string,
+    id: string,
     public readonly email: string,
     public firstName: string,
     public lastName: string,
@@ -21,6 +30,7 @@ export class User {
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
   ) {
+    super(id);
     this._password = password;
     this._isVerified = isVerified;
     this._is2FAEnabled = is2FAEnabled;
@@ -52,9 +62,12 @@ export class User {
     return this._totpSecret;
   }
 
-  changePassword(newPlainPassword: string): void {
-    if (newPlainPassword.length < 6)
-      throw new Error("Password must be at least 6 characters");
+  assertPasswordPolicy(plainPassword: string): void {
+    if (plainPassword.length < MIN_PASSWORD_LENGTH) {
+      throw new Error(
+        `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      );
+    }
   }
 
   setHashedPassword(hashed: string): void {
@@ -64,21 +77,26 @@ export class User {
   verify(): void {
     if (this._isVerified) throw new Error("User already verified");
     this._isVerified = true;
+    this.raise(new UserEmailVerifiedEvent(this.id));
   }
 
-  enable2FA(secret: string): void {
+  startEnabling2FA(secret: string): void {
     if (this._is2FAEnabled) throw new Error("2FA already enabled");
     this._totpSecret = secret;
   }
 
   confirm2FA(): void {
     if (!this._totpSecret) throw new Error("2FA not set up");
+    if (this._is2FAEnabled) throw new Error("2FA already enabled");
     this._is2FAEnabled = true;
+    this.raise(new UserTwoFactorEnabledEvent(this.id));
   }
 
   disable2FA(): void {
+    if (!this._is2FAEnabled) throw new Error("2FA is not enabled");
     this._is2FAEnabled = false;
     this._totpSecret = null;
+    this.raise(new UserTwoFactorDisabledEvent(this.id));
   }
 
   updateProfile(firstName?: string, lastName?: string, phone?: string): void {
@@ -115,5 +133,11 @@ export class User {
       data.createdAt,
       data.updatedAt,
     );
+  }
+
+  static registered(data: Parameters<typeof User.hydrate>[0]): User {
+    const user = User.hydrate(data);
+    user.raise(new UserRegisteredEvent(user.id, user.email));
+    return user;
   }
 }

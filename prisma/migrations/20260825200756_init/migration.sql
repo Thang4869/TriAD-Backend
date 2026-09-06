@@ -178,6 +178,20 @@ CREATE TABLE "wishlist_items" (
     CONSTRAINT "wishlist_items_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "outbox_events" (
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid()::text,
+    "eventName" TEXT NOT NULL,
+    "aggregateId" TEXT NOT NULL,
+    "payload" JSONB NOT NULL,
+    "occurredAt" TIMESTAMP(3) NOT NULL,
+    "publishedAt" TIMESTAMP(3),
+    "attempts" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "outbox_events_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 CREATE UNIQUE INDEX "products_slug_key" ON "products"("slug");
@@ -190,8 +204,14 @@ CREATE UNIQUE INDEX "refresh_tokens_token_key" ON "refresh_tokens"("token");
 CREATE UNIQUE INDEX "discounts_code_key" ON "discounts"("code");
 CREATE UNIQUE INDEX "wishlist_items_userId_productId_key" ON "wishlist_items"("userId", "productId");
 
--- Index cho Full-Text Search
+-- Index for Full-Text Search
 CREATE INDEX "products_searchVector_idx" ON "products" USING GIN ("searchVector");
+
+-- Index for Outbox Events
+CREATE INDEX "outbox_events_publishedAt_attempts_idx" ON "outbox_events" ("publishedAt", "attempts");
+
+-- Index for Outbox Events by Aggregate ID
+CREATE INDEX "outbox_events_aggregateId_idx" ON "outbox_events" ("aggregateId");
 
 -- AddForeignKey
 ALTER TABLE "carts" ADD CONSTRAINT "carts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

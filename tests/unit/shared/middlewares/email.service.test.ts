@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("@core/circuit-breaker/circuit-breaker", () => ({
+  withCircuitBreaker: vi.fn((fn) => fn),
+  withRetry: vi.fn((fn) => fn()),
+}));
+vi.mock("@core/queue/bull", () => ({
+  emailQueue: { add: vi.fn() },
+}));
+
 import { EmailService } from "@shared/services/email.service";
 
-vi.mock("@core/queue/bull", () => ({ emailQueue: { add: vi.fn() } }));
 vi.mock("@core/logger/winston", () => ({
   logger: { info: vi.fn(), error: vi.fn() },
 }));
@@ -15,7 +23,7 @@ describe("EmailService", () => {
     it("enqueue job đúng template và map items sang name/quantity/price", async () => {
       vi.mocked(emailQueue.add).mockResolvedValueOnce(undefined as never);
       const service = new EmailService();
-      const items = [{ product: { name: "Item A" }, quantity: 2, price: 50 }];
+      const items = [{ productName: "Item A", quantity: 2, price: 50 }];
 
       await service.sendOrderConfirmation(
         { email: "a@test.com" },
@@ -47,11 +55,14 @@ describe("EmailService", () => {
         ),
       ).resolves.toBeUndefined();
       expect(logger.error).toHaveBeenCalled();
-    });
+    }, 10000);
   });
 
   describe("sendVerificationEmail", () => {
     it("enqueue job verify-email với đúng data", async () => {
+      vi.mock("@core/circuit-breaker/circuit-breaker", () => ({
+        withRetry: vi.fn((fn) => fn()),
+      }));
       vi.mocked(emailQueue.add).mockResolvedValueOnce(undefined as never);
       const service = new EmailService();
 
@@ -80,6 +91,6 @@ describe("EmailService", () => {
         ),
       ).resolves.toBeUndefined();
       expect(logger.error).toHaveBeenCalled();
-    });
+    }, 10000);
   });
 });

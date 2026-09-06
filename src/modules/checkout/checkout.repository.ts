@@ -1,6 +1,9 @@
 import prisma from "@core/database/prisma";
 import redis from "@core/redis/client";
 import { Prisma, Order } from "@prisma/client";
+import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
+import { persistDomainEvents } from "@core/unit-of-work/unit-of-work";
+import { PaymentMethod, PaymentStatus } from "@prisma/client";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -115,6 +118,12 @@ export interface ICheckoutRepository {
   createOrderItems(tx: TxClient, items: CreateOrderItemData[]): Promise<void>;
   clearCartItems(tx: TxClient, cartId: string): Promise<void>;
 
+  saveNewOrder(
+    tx: TxClient,
+    order: OrderAggregate,
+    idempotencyKey: string,
+  ): Promise<Order>;
+
   findOrdersByUser(
     userId: string,
     skip: number,
@@ -228,6 +237,49 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
 
   async createOrder(tx: TxClient, data: CreateOrderData): Promise<Order> {
     return tx.order.create({ data });
+  }
+
+  async saveNewOrder(
+    tx: TxClient,
+    order: OrderAggregate,
+    idempotencyKey: string,
+  ): Promise<Order> {
+    const created = await tx.order.create({
+      data: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        userId: order.userId,
+        status: order.status,
+        paymentMethod: order.paymentMethod as PaymentMethod,
+        paymentStatus: order.paymentStatus as PaymentStatus,
+        subtotal: order.subtotal.getValue(),
+        tax: order.tax.getValue(),
+        shippingFee: order.shippingFee.getValue(),
+        total: order.total.getValue(),
+        discountAmount: order.discountAmount.getValue(),
+        discountCode: order.discountCode,
+        customerName: order.customerName,
+        customerEmail: order.customerEmail,
+        customerPhone: order.customerPhone,
+        customerAddress: order.customerAddress,
+        notes: order.notes,
+        idempotencyKey,
+      },
+    });
+
+    await tx.orderItem.createMany({
+      data: order.items.map((item) => ({
+        orderId: created.id,
+        productId: item.productId,
+        quantity: item.quantity,
+        price: item.unitPrice.getValue(),
+        total: item.total.getValue(),
+      })),
+    });
+
+    await persistDomainEvents(tx, [order]);
+
+    return created;
   }
 
   async createOrderItems(

@@ -100,7 +100,7 @@ model Order {
   updatedAt       DateTime      @updatedAt
   items           OrderItem[]
   user            User          @relation(fields: [userId], references: [id])
-
+  version         Int           @default(0)
   @@map("orders")
 }
 
@@ -184,6 +184,21 @@ model WishlistItem {
 
   @@unique([userId, productId])
   @@map("wishlist_items")
+}
+
+model OutboxEvent {
+  id          String    @id @default(cuid())
+  eventName   String
+  aggregateId String
+  payload     Json
+  occurredAt  DateTime
+  publishedAt DateTime?
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([publishedAt, attempts])
+  @@index([aggregateId])
+  @@map("outbox_events")
 }
 
 enum Role {

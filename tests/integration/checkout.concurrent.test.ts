@@ -15,7 +15,7 @@ vi.mock("@core/queue/bull", () => ({
   },
 }));
 
-const mockRepository: ICheckoutRepository = {
+const mockRepository = {
   findCachedOrderId: vi.fn().mockResolvedValue(null),
   cacheOrderId: vi.fn().mockResolvedValue(undefined),
   findOrderWithItems: vi.fn().mockResolvedValue(null),
@@ -69,17 +69,11 @@ const mockRepository: ICheckoutRepository = {
   findOrdersByUser: vi.fn().mockResolvedValue([]),
   countOrdersByUser: vi.fn().mockResolvedValue(0),
   findOrderByUserAndId: vi.fn().mockResolvedValue(null),
-};
+  saveNewOrder: vi.fn().mockResolvedValue({ id: "order-1" }),
+} as unknown as ICheckoutRepository;
 
 describe("Checkout Concurrency", () => {
-  const mockEmailService = {
-    sendOrderConfirmation: vi.fn().mockResolvedValue(undefined),
-  };
-
-  const checkoutService = new CheckoutService(
-    mockRepository,
-    mockEmailService as any,
-  );
+  const checkoutService = new CheckoutService(mockRepository);
 
   beforeAll(async () => {});
 

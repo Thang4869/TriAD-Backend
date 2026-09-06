@@ -28,7 +28,7 @@ describe("Prisma client singleton", () => {
     process.env.NODE_ENV = "development";
     await import("@core/database/prisma");
 
-    expect(capturedOptions.log).toEqual(["query", "info", "warn", "error"]);
+    expect(capturedOptions.log).toEqual(["info", "warn", "error"]);
   });
 
   it("uses error-only logging outside development", async () => {

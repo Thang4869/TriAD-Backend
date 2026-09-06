@@ -3,13 +3,17 @@ import speakeasy from "speakeasy";
 import config from "@config";
 import redis from "@core/redis/client";
 
-import { User } from "@prisma/client";
+import { User as PrismaUser } from "@prisma/client";
 
 import { logger } from "@core/logger/winston";
-import { emailQueue } from "@core/queue/bull";
 
-import { toAuthUserResponse, AuthUserResponse } from "./auth.mapper";
+import {
+  toAuthUserResponse,
+  toEntityData,
+  AuthUserResponse,
+} from "./auth.mapper";
 import { IAuthRepository, CreateUserData } from "./auth.repository";
+import { User } from "@modules/users/domain/user.entity";
 
 import { SECURITY } from "@shared/constants/security.constant";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
@@ -18,6 +22,7 @@ import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
 
 import { decodeToken as jwtDecode } from "@shared/utils/jwt";
 import { EmailService } from "@shared/services/email.service";
+import { EventBus } from "@shared/domain/event-bus/event-bus";
 
 const EMAIL_VERIFY_PREFIX = "email-verify:";
 const EMAIL_VERIFY_TTL_SECONDS = 15 * 60;
@@ -88,16 +93,19 @@ export class AuthService implements IAuthService {
 
     const hashedPassword = await hashPassword(data.password);
 
-    const user = await this.repository.createUser({
+    const createdUser = await this.repository.createUser({
       ...data,
       password: hashedPassword,
     });
 
+    const user = User.registered(toEntityData(createdUser));
+    await this.publishEvents(user);
+
     await this.repository.createCartForUser(user.id);
-    await this.sendVerificationEmail(user);
+    await this.sendVerificationEmail(createdUser);
 
     return {
-      user: toAuthUserResponse(user),
+      user: toAuthUserResponse(createdUser),
       message:
         "Registered successfully. Please check your email to verify your account.",
     };
@@ -109,16 +117,20 @@ export class AuthService implements IAuthService {
       throw new BadRequestError("Verification link is invalid or has expired");
     }
 
-    const user = await this.repository.findUserById(userId);
-    if (!user) {
+    const foundUser = await this.repository.findUserById(userId);
+    if (!foundUser) {
       throw new BadRequestError("User not found");
     }
 
     await redis.del(`${EMAIL_VERIFY_PREFIX}${token}`);
 
-    if (user.isVerified) {
-      return this.generateTokens(user);
+    if (foundUser.isVerified) {
+      return this.generateTokens(foundUser);
     }
+
+    const user = User.hydrate(toEntityData(foundUser));
+    user.verify();
+    await this.publishEvents(user);
 
     const updatedUser = await this.repository.updateUser(user.id, {
       isVerified: true,
@@ -179,16 +191,19 @@ export class AuthService implements IAuthService {
   }
 
   async enable2FA(userId: string) {
-    const user = await this.repository.findUserById(userId);
-    if (!user) {
+    const foundUser = await this.repository.findUserById(userId);
+    if (!foundUser) {
       throw new BadRequestError("User not found");
     }
 
     const issuer = process.env.TOTP_ISSUER || "TriAD";
     const secret = speakeasy.generateSecret({
-      name: `${issuer}:${user.email}`,
+      name: `${issuer}:${foundUser.email}`,
       issuer,
     });
+
+    const user = User.hydrate(toEntityData(foundUser));
+    user.startEnabling2FA(secret.base32);
 
     await this.repository.updateUser(userId, {
       totpSecret: secret.base32,
@@ -202,14 +217,18 @@ export class AuthService implements IAuthService {
   }
 
   async verify2FA(userId: string, token: string) {
-    const user = await this.repository.findUserById(userId);
-    if (!user || !user.totpSecret) {
+    const foundUser = await this.repository.findUserById(userId);
+    if (!foundUser || !foundUser.totpSecret) {
       throw new BadRequestError("2FA not set up");
     }
 
-    if (!this.verifyTotpToken(user.totpSecret, token)) {
+    if (!this.verifyTotpToken(foundUser.totpSecret, token)) {
       throw new BadRequestError("Invalid TOTP token");
     }
+
+    const user = User.hydrate(toEntityData(foundUser));
+    user.confirm2FA();
+    await this.publishEvents(user);
 
     await this.repository.updateUser(userId, { is2FAEnabled: true });
     return { enabled: true };
@@ -228,7 +247,7 @@ export class AuthService implements IAuthService {
     return this.generateTokens(user);
   }
 
-  public async generateTokens(user: User): Promise<AuthTokens> {
+  public async generateTokens(user: PrismaUser): Promise<AuthTokens> {
     const accessToken = signToken(
       { sub: user.id, email: user.email, role: user.role },
       AuthService.ACCESS_SECRET,
@@ -277,7 +296,7 @@ export class AuthService implements IAuthService {
 
   // ---------- Private helpers ----------
 
-  private async sendVerificationEmail(user: User): Promise<void> {
+  private async sendVerificationEmail(user: PrismaUser): Promise<void> {
     const verificationToken = crypto.randomBytes(32).toString("hex");
     await redis.setex(
       `${EMAIL_VERIFY_PREFIX}${verificationToken}`,
@@ -287,12 +306,21 @@ export class AuthService implements IAuthService {
 
     const verifyUrl = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
-    await emailQueue.add("verify-email", {
-      to: user.email,
-      subject: "Xác thực tài khoản TriAD của bạn",
-      template: "verify-email",
-      data: { name: user.firstName, verifyUrl },
-    });
+    await this.emailService.sendVerificationEmail(
+      { email: user.email, firstName: user.firstName },
+      verifyUrl,
+    );
+  }
+
+  private async publishEvents(user: User): Promise<void> {
+    const events = user.pullEvents();
+    for (const event of events) {
+      try {
+        await EventBus.getInstance().publish(event);
+      } catch (error) {
+        logger.error(`Failed to publish ${event.eventName}`, { error });
+      }
+    }
   }
 
   private async blacklistAccessToken(accessToken: string): Promise<void> {

@@ -1,24 +1,20 @@
-import { emailQueue } from "@core/queue/bull";
-import { EmailService } from "@shared/services/email.service";
+import crypto from "crypto";
 import { Money } from "@shared/value-objects/money";
 import {
   NotFoundError,
   BadRequestError,
   ConflictError,
 } from "@shared/utils/errors";
+import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
 import {
   ICheckoutRepository,
   TxClient,
-  CreateOrderData,
   OrderWithItems,
 } from "./checkout.repository";
-import { EventBus } from "@shared/domain/event-bus/event-bus";
+import { Order } from "@modules/orders/domain/order.entity";
 
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 100;
-const FREE_SHIPPING_THRESHOLD = 500_000;
-const SHIPPING_FEE = 30_000;
-const TAX_RATE = 0.1;
 
 export interface CheckoutInput {
   idempotencyKey: string;
@@ -55,11 +51,8 @@ export class CheckoutService implements ICheckoutService {
   private static getIdempotencyTTL(): number {
     return parseInt(process.env.IDEMPOTENCY_TTL || "86400", 10);
   }
-  constructor(
-    private readonly repository: ICheckoutRepository,
-    private readonly emailService: EmailService,
-    private readonly eventBus: EventBus = EventBus.getInstance(),
-  ) {}
+
+  constructor(private readonly repository: ICheckoutRepository) {}
 
   async checkout(userId: string, input: CheckoutInput) {
     const idempotentResult = await this.tryReturnIdempotentOrder(
@@ -75,85 +68,73 @@ export class CheckoutService implements ICheckoutService {
     }
 
     const cartItems = user.cart.items;
-    const subtotalMoney = cartItems.reduce(
-      (sum, item) =>
-        sum.add(new Money(item.product.price).multiply(item.quantity)),
-      new Money(0),
-    );
 
-    const order = await this.executeWithRetry(async (tx) => {
+    const persistedOrder = await this.executeWithRetry(async (tx) => {
       await this.reserveStock(tx, cartItems);
 
-      const discountMoney = await this.applyDiscount(
-        tx,
-        input.discountCode,
-        subtotalMoney,
-      );
-      const taxMoney = subtotalMoney.multiply(TAX_RATE);
-      const shippingMoney = new Money(
-        subtotalMoney.getValue() > FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE,
-      );
-
-      const rawTotal =
-        subtotalMoney.getValue() +
-        taxMoney.getValue() +
-        shippingMoney.getValue() -
-        discountMoney.getValue();
-      const totalMoney = new Money(Math.max(0, rawTotal));
-
-      const orderData: CreateOrderData = {
-        orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
+      const order = Order.create({
+        id: crypto.randomUUID(),
         userId,
-        status: "PENDING",
-        paymentMethod: input.paymentMethod,
-        paymentStatus: "PENDING",
-        subtotal: subtotalMoney.getValue(),
-        tax: taxMoney.getValue(),
-        shippingFee: shippingMoney.getValue(),
-        total: totalMoney.getValue(),
-        discountAmount: discountMoney.getValue(),
-        discountCode:
-          discountMoney.getValue() > 0 ? input.discountCode : undefined,
+        orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
         customerName: `${user.firstName} ${user.lastName}`,
         customerEmail: user.email,
         customerPhone: input.phone || user.phone || "",
         customerAddress: input.address,
+        paymentMethod: input.paymentMethod,
         notes: input.notes,
-        idempotencyKey: input.idempotencyKey,
-      };
+      });
 
-      const newOrder = await this.repository.createOrder(tx, orderData);
+      for (const item of cartItems) {
+        order.addItem(
+          item.productId,
+          item.product.name,
+          item.quantity,
+          new Money(item.product.price),
+        );
+      }
 
-      await this.repository.createOrderItems(
+      const discountMoney = await this.applyDiscount(
         tx,
-        cartItems.map((item) => ({
-          orderId: newOrder.id,
-          productId: item.productId,
-          quantity: item.quantity,
-          price: item.product.price,
-          total: new Money(item.product.price)
-            .multiply(item.quantity)
-            .getValue(),
-        })),
+        input.discountCode,
+        order.subtotal,
+      );
+      const taxMoney = order.subtotal.multiply(CHECKOUT_PRICING.TAX_RATE);
+      const shippingMoney = new Money(
+        order.subtotal.getValue() > CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD
+          ? 0
+          : CHECKOUT_PRICING.SHIPPING_FEE,
       );
 
+      order.applyPricing({
+        tax: taxMoney,
+        shippingFee: shippingMoney,
+        discountAmount: discountMoney,
+        discountCode:
+          discountMoney.getValue() > 0 ? input.discountCode : undefined,
+      });
+
+      order.place();
+
+      await this.repository.saveNewOrder(tx, order, input.idempotencyKey);
       await this.repository.clearCartItems(tx, user.cart!.id);
-      return newOrder;
+
+      return order;
     });
 
-    const fullOrder = await this.repository.findOrderWithItems(order.id);
+    const fullOrder = await this.repository.findOrderWithItems(
+      persistedOrder.id,
+    );
     if (!fullOrder) {
       throw new Error("Failed to retrieve created order with items");
     }
     if (input.idempotencyKey) {
       await this.repository.cacheOrderId(
         input.idempotencyKey,
-        order.id,
+        persistedOrder.id,
         CheckoutService.getIdempotencyTTL(),
       );
     }
 
-    await this.notifyOrderConfirmation(user.email, order, cartItems);
     return { order: fullOrder, idempotent: false };
   }
 
@@ -295,36 +276,5 @@ export class CheckoutService implements ICheckoutService {
       }
       throw error;
     }
-  }
-
-  private async notifyOrderConfirmation(
-    email: string,
-    order: { orderNumber: string; total: number },
-    cartItems: { product: { name: string; price: number }; quantity: number }[],
-  ): Promise<void> {
-    await emailQueue.add("order-confirmation", {
-      to: email,
-      subject: `Order #${order.orderNumber} Confirmed`,
-      template: "order-confirmation",
-      data: {
-        orderNumber: order.orderNumber,
-        total: order.total,
-        items: cartItems.map((item) => ({
-          name: item.product.name,
-          quantity: item.quantity,
-          price: item.product.price,
-        })),
-      },
-    });
-
-    await this.emailService.sendOrderConfirmation(
-      { email },
-      { orderNumber: order.orderNumber, total: order.total },
-      cartItems.map((item) => ({
-        product: { name: item.product.name },
-        quantity: item.quantity,
-        price: item.product.price,
-      })),
-    );
   }
 }

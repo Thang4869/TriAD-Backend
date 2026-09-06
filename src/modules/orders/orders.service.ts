@@ -1,4 +1,4 @@
-import { NotFoundError } from "@shared/utils/errors";
+import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 import { OrderStatus } from "@prisma/client";
 import {
   IOrdersRepository,
@@ -6,6 +6,10 @@ import {
   OrderWithItems,
   AdminOrderWithRelations,
 } from "./orders.repository";
+import { Order } from "./domain/order.entity";
+import { EventBus } from "@shared/domain/event-bus/event-bus";
+import { OrderStatusChangedEvent } from "@shared/domain/events/order-events";
+import { logger } from "@core/logger/winston";
 
 export interface IOrdersService {
   getOrders(
@@ -79,6 +83,26 @@ export class OrdersService implements IOrdersService {
     if (!order) {
       throw new NotFoundError("Order not found");
     }
-    return this.repository.updateStatus(orderId, status);
+    if (!Order.canTransition(order.status, status)) {
+      throw new BadRequestError(
+        `Cannot transition order from ${order.status} to ${status}`,
+      );
+    }
+    const updated = await this.repository.updateStatus(orderId, status);
+
+    await EventBus.getInstance()
+      .publish(
+        new OrderStatusChangedEvent(
+          orderId,
+          order.status,
+          status,
+          order.userId,
+        ),
+      )
+      .catch((error) =>
+        logger.error("Failed to publish OrderStatusChanged", { error }),
+      );
+
+    return updated;
   }
 }

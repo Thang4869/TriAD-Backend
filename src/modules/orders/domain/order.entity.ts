@@ -5,7 +5,7 @@ import {
   OrderStatusChangedEvent,
   OrderCancelledEvent,
 } from "@shared/domain/events/order-events";
-import { DomainEvent } from "@/shared/domain/events/domain-event";
+import { AggregateRoot } from "@shared/domain/aggregate-root";
 
 export class OrderItem {
   constructor(
@@ -20,15 +20,17 @@ export class OrderItem {
   }
 }
 
-export class Order {
+export class Order extends AggregateRoot {
   private _items: OrderItem[] = [];
   private _status: OrderStatus;
-  private _total: Money;
-  private _version: number = 0;
-  private _events: DomainEvent[] = [];
+  private _discountAmount: Money;
+  private _shippingFee: Money;
+  private _tax: Money;
+  private _discountCode?: string;
+  private _placed = false;
 
   private constructor(
-    public readonly id: string,
+    id: string,
     public readonly userId: string,
     public readonly orderNumber: string,
     status: OrderStatus,
@@ -39,14 +41,18 @@ export class Order {
     public readonly customerAddress: string,
     public readonly paymentMethod: string,
     public readonly paymentStatus: string,
-    public readonly discountAmount: Money,
-    public readonly shippingFee: Money,
-    public readonly tax: Money,
+    discountAmount: Money,
+    shippingFee: Money,
+    tax: Money,
     public readonly notes?: string,
-    public readonly discountCode?: string,
+    discountCode?: string,
   ) {
+    super(id);
     this._status = status;
-    this._total = new Money(0);
+    this._discountAmount = discountAmount;
+    this._shippingFee = shippingFee;
+    this._tax = tax;
+    this._discountCode = discountCode;
   }
 
   static create(props: {
@@ -58,13 +64,9 @@ export class Order {
     customerPhone: string;
     customerAddress: string;
     paymentMethod: string;
-    discountAmount?: Money;
-    shippingFee?: Money;
-    tax?: Money;
     notes?: string;
-    discountCode?: string;
   }): Order {
-    const order = new Order(
+    return new Order(
       props.id,
       props.userId,
       props.orderNumber,
@@ -76,39 +78,56 @@ export class Order {
       props.customerAddress,
       props.paymentMethod,
       "PENDING",
-      props.discountAmount || new Money(0),
-      props.shippingFee || new Money(0),
-      props.tax || new Money(0),
+      new Money(0),
+      new Money(0),
+      new Money(0),
       props.notes,
-      props.discountCode,
     );
-    order.addEvent(new OrderPlacedEvent(props.id, props.userId, 0, []));
-    return order;
   }
 
   get status(): OrderStatus {
     return this._status;
   }
 
-  get total(): Money {
-    return this._total;
+  get discountAmount(): Money {
+    return this._discountAmount;
+  }
+
+  get shippingFee(): Money {
+    return this._shippingFee;
+  }
+
+  get tax(): Money {
+    return this._tax;
+  }
+
+  get discountCode(): string | undefined {
+    return this._discountCode;
   }
 
   get items(): ReadonlyArray<OrderItem> {
     return this._items;
   }
 
-  get version(): number {
-    return this._version;
+  get subtotal(): Money {
+    return this._items.reduce((sum, item) => sum.add(item.total), new Money(0));
   }
 
-  get events(): ReadonlyArray<DomainEvent> {
-    return this._events;
+  get total(): Money {
+    const raw = this.subtotal
+      .add(this._tax)
+      .add(this._shippingFee)
+      .subtract(this._discountAmount);
+    return new Money(Math.max(0, raw.getValue()));
   }
 
-  private addEvent(event: DomainEvent): void {
-    this._events.push(event);
-    this._version++;
+  private assertMutable(): void {
+    if (this._placed) {
+      throw new Error("Cannot modify an order that has already been placed");
+    }
+    if (this._status !== OrderStatus.PENDING) {
+      throw new Error("Cannot modify an order that is not PENDING");
+    }
   }
 
   addItem(
@@ -117,20 +136,17 @@ export class Order {
     quantity: number,
     unitPrice: Money,
   ): void {
-    if (this._status !== OrderStatus.PENDING) {
-      throw new Error("Cannot add items to order that is not PENDING");
-    }
+    this.assertMutable();
     if (quantity <= 0) {
       throw new Error("Quantity must be positive");
     }
     const existing = this._items.find((item) => item.productId === productId);
     if (existing) {
-      const newQty = existing.quantity + quantity;
       const idx = this._items.indexOf(existing);
       this._items[idx] = new OrderItem(
         productId,
         productName,
-        newQty,
+        existing.quantity + quantity,
         unitPrice,
       );
     } else {
@@ -138,29 +154,55 @@ export class Order {
         new OrderItem(productId, productName, quantity, unitPrice),
       );
     }
-    this.recalculateTotal();
   }
 
   removeItem(productId: string): void {
-    if (this._status !== OrderStatus.PENDING) {
-      throw new Error("Cannot remove items from order that is not PENDING");
-    }
+    this.assertMutable();
     const idx = this._items.findIndex((item) => item.productId === productId);
     if (idx === -1) return;
     this._items.splice(idx, 1);
-    this.recalculateTotal();
   }
 
-  private recalculateTotal(): void {
-    const subtotal = this._items.reduce(
-      (sum, item) => sum.add(item.total),
-      new Money(0),
+  applyPricing(pricing: {
+    tax: Money;
+    shippingFee: Money;
+    discountAmount: Money;
+    discountCode?: string;
+  }): void {
+    this.assertMutable();
+    if (pricing.discountAmount.getValue() > this.subtotal.getValue()) {
+      throw new Error("Discount cannot exceed order subtotal");
+    }
+    this._tax = pricing.tax;
+    this._shippingFee = pricing.shippingFee;
+    this._discountAmount = pricing.discountAmount;
+    this._discountCode = pricing.discountCode;
+  }
+
+  place(): void {
+    if (this._placed) {
+      throw new Error("Order has already been placed");
+    }
+    if (this._items.length === 0) {
+      throw new Error("Cannot place an order with no items");
+    }
+    this._placed = true;
+    this.raise(
+      new OrderPlacedEvent(
+        this.id,
+        this.userId,
+        this.orderNumber,
+        this.customerName,
+        this.customerEmail,
+        this.total.getValue(),
+        this._items.map((item) => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice.getValue(),
+        })),
+      ),
     );
-    const total = subtotal
-      .add(this.tax)
-      .add(this.shippingFee)
-      .subtract(this.discountAmount);
-    this._total = new Money(Math.max(0, total.getValue()));
   }
 
   confirm(): void {
@@ -183,7 +225,7 @@ export class Order {
       throw new Error("Order already cancelled");
     }
     this.transitionStatus(OrderStatus.CANCELLED);
-    this.addEvent(new OrderCancelledEvent(this.id, this.userId));
+    this.raise(new OrderCancelledEvent(this.id, this.userId));
   }
 
   private transitionStatus(newStatus: OrderStatus): void {
@@ -192,12 +234,16 @@ export class Order {
       throw new Error(`Cannot transition from ${oldStatus} to ${newStatus}`);
     }
     this._status = newStatus;
-    this.addEvent(
+    this.raise(
       new OrderStatusChangedEvent(this.id, oldStatus, newStatus, this.userId),
     );
   }
 
   private canTransitionTo(current: OrderStatus, next: OrderStatus): boolean {
+    return Order.canTransition(current, next);
+  }
+
+  static canTransition(current: OrderStatus, next: OrderStatus): boolean {
     const transitions: Record<OrderStatus, OrderStatus[]> = {
       [OrderStatus.PENDING]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
       [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
@@ -262,14 +308,10 @@ export class Order {
         ),
       );
     }
-    order.recalculateTotal();
+    order._placed = true;
     if (data.version !== undefined) {
-      order._version = data.version;
+      order.setVersionFromPersistence(data.version);
     }
     return order;
-  }
-
-  clearEvents(): void {
-    this._events = [];
   }
 }

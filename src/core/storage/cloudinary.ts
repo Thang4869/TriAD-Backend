@@ -1,5 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import { config } from "@config";
+import { withCircuitBreaker } from "@core/circuit-breaker/circuit-breaker";
 
 cloudinary.config({
   cloud_name: config.CLOUDINARY_CLOUD_NAME,
@@ -15,7 +16,19 @@ export interface IImageStorage {
 }
 
 export class CloudinaryImageStorage implements IImageStorage {
+  private readonly uploadWithBreaker = withCircuitBreaker(
+    (buffer: Buffer, folder: string) => this.rawUpload(buffer, folder),
+    { name: "cloudinary-upload", timeout: 10_000, resetTimeout: 20_000 },
+  );
+
   upload(
+    buffer: Buffer,
+    folder: string,
+  ): Promise<{ url: string; publicId: string }> {
+    return this.uploadWithBreaker(buffer, folder);
+  }
+
+  private rawUpload(
     buffer: Buffer,
     folder: string,
   ): Promise<{ url: string; publicId: string }> {

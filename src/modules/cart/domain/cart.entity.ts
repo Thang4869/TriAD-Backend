@@ -4,7 +4,7 @@ import {
   CartItemRemovedEvent,
   CartClearedEvent,
 } from "@shared/domain/events/cart-events";
-import { BaseDomainEvent } from "@shared/domain/events/domain-event";
+import { AggregateRoot } from "@shared/domain/aggregate-root";
 
 export class CartItem {
   constructor(
@@ -31,14 +31,15 @@ export class CartItem {
   }
 }
 
-export class Cart {
+export class Cart extends AggregateRoot {
   private _items: Map<string, CartItem> = new Map();
-  private _events: BaseDomainEvent[] = [];
 
   private constructor(
-    public readonly id: string,
+    id: string,
     public readonly userId: string,
-  ) {}
+  ) {
+    super(id);
+  }
 
   static create(id: string, userId: string): Cart {
     return new Cart(id, userId);
@@ -54,14 +55,6 @@ export class Cart {
 
   get itemCount(): number {
     return this.items.reduce((sum, item) => sum + item.quantity, 0);
-  }
-
-  get events(): ReadonlyArray<BaseDomainEvent> {
-    return this._events;
-  }
-
-  private addEvent(event: BaseDomainEvent): void {
-    this._events.push(event);
   }
 
   addItem(
@@ -80,7 +73,7 @@ export class Cart {
         new CartItem(productId, productName, unitPrice, quantity),
       );
     }
-    this.addEvent(
+    this.raise(
       new CartItemAddedEvent(this.id, this.userId, productId, quantity),
     );
   }
@@ -97,21 +90,19 @@ export class Cart {
     const existing = this._items.get(productId)!;
     const delta = quantity - existing.quantity;
     existing.quantity = quantity;
-    this.addEvent(
-      new CartItemAddedEvent(this.id, this.userId, productId, delta),
-    );
+    this.raise(new CartItemAddedEvent(this.id, this.userId, productId, delta));
   }
 
   removeItem(productId: string): void {
     if (!this._items.has(productId)) return;
     this._items.delete(productId);
-    this.addEvent(new CartItemRemovedEvent(this.id, this.userId, productId));
+    this.raise(new CartItemRemovedEvent(this.id, this.userId, productId));
   }
 
   clear(): void {
     if (this._items.size === 0) return;
     this._items.clear();
-    this.addEvent(new CartClearedEvent(this.id, this.userId));
+    this.raise(new CartClearedEvent(this.id, this.userId));
   }
 
   static hydrate(data: {
@@ -137,9 +128,5 @@ export class Cart {
       );
     }
     return cart;
-  }
-
-  clearEvents(): void {
-    this._events = [];
   }
 }

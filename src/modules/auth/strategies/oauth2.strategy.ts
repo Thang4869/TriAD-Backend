@@ -13,6 +13,7 @@ export function registerOAuthStrategies(authService: AuthService): void {
         callbackURL:
           process.env.GOOGLE_CALLBACK_URL || "/api/auth/google/callback",
       },
+
       async (accessToken, refreshToken, profile, done) => {
         try {
           const email = profile.emails?.[0]?.value;

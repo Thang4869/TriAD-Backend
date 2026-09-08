@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { IAuthService, TwoFactorRequired } from "./auth.service";
+import { AuthService, TwoFactorRequired, AuthTokens } from "./auth.service";
 import { logger } from "@core/logger/winston";
 import { BadRequestError } from "@shared/utils/errors";
 import config from "@config";
@@ -29,8 +29,18 @@ function is2FAResult(result: unknown): result is TwoFactorRequired {
   );
 }
 
+function isAuthTokens(result: unknown): result is AuthTokens {
+  return (
+    typeof result === "object" &&
+    result !== null &&
+    "accessToken" in result &&
+    "refreshToken" in result &&
+    "user" in result
+  );
+}
+
 export class AuthController {
-  constructor(private readonly service: IAuthService) {}
+  constructor(private readonly service: AuthService) {}
 
   register = asyncHandler(async (req: Request, res: Response) => {
     const result = await this.service.register(req.body);
@@ -75,6 +85,10 @@ export class AuthController {
         },
       });
       return;
+    }
+
+    if (!isAuthTokens(result)) {
+      throw new BadRequestError("Unexpected result from login");
     }
 
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
@@ -125,6 +139,13 @@ export class AuthController {
       throw new BadRequestError("userId and token are required");
     }
     const result = await this.service.verifyTOTP(userId, token);
+
+    // 👇 Type guard đã có sẵn, hãy chắc chắn nó được gọi
+    if (!isAuthTokens(result)) {
+      throw new BadRequestError("Unexpected result from TOTP verification");
+    }
+
+    // Sau guard, TypeScript biết result là AuthTokens
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
     res.json({ success: true, data: { user: result.user } });
   });

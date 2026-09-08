@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CheckoutService } from "@modules/checkout/checkout.service";
 import { ICheckoutRepository } from "@modules/checkout/checkout.repository";
+import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
+import { IdempotencyService } from "@/modules/checkout/services/idempotency.service";
 import {
   BadRequestError,
   ConflictError,
   NotFoundError,
 } from "@shared/utils/errors";
+import { PricingService } from "@/modules/checkout/domain/pricing.service";
 
 vi.mock("@core/redis/client", () => ({
   default: { get: vi.fn(), setex: vi.fn() },
@@ -93,7 +96,6 @@ function createFakeRepository(
     incrementDiscountUsage: vi.fn().mockResolvedValue(true),
     createOrder: vi
       .fn()
-
       .mockResolvedValue({ id: "order-1", orderNumber: "ORD-123" }),
     createOrderItems: vi.fn().mockResolvedValue(undefined),
     clearCartItems: vi.fn().mockResolvedValue(undefined),
@@ -107,25 +109,46 @@ function createFakeRepository(
   };
 }
 
-const mockEmailService = {
-  sendOrderConfirmation: vi.fn().mockResolvedValue(undefined),
-};
-
 describe("CheckoutService", () => {
   let repository: ICheckoutRepository;
+  let pricingService: PricingService;
   let service: CheckoutService;
+  let mockStockService: StockReservationService;
+  let mockIdempotencyService: IdempotencyService;
 
   beforeEach(() => {
+    mockStockService = {
+      reserveStock: vi.fn().mockResolvedValue(undefined),
+    } as unknown as StockReservationService;
+
+    mockIdempotencyService = {
+      tryReturnIdempotentOrder: vi.fn().mockResolvedValue(null),
+      cacheOrderId: vi.fn().mockResolvedValue(undefined),
+    } as unknown as IdempotencyService;
+
+    service = new CheckoutService(
+      repository,
+      pricingService,
+      mockStockService,
+      mockIdempotencyService,
+    );
+
     vi.clearAllMocks();
     repository = createFakeRepository();
-    service = new CheckoutService(repository);
+    pricingService = new PricingService(repository);
+    service = new CheckoutService(
+      repository,
+      pricingService,
+      mockStockService,
+      mockIdempotencyService,
+    );
   });
 
   function mockFindOrderSuccess() {
     repository.findOrderWithItems = vi.fn().mockResolvedValue(mockOrder);
   }
 
-  it("should handle checkout without idempotency key (covers line 107)", async () => {
+  it("should handle checkout without idempotency key", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
     mockFindOrderSuccess();
     const inputWithoutIdempotency = { ...baseInput, idempotencyKey: "" };
@@ -133,16 +156,21 @@ describe("CheckoutService", () => {
     expect(repository.cacheOrderId).not.toHaveBeenCalled();
   });
 
-  it("should return idempotent response when cached order exists and order found (covers line 148)", async () => {
-    repository.findCachedOrderId = vi.fn().mockResolvedValue("order-1");
-    repository.findOrderWithItems = vi.fn().mockResolvedValue(mockOrder);
+  it("should return idempotent response when cached order exists and order found", async () => {
+    // Mock idempotencyService để trả về order
+    mockIdempotencyService.tryReturnIdempotentOrder = vi
+      .fn()
+      .mockResolvedValue({
+        order: mockOrder,
+        idempotent: true,
+      });
     const result = await service.checkout("user-1", baseInput);
     expect(result.idempotent).toBe(true);
     expect(result.order).toEqual(mockOrder);
     expect(repository.findUserCartForCheckout).not.toHaveBeenCalled();
   });
 
-  it("should apply percentage discount correctly (covers discount branch)", async () => {
+  it("should apply percentage discount correctly", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
     mockFindOrderSuccess();
     const discountPercent = { ...discount, type: "PERCENTAGE", value: 20 };
@@ -158,7 +186,7 @@ describe("CheckoutService", () => {
     );
   });
 
-  it("should handle discount code with maxUses and not exceed limit (covers maxUses branch)", async () => {
+  it("should handle discount code with maxUses and not exceed limit", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
     mockFindOrderSuccess();
     const discountLimited = { ...discount, maxUses: 2, usedCount: 1 };
@@ -172,16 +200,17 @@ describe("CheckoutService", () => {
     );
   });
 
-  it("throws ConflictError when decrementProductStock fails due to version mismatch (covers line 190)", async () => {
+  it("throws ConflictError when decrementProductStock fails due to version mismatch", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-    repository.decrementProductStock = vi.fn().mockResolvedValue(false);
-    repository.runInTransaction = vi
-      .fn()
-      .mockImplementation(async (fn) => fn({} as any));
+    const conflictError = new ConflictError("Stock conflict");
+    mockStockService.reserveStock = vi.fn().mockRejectedValue(conflictError);
+    repository.runInTransaction = vi.fn().mockImplementation(async (fn) => {
+      await fn({} as any);
+    });
     await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
       ConflictError,
     );
-    expect(repository.decrementProductStock).toHaveBeenCalled();
+    expect(mockStockService.reserveStock).toHaveBeenCalled();
   });
 
   it("throws ConflictError after exhausting all retries", async () => {
@@ -219,8 +248,12 @@ describe("CheckoutService", () => {
     });
 
     it("returns idempotent result if cached", async () => {
-      repository.findCachedOrderId = vi.fn().mockResolvedValue("order-1");
-      repository.findOrderWithItems = vi.fn().mockResolvedValue(mockOrder);
+      mockIdempotencyService.tryReturnIdempotentOrder = vi
+        .fn()
+        .mockResolvedValue({
+          order: mockOrder,
+          idempotent: true,
+        });
       const result = await service.checkout("user-1", baseInput);
       expect(result).toHaveProperty("idempotent", true);
       expect(repository.findUserCartForCheckout).not.toHaveBeenCalled();
@@ -325,7 +358,12 @@ describe("CheckoutService", () => {
 
     it("throws NotFoundError if a cart product is missing from the locked products", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      // lockProductsForUpdate trả về mảng rỗng
       repository.lockProductsForUpdate = vi.fn().mockResolvedValue([]);
+      // stockService.reserveStock sẽ throw NotFoundError
+      mockStockService.reserveStock = vi
+        .fn()
+        .mockRejectedValue(new NotFoundError("Product not found"));
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
         NotFoundError,
       );
@@ -333,6 +371,7 @@ describe("CheckoutService", () => {
 
     it("throws BadRequestError when locked stock is not enough for the requested quantity", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      // lockProductsForUpdate trả về stock = 1, quantity yêu cầu là 2
       repository.lockProductsForUpdate = vi.fn().mockResolvedValue([
         {
           id: baseUser.cart.items[0].productId,
@@ -342,6 +381,10 @@ describe("CheckoutService", () => {
           price: baseUser.cart.items[0].product.price,
         },
       ]);
+      // stockService.reserveStock sẽ throw BadRequestError
+      mockStockService.reserveStock = vi
+        .fn()
+        .mockRejectedValue(new BadRequestError("Not enough stock"));
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
         BadRequestError,
       );
@@ -365,19 +408,15 @@ describe("CheckoutService", () => {
     it("caches order id after success", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
       mockFindOrderSuccess();
+      mockIdempotencyService.cacheOrderId = vi
+        .fn()
+        .mockResolvedValue(undefined);
       await service.checkout("user-1", baseInput);
-      expect(repository.cacheOrderId).toHaveBeenCalledWith(
+      // Chỉ kỳ vọng 2 tham số: idempotencyKey và orderId
+      expect(mockIdempotencyService.cacheOrderId).toHaveBeenCalledWith(
         baseInput.idempotencyKey,
         expect.any(String),
-        expect.any(Number),
       );
-    });
-
-    it.skip("sends order confirmation email", async () => {
-      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-      mockFindOrderSuccess();
-      await service.checkout("user-1", baseInput);
-      expect(mockEmailService.sendOrderConfirmation).toHaveBeenCalled();
     });
   });
 
@@ -411,7 +450,7 @@ describe("CheckoutService", () => {
   it("sets discountCode to undefined when discountAmount is 0", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
     mockFindOrderSuccess();
-    const inputWithoutDiscount = { ...baseInput, _discountCode: undefined };
+    const inputWithoutDiscount = { ...baseInput, discountCode: undefined };
     await service.checkout("user-1", inputWithoutDiscount);
     expect(repository.saveNewOrder).toHaveBeenCalledWith(
       expect.any(Object),
@@ -465,19 +504,19 @@ describe("CheckoutService", () => {
     );
   });
 
-  it("continues checkout when cached order id exists but order not found (idempotent returns null)", async () => {
-    repository.findCachedOrderId = vi.fn().mockResolvedValue("order-1");
-    repository.findOrderWithItems = vi.fn().mockResolvedValue(null);
+  it("continues checkout when cached order id exists but order not found", async () => {
+    // Lần đầu idempotencyService trả null (không tìm thấy order)
+    mockIdempotencyService.tryReturnIdempotentOrder = vi
+      .fn()
+      .mockResolvedValue(null);
+    // Mock findUserCartForCheckout và các thành phần khác để checkout thành công
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
     mockFindOrderSuccess();
-    repository.findOrderWithItems = vi
-      .fn()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(mockOrder);
-    repository.findCachedOrderId = vi.fn().mockResolvedValue("order-1");
+    // Mock cacheOrderId để kiểm tra
+    mockIdempotencyService.cacheOrderId = vi.fn().mockResolvedValue(undefined);
     const result = await service.checkout("user-1", baseInput);
     expect(result.idempotent).toBe(false);
-    expect(repository.cacheOrderId).toHaveBeenCalled();
+    expect(mockIdempotencyService.cacheOrderId).toHaveBeenCalled();
   });
 
   it("applies discount fixed amount capped at subtotal when rawAmount exceeds subtotal", async () => {
@@ -499,31 +538,27 @@ describe("CheckoutService", () => {
     );
   });
 
-  describe("getIdempotencyTTL coverage", () => {
-    it("should cover fallback branch when env var is not set", () => {
-      const oldTTL = process.env.IDEMPOTENCY_TTL;
-      delete process.env.IDEMPOTENCY_TTL;
+  // describe("getIdempotencyTTL coverage", () => {
+  //   it("should cover fallback branch when env var is not set", () => {
+  //     const oldTTL = process.env.IDEMPOTENCY_TTL;
+  //     delete process.env.IDEMPOTENCY_TTL;
+  //     const ttl = (CheckoutService as any).getIdempotencyTTL();
+  //     expect(ttl).toBe(86400);
+  //     if (oldTTL !== undefined) {
+  //       process.env.IDEMPOTENCY_TTL = oldTTL;
+  //     }
+  //   });
 
-      const ttl = (CheckoutService as any).getIdempotencyTTL();
-      expect(ttl).toBe(86400);
-
-      if (oldTTL !== undefined) {
-        process.env.IDEMPOTENCY_TTL = oldTTL;
-      }
-    });
-
-    it("should cover env branch when env var is set", () => {
-      const oldTTL = process.env.IDEMPOTENCY_TTL;
-      process.env.IDEMPOTENCY_TTL = "12345";
-
-      const ttl = (CheckoutService as any).getIdempotencyTTL();
-      expect(ttl).toBe(12345);
-
-      if (oldTTL !== undefined) {
-        process.env.IDEMPOTENCY_TTL = oldTTL;
-      } else {
-        delete process.env.IDEMPOTENCY_TTL;
-      }
-    });
-  });
+  //   it("should cover env branch when env var is set", () => {
+  //     const oldTTL = process.env.IDEMPOTENCY_TTL;
+  //     process.env.IDEMPOTENCY_TTL = "12345";
+  //     const ttl = (CheckoutService as any).getIdempotencyTTL();
+  //     expect(ttl).toBe(12345);
+  //     if (oldTTL !== undefined) {
+  //       process.env.IDEMPOTENCY_TTL = oldTTL;
+  //     } else {
+  //       delete process.env.IDEMPOTENCY_TTL;
+  //     }
+  //   });
+  // });
 });

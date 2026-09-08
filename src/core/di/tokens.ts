@@ -13,7 +13,7 @@ import type { INotificationsRepository } from "@modules/notifications/notificati
 import type { ProductsService } from "@modules/products/products.service";
 import type { AuthService } from "@modules/auth/auth.service";
 import type { CartService } from "@modules/cart/cart.service";
-import type { ICheckoutService } from "@modules/checkout/checkout.service";
+import type { CheckoutService } from "@modules/checkout/checkout.service";
 import type { OrdersService } from "@modules/orders/orders.service";
 import type { ReviewsService } from "@modules/reviews/reviews.service";
 import type { UsersService } from "@modules/users/users.service";
@@ -36,6 +36,14 @@ import type { DashboardController } from "@modules/admin/dashboard/dashboard.con
 import type { NotificationsController } from "@modules/notifications/notifications.controller";
 import type { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-placed.handler";
 import type { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
+import type { PricingService } from "@/modules/checkout/domain/pricing.service";
+import { TokenService } from "@/modules/auth/services/token.service";
+import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
+import { IdempotencyService } from "@/modules/checkout/services/idempotency.service";
+import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
+import { AdminProductService } from "@/modules/products/services/admin-product.service";
+import { CatalogService } from "@/modules/products/services/catalog.service";
+import { ProductImageService } from "@/modules/products/services/product-image.service";
 
 export const TOKENS = {
   // Repositories
@@ -61,7 +69,7 @@ export const TOKENS = {
   ProductsService: createToken<ProductsService>("ProductsService"),
   AuthService: createToken<AuthService>("AuthService"),
   CartService: createToken<CartService>("CartService"),
-  CheckoutService: createToken<ICheckoutService>("CheckoutService"),
+  CheckoutService: createToken<CheckoutService>("CheckoutService"),
   OrdersService: createToken<OrdersService>("OrdersService"),
   ReviewsService: createToken<ReviewsService>("ReviewsService"),
   UsersService: createToken<UsersService>("UsersService"),
@@ -70,6 +78,7 @@ export const TOKENS = {
   NotificationsService: createToken<NotificationsService>(
     "NotificationsService",
   ),
+  PricingService: createToken<PricingService>("PricingService"),
 
   // Controllers
   ProductsController: createToken<ProductsController>("ProductsController"),
@@ -90,4 +99,19 @@ export const TOKENS = {
   OrderStatusChangedHandler: createToken<OrderStatusChangedHandler>(
     "OrderStatusChangedHandler",
   ),
+
+  // Auth
+  TokenService: createToken<TokenService>("TokenService"),
+  TwoFactorService: createToken<TwoFactorService>("TwoFactorService"),
+
+  // Products
+  CatalogService: createToken<CatalogService>("CatalogService"),
+  AdminProductService: createToken<AdminProductService>("AdminProductService"),
+  ProductImageService: createToken<ProductImageService>("ProductImageService"),
+
+  // Checkout
+  StockReservationService: createToken<StockReservationService>(
+    "StockReservationService",
+  ),
+  IdempotencyService: createToken<IdempotencyService>("IdempotencyService"),
 } as const;

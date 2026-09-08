@@ -23,12 +23,24 @@ export interface IAuthRepository {
   createRefreshToken(
     token: string,
     userId: string,
+    familyId: string,
     expiresAt: Date,
   ): Promise<RefreshToken>;
+  findRefreshTokenByToken(token: string): Promise<RefreshToken | null>;
+  revokeRefreshToken(id: string): Promise<void>;
   findRefreshTokenWithUser(token: string): Promise<RefreshTokenWithUser | null>;
   deleteRefreshTokenById(id: string): Promise<void>;
   deleteRefreshTokenByToken(token: string): Promise<void>;
   deleteRefreshTokensByUserId(userId: string): Promise<void>;
+  findRefreshTokenByFamilyAndToken(
+    familyId: string,
+    token: string,
+  ): Promise<RefreshToken | null>;
+  findActiveRefreshTokenByFamily(
+    familyId: string,
+  ): Promise<RefreshToken | null>;
+  revokeRefreshToken(id: string): Promise<void>;
+  revokeAllTokensInFamily(familyId: string): Promise<void>;
 }
 
 // ---------- Prisma implementation ----------
@@ -56,16 +68,6 @@ export class PrismaAuthRepository implements IAuthRepository {
     return prisma.user.update({ where: { id }, data });
   }
 
-  async createRefreshToken(
-    token: string,
-    userId: string,
-    expiresAt: Date,
-  ): Promise<RefreshToken> {
-    return prisma.refreshToken.create({
-      data: { token, userId, expiresAt },
-    });
-  }
-
   async findRefreshTokenWithUser(
     token: string,
   ): Promise<RefreshTokenWithUser | null> {
@@ -85,5 +87,66 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async deleteRefreshTokensByUserId(userId: string): Promise<void> {
     await prisma.refreshToken.deleteMany({ where: { userId } });
+  }
+
+  async findRefreshTokenByFamily(
+    familyId: string,
+    userId: string,
+  ): Promise<RefreshToken | null> {
+    return prisma.refreshToken.findFirst({
+      where: { familyId, userId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async createRefreshToken(
+    token: string,
+    userId: string,
+    familyId: string,
+    expiresAt: Date,
+  ): Promise<RefreshToken> {
+    return prisma.refreshToken.create({
+      data: { token, userId, familyId, expiresAt },
+    });
+  }
+
+  async findRefreshTokenByToken(token: string): Promise<RefreshToken | null> {
+    return prisma.refreshToken.findUnique({ where: { token } });
+  }
+
+  async findRefreshTokenByFamilyAndToken(
+    familyId: string,
+    token: string,
+  ): Promise<RefreshToken | null> {
+    return prisma.refreshToken.findUnique({
+      where: { familyId_token: { familyId, token } },
+    });
+  }
+
+  async findActiveRefreshTokenByFamily(
+    familyId: string,
+  ): Promise<RefreshToken | null> {
+    return prisma.refreshToken.findFirst({
+      where: {
+        familyId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async revokeRefreshToken(id: string): Promise<void> {
+    await prisma.refreshToken.update({
+      where: { id },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  async revokeAllTokensInFamily(familyId: string): Promise<void> {
+    await prisma.refreshToken.updateMany({
+      where: { familyId },
+      data: { revokedAt: new Date() },
+    });
   }
 }

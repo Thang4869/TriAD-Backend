@@ -149,11 +149,14 @@ model Notification {
 model RefreshToken {
   id        String   @id @default(cuid())
   token     String   @unique
+  familyId  String
   userId    String
   expiresAt DateTime
+  revokedAt DateTime?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([familyId, token])
   @@map("refresh_tokens")
 }
 

@@ -97,6 +97,7 @@ CREATE TABLE "orders" (
     "idempotencyKey" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "version" INTEGER NOT NULL DEFAULT 0,
 
     CONSTRAINT "orders_pkey" PRIMARY KEY ("id")
 );
@@ -248,3 +249,22 @@ ALTER TABLE "wishlist_items" ADD CONSTRAINT "wishlist_items_userId_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "wishlist_items" ADD CONSTRAINT "wishlist_items_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+
+
+
+
+-- Thêm cột familyId
+ALTER TABLE "refresh_tokens" ADD COLUMN "familyId" TEXT;
+
+-- Thêm cột revokedAt
+ALTER TABLE "refresh_tokens" ADD COLUMN "revokedAt" TIMESTAMP(3);
+
+-- Tạo unique constraint cho (familyId, token)
+ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_familyId_token_key" UNIQUE ("familyId", "token");
+
+-- Cập nhật familyId cho các token hiện có (nếu cần)
+UPDATE "refresh_tokens" SET "familyId" = gen_random_uuid()::text WHERE "familyId" IS NULL;
+
+-- Sau đó đặt NOT NULL
+ALTER TABLE "refresh_tokens" ALTER COLUMN "familyId" SET NOT NULL;

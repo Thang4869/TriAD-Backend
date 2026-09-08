@@ -78,6 +78,7 @@ describe("PrismaAuthRepository (integration)", () => {
       await repository.createRefreshToken(
         token,
         userId,
+        "family-id",
         new Date(Date.now() + 100000),
       );
 
@@ -91,6 +92,7 @@ describe("PrismaAuthRepository (integration)", () => {
       const created = await repository.createRefreshToken(
         token,
         userId,
+        "family-id",
         new Date(Date.now() + 100000),
       );
 
@@ -106,6 +108,7 @@ describe("PrismaAuthRepository (integration)", () => {
       await repository.createRefreshToken(
         token,
         userId,
+        "family-id",
         new Date(Date.now() + 100000),
       );
 
@@ -126,11 +129,13 @@ describe("PrismaAuthRepository (integration)", () => {
       await repository.createRefreshToken(
         `rt-a-${Date.now()}`,
         userId,
+        "family-id",
         new Date(Date.now() + 100000),
       );
       await repository.createRefreshToken(
         `rt-b-${Date.now()}`,
         otherUser.id,
+        "family-id",
         new Date(Date.now() + 100000),
       );
 

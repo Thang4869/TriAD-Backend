@@ -1,31 +1,21 @@
 import crypto from "crypto";
-import speakeasy from "speakeasy";
-import config from "@config";
 import redis from "@core/redis/client";
-
-import { User as PrismaUser } from "@prisma/client";
-
 import { logger } from "@core/logger/winston";
-
+import { User as PrismaUser } from "@prisma/client";
+import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
+import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
+import { IAuthRepository, CreateUserData } from "./auth.repository";
+import { EmailService } from "@shared/services/email.service";
+import { TokenService } from "./services/token.service";
+import { TwoFactorService } from "./services/two-factor.service";
 import {
+  AuthUserResponse,
   toAuthUserResponse,
   toEntityData,
-  AuthUserResponse,
 } from "./auth.mapper";
-import { IAuthRepository, CreateUserData } from "./auth.repository";
-import { User } from "@modules/users/domain/user.entity";
-
-import { SECURITY } from "@shared/constants/security.constant";
-import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
-import { signToken, verifyToken } from "@shared/utils/jwt";
-import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
-
-import { decodeToken as jwtDecode } from "@shared/utils/jwt";
-import { EmailService } from "@shared/services/email.service";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
-
-const EMAIL_VERIFY_PREFIX = "email-verify:";
-const EMAIL_VERIFY_TTL_SECONDS = 15 * 60;
+import config from "@config";
+import { User as UserEntity } from "../users/domain/user.entity";
 
 export interface AuthTokens {
   accessToken: string;
@@ -39,68 +29,30 @@ export interface TwoFactorRequired {
   message: string;
 }
 
-export interface IAuthService {
-  register(
-    data: CreateUserData,
-  ): Promise<{ user: AuthUserResponse; message: string }>;
-  verifyEmail(token: string): Promise<AuthTokens>;
-  resendVerificationEmail(email: string): Promise<{ message: string }>;
-  login(
-    email: string,
-    password: string,
-  ): Promise<AuthTokens | TwoFactorRequired>;
-  logout(
-    userId: string,
-    accessToken?: string,
-    refreshToken?: string,
-  ): Promise<void>;
-  enable2FA(userId: string): Promise<{ otpauthUrl: string; secret: string }>;
-  verify2FA(userId: string, token: string): Promise<{ enabled: boolean }>;
-  verifyTOTP(userId: string, token: string): Promise<AuthTokens>;
-  refreshToken(refreshToken: string): Promise<AuthTokens>;
-}
-
-export class AuthService implements IAuthService {
+export class AuthService {
   constructor(
     private readonly repository: IAuthRepository,
     private readonly emailService: EmailService,
+    private readonly tokenService: TokenService,
+    private readonly twoFactorService: TwoFactorService,
   ) {}
 
-  private static get ACCESS_SECRET(): string {
-    const secret = process.env.JWT_ACCESS_SECRET;
-    if (!secret) throw new Error("JWT_ACCESS_SECRET is not defined");
-    return secret;
-  }
-
-  private static get REFRESH_SECRET(): string {
-    const secret = process.env.JWT_REFRESH_SECRET;
-    if (!secret) throw new Error("JWT_REFRESH_SECRET is not defined");
-    return secret;
-  }
-
-  private static get ACCESS_EXPIRY(): string {
-    return process.env.JWT_ACCESS_EXPIRY || "15m";
-  }
-  private static get REFRESH_EXPIRY(): string {
-    return process.env.JWT_REFRESH_EXPIRY || "7d";
+  async generateTokens(user: PrismaUser) {
+    return this.tokenService.generateTokens(user);
   }
 
   async register(data: CreateUserData) {
     const existing = await this.repository.findUserByEmail(data.email);
-    if (existing) {
-      throw new BadRequestError("Email already registered");
-    }
+    if (existing) throw new BadRequestError("Email already registered");
 
     const hashedPassword = await hashPassword(data.password);
-
     const createdUser = await this.repository.createUser({
       ...data,
       password: hashedPassword,
     });
 
-    const user = User.registered(toEntityData(createdUser));
+    const user = UserEntity.registered(toEntityData(createdUser));
     await this.publishEvents(user);
-
     await this.repository.createCartForUser(user.id);
     await this.sendVerificationEmail(createdUser);
 
@@ -111,208 +63,94 @@ export class AuthService implements IAuthService {
     };
   }
 
-  async verifyEmail(token: string): Promise<AuthTokens> {
-    const userId = await redis.get(`${EMAIL_VERIFY_PREFIX}${token}`);
-    if (!userId) {
+  async verifyEmail(token: string) {
+    const userId = await redis.get(`email-verify:${token}`);
+    if (!userId)
       throw new BadRequestError("Verification link is invalid or has expired");
-    }
 
     const foundUser = await this.repository.findUserById(userId);
-    if (!foundUser) {
-      throw new BadRequestError("User not found");
-    }
+    if (!foundUser) throw new BadRequestError("User not found");
 
-    await redis.del(`${EMAIL_VERIFY_PREFIX}${token}`);
+    await redis.del(`email-verify:${token}`);
 
     if (foundUser.isVerified) {
-      return this.generateTokens(foundUser);
+      return this.tokenService.generateTokens(foundUser);
     }
 
-    const user = User.hydrate(toEntityData(foundUser));
+    const user = UserEntity.hydrate(toEntityData(foundUser));
     user.verify();
     await this.publishEvents(user);
 
     const updatedUser = await this.repository.updateUser(user.id, {
       isVerified: true,
     });
-
-    return this.generateTokens(updatedUser);
+    return this.tokenService.generateTokens(updatedUser);
   }
 
   async resendVerificationEmail(email: string) {
     const user = await this.repository.findUserByEmail(email);
-
     if (user && !user.isVerified) {
       await this.sendVerificationEmail(user);
     }
-
     return {
       message:
         "If that account exists and is not verified yet, a new verification email has been sent.",
     };
   }
 
-  async login(
-    email: string,
-    password: string,
-  ): Promise<AuthTokens | TwoFactorRequired> {
+  async login(email: string, password: string) {
     const user = await this.repository.findUserByEmail(email);
-    if (!user) {
-      throw new UnauthorizedError("Invalid credentials");
-    }
+    if (!user) throw new UnauthorizedError("Invalid credentials");
 
     const isValid = await comparePassword(password, user.password || "");
-    if (!isValid) {
-      throw new UnauthorizedError("Invalid credentials");
-    }
+    if (!isValid) throw new UnauthorizedError("Invalid credentials");
 
-    if (!user.isVerified) {
+    if (!user.isVerified)
       throw new UnauthorizedError("Please verify your email");
-    }
 
     if (user.is2FAEnabled) {
       return { requires2FA: true, userId: user.id, message: "2FA required" };
     }
 
-    return this.generateTokens(user);
+    return this.tokenService.generateTokens(user);
   }
 
   async logout(userId: string, accessToken?: string, refreshToken?: string) {
-    if (accessToken) {
-      await this.blacklistAccessToken(accessToken);
-    }
-
+    if (accessToken) await this.tokenService.blacklistAccessToken(accessToken);
     if (refreshToken) {
       await this.repository.deleteRefreshTokenByToken(refreshToken);
     } else {
-      await this.repository.deleteRefreshTokensByUserId(userId);
+      await this.tokenService.invalidateAllUserTokens(userId);
     }
-    await this.invalidateAllUserTokens(userId);
   }
 
   async enable2FA(userId: string) {
-    const foundUser = await this.repository.findUserById(userId);
-    if (!foundUser) {
-      throw new BadRequestError("User not found");
-    }
-
-    const issuer = process.env.TOTP_ISSUER || "TriAD";
-    const secret = speakeasy.generateSecret({
-      name: `${issuer}:${foundUser.email}`,
-      issuer,
-    });
-
-    const user = User.hydrate(toEntityData(foundUser));
-    user.startEnabling2FA(secret.base32);
-
-    await this.repository.updateUser(userId, {
-      totpSecret: secret.base32,
-      is2FAEnabled: false,
-    });
-
-    return {
-      otpauthUrl: secret.otpauth_url ?? "",
-      secret: secret.base32,
-    };
+    return this.twoFactorService.enable2FA(userId);
   }
 
   async verify2FA(userId: string, token: string) {
-    const foundUser = await this.repository.findUserById(userId);
-    if (!foundUser || !foundUser.totpSecret) {
-      throw new BadRequestError("2FA not set up");
-    }
-
-    if (!this.verifyTotpToken(foundUser.totpSecret, token)) {
-      throw new BadRequestError("Invalid TOTP token");
-    }
-
-    const user = User.hydrate(toEntityData(foundUser));
-    user.confirm2FA();
-    await this.publishEvents(user);
-
-    await this.repository.updateUser(userId, { is2FAEnabled: true });
-    return { enabled: true };
+    return this.twoFactorService.verify2FA(userId, token);
   }
 
-  async verifyTOTP(userId: string, token: string): Promise<AuthTokens> {
-    const user = await this.repository.findUserById(userId);
-    if (!user || !user.totpSecret || !user.is2FAEnabled) {
-      throw new BadRequestError("2FA not enabled");
-    }
-
-    if (!this.verifyTotpToken(user.totpSecret, token)) {
-      throw new BadRequestError("Invalid TOTP token");
-    }
-
-    return this.generateTokens(user);
+  async verifyTOTP(userId: string, token: string) {
+    return this.twoFactorService.verifyTOTP(userId, token);
   }
 
-  public async generateTokens(user: PrismaUser): Promise<AuthTokens> {
-    const accessToken = signToken(
-      { sub: user.id, email: user.email, role: user.role },
-      AuthService.ACCESS_SECRET,
-      AuthService.ACCESS_EXPIRY,
-    );
-
-    const refreshToken = signToken(
-      { sub: user.id },
-      AuthService.REFRESH_SECRET,
-      AuthService.REFRESH_EXPIRY,
-    );
-
-    await this.repository.createRefreshToken(
-      refreshToken,
-      user.id,
-      new Date(Date.now() + SECURITY.REFRESH_TOKEN_TTL_MS),
-    );
-
-    return { accessToken, refreshToken, user: toAuthUserResponse(user) };
+  async refreshToken(refreshToken: string) {
+    return this.tokenService.refreshToken(refreshToken);
   }
 
-  async invalidateAllUserTokens(userId: string) {
-    await this.repository.deleteRefreshTokensByUserId(userId);
-  }
-
-  async refreshToken(refreshToken: string): Promise<AuthTokens> {
-    try {
-      verifyToken(refreshToken, AuthService.REFRESH_SECRET);
-
-      const tokenRecord =
-        await this.repository.findRefreshTokenWithUser(refreshToken);
-
-      if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
-        throw new UnauthorizedError("Invalid refresh token");
-      }
-
-      const user = tokenRecord.user;
-      await this.repository.deleteRefreshTokenById(tokenRecord.id);
-      await this.invalidateAllUserTokens(user.id);
-
-      return this.generateTokens(user);
-    } catch {
-      throw new UnauthorizedError("Invalid refresh token");
-    }
-  }
-
-  // ---------- Private helpers ----------
-
-  private async sendVerificationEmail(user: PrismaUser): Promise<void> {
+  private async sendVerificationEmail(user: PrismaUser) {
     const verificationToken = crypto.randomBytes(32).toString("hex");
-    await redis.setex(
-      `${EMAIL_VERIFY_PREFIX}${verificationToken}`,
-      EMAIL_VERIFY_TTL_SECONDS,
-      user.id,
-    );
-
+    await redis.setex(`email-verify:${verificationToken}`, 15 * 60, user.id);
     const verifyUrl = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
-
     await this.emailService.sendVerificationEmail(
       { email: user.email, firstName: user.firstName },
       verifyUrl,
     );
   }
 
-  private async publishEvents(user: User): Promise<void> {
+  private async publishEvents(user: UserEntity) {
     const events = user.pullEvents();
     for (const event of events) {
       try {
@@ -321,32 +159,5 @@ export class AuthService implements IAuthService {
         logger.error(`Failed to publish ${event.eventName}`, { error });
       }
     }
-  }
-
-  private async blacklistAccessToken(accessToken: string): Promise<void> {
-    try {
-      const decoded = jwtDecode(accessToken) as { exp: number } | null;
-      if (decoded?.exp) {
-        const ttl = decoded.exp - Math.floor(Date.now() / 1000);
-        if (ttl > 0) {
-          await redis.setex(
-            `${SECURITY.BLACKLIST_KEY_PREFIX}${accessToken}`,
-            ttl,
-            "1",
-          );
-        }
-      }
-    } catch (error) {
-      logger.warn("Failed to decode access token during logout", { error });
-    }
-  }
-
-  private verifyTotpToken(secret: string, token: string): boolean {
-    return speakeasy.totp.verify({
-      secret,
-      encoding: "base32",
-      token,
-      window: 1,
-    });
   }
 }

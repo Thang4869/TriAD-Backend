@@ -1,23 +1,18 @@
 import crypto from "crypto";
 import { Money } from "@shared/value-objects/money";
 import {
-  NotFoundError,
   BadRequestError,
   ConflictError,
+  NotFoundError,
 } from "@shared/utils/errors";
-import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
-import {
-  ICheckoutRepository,
-  TxClient,
-  OrderWithItems,
-} from "./checkout.repository";
+import { ICheckoutRepository, TxClient } from "./checkout.repository";
+import { PricingService } from "./domain/pricing.service";
+import { StockReservationService } from "./services/stock-reservation.service";
+import { IdempotencyService } from "./services/idempotency.service";
 import { Order } from "@modules/orders/domain/order.entity";
 
-const MAX_RETRIES = 5;
-const BASE_DELAY_MS = 100;
-
 export interface CheckoutInput {
-  idempotencyKey: string;
+  idempotencyKey?: string;
   paymentMethod: "COD" | "CARD" | "BANKING";
   address: string;
   phone: string;
@@ -25,41 +20,24 @@ export interface CheckoutInput {
   discountCode?: string;
 }
 
-export interface ICheckoutService {
-  checkout(
-    userId: string,
-    input: CheckoutInput,
-  ): Promise<{
-    order: OrderWithItems;
-    idempotent: boolean;
-  }>;
-  getOrder(orderId: string, userId: string): Promise<OrderWithItems>;
-  getOrders(
-    userId: string,
-    page?: number,
-    limit?: number,
-  ): Promise<{
-    orders: OrderWithItems[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }>;
-}
+const MAX_RETRIES = 5;
+const BASE_DELAY_MS = 100;
 
-export class CheckoutService implements ICheckoutService {
-  private static getIdempotencyTTL(): number {
-    return parseInt(process.env.IDEMPOTENCY_TTL || "86400", 10);
-  }
-
-  constructor(private readonly repository: ICheckoutRepository) {}
+export class CheckoutService {
+  constructor(
+    private readonly repository: ICheckoutRepository,
+    private readonly pricingService: PricingService,
+    private readonly stockService: StockReservationService,
+    private readonly idempotencyService: IdempotencyService,
+  ) {}
 
   async checkout(userId: string, input: CheckoutInput) {
-    const idempotentResult = await this.tryReturnIdempotentOrder(
-      input.idempotencyKey,
-    );
-    if (idempotentResult) {
-      return idempotentResult;
+    if (input.idempotencyKey) {
+      const idempotentResult =
+        await this.idempotencyService.tryReturnIdempotentOrder(
+          input.idempotencyKey,
+        );
+      if (idempotentResult) return idempotentResult;
     }
 
     const user = await this.repository.findUserCartForCheckout(userId);
@@ -67,10 +45,10 @@ export class CheckoutService implements ICheckoutService {
       throw new BadRequestError("Cart is empty");
     }
 
-    const cartItems = user.cart.items;
+    const cart = user.cart;
 
     const persistedOrder = await this.executeWithRetry(async (tx) => {
-      await this.reserveStock(tx, cartItems);
+      await this.stockService.reserveStock(tx, cart.items);
 
       const order = Order.create({
         id: crypto.randomUUID(),
@@ -84,7 +62,7 @@ export class CheckoutService implements ICheckoutService {
         notes: input.notes,
       });
 
-      for (const item of cartItems) {
+      for (const item of cart.items) {
         order.addItem(
           item.productId,
           item.product.name,
@@ -93,45 +71,28 @@ export class CheckoutService implements ICheckoutService {
         );
       }
 
-      const discountMoney = await this.applyDiscount(
-        tx,
-        input.discountCode,
+      const pricing = await this.pricingService.calculatePricing(
         order.subtotal,
+        input.discountCode,
+        tx,
       );
-      const taxMoney = order.subtotal.multiply(CHECKOUT_PRICING.TAX_RATE);
-      const shippingMoney = new Money(
-        order.subtotal.getValue() > CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD
-          ? 0
-          : CHECKOUT_PRICING.SHIPPING_FEE,
-      );
-
-      order.applyPricing({
-        tax: taxMoney,
-        shippingFee: shippingMoney,
-        discountAmount: discountMoney,
-        discountCode:
-          discountMoney.getValue() > 0 ? input.discountCode : undefined,
-      });
-
+      order.applyPricing(pricing);
       order.place();
 
-      await this.repository.saveNewOrder(tx, order, input.idempotencyKey);
-      await this.repository.clearCartItems(tx, user.cart!.id);
-
+      await this.repository.saveNewOrder(tx, order, input.idempotencyKey || "");
+      await this.repository.clearCartItems(tx, cart.id);
       return order;
     });
 
     const fullOrder = await this.repository.findOrderWithItems(
       persistedOrder.id,
     );
-    if (!fullOrder) {
-      throw new Error("Failed to retrieve created order with items");
-    }
+    if (!fullOrder) throw new Error("Failed to retrieve created order");
+
     if (input.idempotencyKey) {
-      await this.repository.cacheOrderId(
+      await this.idempotencyService.cacheOrderId(
         input.idempotencyKey,
         persistedOrder.id,
-        CheckoutService.getIdempotencyTTL(),
       );
     }
 
@@ -140,20 +101,16 @@ export class CheckoutService implements ICheckoutService {
 
   async getOrder(orderId: string, userId: string) {
     const order = await this.repository.findOrderByUserAndId(orderId, userId);
-    if (!order) {
-      throw new NotFoundError("Order not found");
-    }
+    if (!order) throw new NotFoundError("Order not found");
     return order;
   }
 
   async getOrders(userId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
-
     const [orders, total] = await Promise.all([
       this.repository.findOrdersByUser(userId, skip, limit),
       this.repository.countOrdersByUser(userId),
     ]);
-
     return {
       orders,
       total,
@@ -161,105 +118,6 @@ export class CheckoutService implements ICheckoutService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
-  }
-
-  // ---------- Private orchestration helpers ----------
-
-  private async tryReturnIdempotentOrder(idempotencyKey: string) {
-    if (!idempotencyKey) return null;
-
-    const cachedOrderId =
-      await this.repository.findCachedOrderId(idempotencyKey);
-    if (!cachedOrderId) return null;
-
-    const order = await this.repository.findOrderWithItems(cachedOrderId);
-    return order ? { order, idempotent: true } : null;
-  }
-
-  private async reserveStock(
-    tx: TxClient,
-    cartItems: { productId: string; quantity: number }[],
-  ): Promise<void> {
-    const productIds = cartItems.map((item) => item.productId);
-    const lockedProducts = await this.repository.lockProductsForUpdate(
-      tx,
-      productIds,
-    );
-    const productMap = new Map(lockedProducts.map((p) => [p.id, p]));
-
-    for (const item of cartItems) {
-      const product = productMap.get(item.productId);
-      if (!product) {
-        throw new NotFoundError(`Product ${item.productId} not found`);
-      }
-      if (product.stock < item.quantity) {
-        throw new BadRequestError(
-          `Not enough stock for ${product.name}. Available: ${product.stock}`,
-        );
-      }
-    }
-
-    for (const item of cartItems) {
-      const product = productMap.get(item.productId)!;
-      const success = await this.repository.decrementProductStock(
-        tx,
-        item.productId,
-        product.version,
-        item.quantity,
-      );
-      if (!success) {
-        throw new ConflictError(
-          `Stock conflict for product ${item.productId}. Please retry.`,
-        );
-      }
-    }
-  }
-
-  private async applyDiscount(
-    tx: TxClient,
-    discountCode: string | undefined,
-    subtotal: Money,
-  ): Promise<Money> {
-    if (!discountCode) {
-      return new Money(0);
-    }
-
-    const discount = await this.repository.findDiscountByCode(tx, discountCode);
-
-    if (!discount || !discount.isActive) {
-      throw new BadRequestError("Invalid or inactive discount code");
-    }
-
-    if (discount.expiresAt && discount.expiresAt < new Date()) {
-      throw new BadRequestError("Discount code has expired");
-    }
-
-    if (
-      discount.minOrderAmount != null &&
-      subtotal.getValue() < discount.minOrderAmount
-    ) {
-      throw new BadRequestError(
-        `Order must be at least ${discount.minOrderAmount} to use this discount code`,
-      );
-    }
-
-    const success = await this.repository.incrementDiscountUsage(
-      tx,
-      discount.id,
-      discount.maxUses,
-    );
-    if (!success) {
-      throw new ConflictError(
-        "Discount code just reached its usage limit. Please retry.",
-      );
-    }
-
-    const rawAmount =
-      discount.type === "PERCENTAGE"
-        ? subtotal.multiply(discount.value / 100)
-        : new Money(discount.value);
-
-    return subtotal.lessThan(rawAmount) ? subtotal : rawAmount;
   }
 
   private async executeWithRetry<T>(

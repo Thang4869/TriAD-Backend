@@ -47,10 +47,17 @@ import { CloudinaryImageStorage } from "@core/storage/cloudinary";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-placed.handler";
 import { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
-import {
-  OrderPlacedEvent,
-  OrderStatusChangedEvent,
-} from "@shared/domain/events/order-events";
+import { OrderPlacedEvent } from "@shared/domain/events/order-events";
+import { OrderStatusChangedEvent } from "@shared/domain/events/order-events";
+
+import { PricingService } from "@modules/checkout/domain/pricing.service";
+import { IdempotencyService } from "./modules/checkout/services/idempotency.service";
+import { StockReservationService } from "./modules/checkout/services/stock-reservation.service";
+import { ProductImageService } from "./modules/products/services/product-image.service";
+import { TokenService } from "./modules/auth/services/token.service";
+import { TwoFactorService } from "./modules/auth/services/two-factor.service";
+import { AdminProductService } from "./modules/products/services/admin-product.service";
+import { CatalogService } from "./modules/products/services/catalog.service";
 
 export const container = new Container();
 
@@ -89,6 +96,53 @@ container.register(
   () => new PrismaNotificationsRepository(),
 );
 
+container.register(
+  TOKENS.PricingService,
+  (c) => new PricingService(c.resolve(TOKENS.CheckoutRepository)),
+);
+
+// ---------- Auth sub-services ----------
+container.register(
+  TOKENS.TokenService,
+  (c) => new TokenService(c.resolve(TOKENS.AuthRepository)),
+);
+container.register(
+  TOKENS.TwoFactorService,
+  (c) =>
+    new TwoFactorService(
+      c.resolve(TOKENS.AuthRepository),
+      c.resolve(TOKENS.TokenService),
+    ),
+);
+
+// ---------- Product sub-services ----------
+container.register(
+  TOKENS.CatalogService,
+  (c) => new CatalogService(c.resolve(TOKENS.ProductsRepository)),
+);
+container.register(
+  TOKENS.AdminProductService,
+  (c) =>
+    new AdminProductService(
+      c.resolve(TOKENS.ProductsRepository),
+      c.resolve(TOKENS.ProductImageService),
+    ),
+);
+container.register(
+  TOKENS.ProductImageService,
+  (c) => new ProductImageService(c.resolve(TOKENS.ProductsRepository)),
+);
+
+// ---------- Checkout sub-services ----------
+container.register(
+  TOKENS.StockReservationService,
+  (c) => new StockReservationService(c.resolve(TOKENS.CheckoutRepository)),
+);
+container.register(
+  TOKENS.IdempotencyService,
+  (c) => new IdempotencyService(c.resolve(TOKENS.CheckoutRepository)),
+);
+
 // ---------- Domain services ----------
 container.register(
   TOKENS.ProductsService,
@@ -100,6 +154,8 @@ container.register(
     new AuthService(
       c.resolve(TOKENS.AuthRepository),
       c.resolve(TOKENS.EmailService),
+      c.resolve(TOKENS.TokenService),
+      c.resolve(TOKENS.TwoFactorService),
     ),
 );
 container.register(
@@ -108,7 +164,13 @@ container.register(
 );
 container.register(
   TOKENS.CheckoutService,
-  (c) => new CheckoutService(c.resolve(TOKENS.CheckoutRepository)),
+  (c) =>
+    new CheckoutService(
+      c.resolve(TOKENS.CheckoutRepository),
+      c.resolve(TOKENS.PricingService),
+      c.resolve(TOKENS.StockReservationService),
+      c.resolve(TOKENS.IdempotencyService),
+    ),
 );
 container.register(
   TOKENS.OrdersService,
@@ -138,7 +200,11 @@ container.register(
 // ---------- Controllers ----------
 container.register(
   TOKENS.ProductsController,
-  (c) => new ProductsController(c.resolve(TOKENS.ProductsService)),
+  (c) =>
+    new ProductsController(
+      c.resolve(TOKENS.CatalogService),
+      c.resolve(TOKENS.AdminProductService),
+    ),
   Lifetime.Transient,
 );
 container.register(

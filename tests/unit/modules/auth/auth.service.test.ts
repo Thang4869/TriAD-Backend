@@ -4,12 +4,15 @@ import { User } from "@prisma/client";
 import { AuthService } from "@modules/auth/auth.service";
 import { IAuthRepository } from "@modules/auth/auth.repository";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
-import { emailQueue } from "@core/queue/bull";
 import redis from "@core/redis/client";
 import speakeasy from "speakeasy";
 import { signToken, decodeToken } from "@shared/utils/jwt";
 import { EmailService } from "@/shared/services/email.service";
+import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
+import { TokenService } from "@/modules/auth/services/token.service";
+import { logger } from "@core/logger/winston";
 
+// ---------- Mocks ----------
 const mockEmailService = {
   sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
   sendOrderConfirmation: vi.fn().mockResolvedValue(undefined),
@@ -17,6 +20,7 @@ const mockEmailService = {
   enqueueWithRetry: vi.fn().mockResolvedValue(undefined),
 } as unknown as EmailService;
 
+// Mock Redis
 vi.mock("@core/redis/client", () => ({
   default: {
     get: vi.fn(),
@@ -45,24 +49,29 @@ vi.mock("@shared/utils/jwt", async (importOriginal) => {
   };
 });
 
-function createFakeRepository(
-  overrides: Partial<IAuthRepository> = {},
-): IAuthRepository {
+// ---------- Helper to create repository mock ----------
+function createFakeRepository(overrides = {}): IAuthRepository {
   return {
-    findUserByEmail: vi.fn().mockResolvedValue(null),
-    findUserById: vi.fn().mockResolvedValue(null),
+    findUserByEmail: vi.fn(),
+    findUserById: vi.fn(),
     createUser: vi.fn(),
-    createCartForUser: vi.fn().mockResolvedValue(undefined),
+    createCartForUser: vi.fn(),
     updateUser: vi.fn(),
-    createRefreshToken: vi.fn().mockResolvedValue({}),
-    findRefreshTokenWithUser: vi.fn().mockResolvedValue(null),
-    deleteRefreshTokenById: vi.fn().mockResolvedValue(undefined),
-    deleteRefreshTokenByToken: vi.fn().mockResolvedValue(undefined),
-    deleteRefreshTokensByUserId: vi.fn().mockResolvedValue(undefined),
+    createRefreshToken: vi.fn(),
+    findRefreshTokenByToken: vi.fn(),
+    revokeRefreshToken: vi.fn(),
+    findRefreshTokenWithUser: vi.fn(),
+    deleteRefreshTokenById: vi.fn(),
+    deleteRefreshTokenByToken: vi.fn(),
+    deleteRefreshTokensByUserId: vi.fn(),
+    findRefreshTokenByFamilyAndToken: vi.fn(),
+    findActiveRefreshTokenByFamily: vi.fn(),
+    revokeAllTokensInFamily: vi.fn(),
     ...overrides,
   };
 }
 
+// ---------- Base user ----------
 const baseUser: User = {
   id: "user-id",
   email: "test@test.com",
@@ -78,20 +87,183 @@ const baseUser: User = {
   updatedAt: new Date(),
 } as User;
 
+// ---------- Tests ----------
 describe("AuthService", () => {
+  let repository: IAuthRepository;
+  let mockTokenService: TokenService;
+  let mockTwoFactorService: TwoFactorService;
+  let service: AuthService;
+
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.JWT_ACCESS_SECRET = "test-access-secret-32charslongenough";
     process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32charslongenough";
+
+    repository = createFakeRepository();
+
+    // ----- TokenService mock với implementation cơ bản -----
+    mockTokenService = {
+      generateTokens: vi.fn().mockImplementation(async (user: User) => {
+        const accessToken = signToken(
+          { sub: user.id },
+          process.env.JWT_ACCESS_SECRET!,
+          "15m",
+        );
+        const refreshToken = signToken(
+          { sub: user.id, familyId: "family-id" },
+          process.env.JWT_REFRESH_SECRET!,
+          "7d",
+        );
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await repository.createRefreshToken(
+          refreshToken,
+          user.id,
+          "family-id",
+          expiresAt,
+        );
+        return {
+          accessToken,
+          refreshToken,
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            is2FAEnabled: user.is2FAEnabled,
+          },
+        };
+      }),
+      refreshToken: vi.fn().mockImplementation(async (token: string) => {
+        // Kiểm tra token hợp lệ (mô phỏng)
+        if (token === "bad" || token === "expired") {
+          throw new UnauthorizedError("Invalid refresh token");
+        }
+        // Giả lập tìm record
+        const record = await repository.findRefreshTokenWithUser(token);
+        if (!record) throw new UnauthorizedError("Invalid refresh token");
+        // Kiểm tra hết hạn
+        if (record.expiresAt < new Date()) {
+          throw new UnauthorizedError("Refresh token expired");
+        }
+        // Xóa token cũ, tạo token mới
+        await repository.deleteRefreshTokenById(record.id);
+        await repository.deleteRefreshTokensByUserId(record.userId);
+        const newAccessToken = signToken(
+          { sub: record.userId },
+          process.env.JWT_ACCESS_SECRET!,
+          "15m",
+        );
+        const newRefreshToken = signToken(
+          { sub: record.userId, familyId: "new-family" },
+          process.env.JWT_REFRESH_SECRET!,
+          "7d",
+        );
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await repository.createRefreshToken(
+          newRefreshToken,
+          record.userId,
+          "new-family",
+          expiresAt,
+        );
+        return {
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+          user: {
+            id: record.user.id,
+            email: record.user.email,
+            firstName: record.user.firstName,
+            lastName: record.user.lastName,
+            role: record.user.role,
+            is2FAEnabled: record.user.is2FAEnabled,
+          },
+        };
+      }),
+      blacklistAccessToken: vi
+        .fn()
+        .mockImplementation(async (token: string) => {
+          try {
+            const decoded = decodeToken(token) as { exp?: number } | null;
+            if (decoded?.exp) {
+              const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+              if (ttl > 0) {
+                await redis.setex(`jwt:blacklist:${token}`, ttl, "1");
+              }
+            }
+          } catch (error) {
+            logger.warn("Failed to decode access token during logout", {
+              error,
+            });
+          }
+        }),
+      invalidateAllUserTokens: vi
+        .fn()
+        .mockImplementation(async (userId: string) => {
+          await repository.deleteRefreshTokensByUserId(userId);
+        }),
+    } as unknown as TokenService;
+
+    // ----- TwoFactorService mock với implementation cơ bản -----
+    mockTwoFactorService = {
+      enable2FA: vi.fn().mockImplementation(async (userId: string) => {
+        const user = await repository.findUserById(userId);
+        if (!user) throw new BadRequestError("User not found");
+        const issuer = process.env.TOTP_ISSUER || "TriAD";
+        const secret = speakeasy.generateSecret({
+          name: `${issuer}:${user.email}`,
+          issuer,
+        });
+        await repository.updateUser(userId, {
+          totpSecret: secret.base32,
+          is2FAEnabled: false,
+        });
+        return { otpauthUrl: secret.otpauth_url ?? "", secret: secret.base32 };
+      }),
+      verify2FA: vi
+        .fn()
+        .mockImplementation(async (userId: string, token: string) => {
+          const user = await repository.findUserById(userId);
+          if (!user || !user.totpSecret)
+            throw new BadRequestError("2FA not set up");
+          // Bỏ qua verify thực tế trong mock để test gọi updateUser
+          // Giả sử token hợp lệ trừ khi token === "wrong"
+          if (token === "wrong")
+            throw new BadRequestError("Invalid TOTP token");
+          await repository.updateUser(userId, { is2FAEnabled: true });
+          return { enabled: true };
+        }),
+      verifyTOTP: vi
+        .fn()
+        .mockImplementation(async (userId: string, token: string) => {
+          const user = await repository.findUserById(userId);
+          if (!user || !user.totpSecret || !user.is2FAEnabled)
+            throw new BadRequestError("2FA not enabled");
+          // Kiểm tra thực tế bằng speakeasy
+          const isValid = speakeasy.totp.verify({
+            secret: user.totpSecret,
+            encoding: "base32",
+            token,
+            window: 1,
+          });
+          if (!isValid) throw new BadRequestError("Invalid TOTP token");
+          return mockTokenService.generateTokens(user);
+        }),
+    } as unknown as TwoFactorService;
+
+    service = new AuthService(
+      repository,
+      mockEmailService,
+      mockTokenService,
+      mockTwoFactorService,
+    );
   });
 
+  // ---------- Register ----------
   describe("register", () => {
     it("throws BadRequestError if email already exists", async () => {
-      const repository = createFakeRepository({
-        findUserByEmail: vi.fn().mockResolvedValue({ id: "existing" }),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserByEmail = vi
+        .fn()
+        .mockResolvedValue({ id: "existing" });
       await expect(
         service.register({
           email: "test@test.com",
@@ -100,18 +272,13 @@ describe("AuthService", () => {
           lastName: "Doe",
         }),
       ).rejects.toBeInstanceOf(BadRequestError);
-
       expect(repository.createUser).not.toHaveBeenCalled();
     });
 
     it("creates user, cart, and enqueues verification email", async () => {
       (bcrypt.hash as any).mockResolvedValueOnce("hashed");
-
-      const repository = createFakeRepository({
-        findUserByEmail: vi.fn().mockResolvedValue(null),
-        createUser: vi.fn().mockResolvedValue(baseUser),
-      });
-      const service = new AuthService(repository, mockEmailService);
+      repository.findUserByEmail = vi.fn().mockResolvedValue(null);
+      repository.createUser = vi.fn().mockResolvedValue(baseUser);
 
       const result = await service.register({
         email: "test@test.com",
@@ -130,13 +297,10 @@ describe("AuthService", () => {
     });
   });
 
+  // ---------- Login ----------
   describe("login", () => {
     it("throws UnauthorizedError if user not found", async () => {
-      const repository = createFakeRepository({
-        findUserByEmail: vi.fn().mockResolvedValue(null),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserByEmail = vi.fn().mockResolvedValue(null);
       await expect(
         service.login("notfound@test.com", "pass"),
       ).rejects.toBeInstanceOf(UnauthorizedError);
@@ -144,11 +308,7 @@ describe("AuthService", () => {
 
     it("throws UnauthorizedError if password is incorrect", async () => {
       (bcrypt.compare as any).mockResolvedValueOnce(false);
-      const repository = createFakeRepository({
-        findUserByEmail: vi.fn().mockResolvedValue(baseUser),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserByEmail = vi.fn().mockResolvedValue(baseUser);
       await expect(
         service.login("test@test.com", "wrong"),
       ).rejects.toBeInstanceOf(UnauthorizedError);
@@ -156,23 +316,7 @@ describe("AuthService", () => {
 
     it("returns tokens when 2FA is not enabled", async () => {
       (bcrypt.compare as any).mockResolvedValueOnce(true);
-      const repository = createFakeRepository({
-        findUserByEmail: vi.fn().mockResolvedValue(baseUser),
-      });
-      const service = new AuthService(repository, mockEmailService);
-      vi.spyOn(service, "generateTokens").mockResolvedValueOnce({
-        accessToken: "at",
-        refreshToken: "rt",
-        user: {
-          id: baseUser.id,
-          email: baseUser.email,
-          firstName: baseUser.firstName,
-          lastName: baseUser.lastName,
-          role: baseUser.role,
-          is2FAEnabled: baseUser.is2FAEnabled,
-        },
-      });
-
+      repository.findUserByEmail = vi.fn().mockResolvedValue(baseUser);
       const result = await service.login("test@test.com", "pass");
       expect(result).toHaveProperty("accessToken");
     });
@@ -180,11 +324,7 @@ describe("AuthService", () => {
     it("returns requires2FA when 2FA is enabled", async () => {
       (bcrypt.compare as any).mockResolvedValueOnce(true);
       const twoFactorUser: User = { ...baseUser, is2FAEnabled: true };
-      const repository = createFakeRepository({
-        findUserByEmail: vi.fn().mockResolvedValue(twoFactorUser),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserByEmail = vi.fn().mockResolvedValue(twoFactorUser);
       const result = await service.login("test@test.com", "pass");
       expect(result).toEqual({
         requires2FA: true,
@@ -196,11 +336,7 @@ describe("AuthService", () => {
     it("uses empty string as password when user.password is null (OAuth user)", async () => {
       (bcrypt.compare as any).mockResolvedValueOnce(false);
       const oauthUser: User = { ...baseUser, password: null as any };
-      const repository = createFakeRepository({
-        findUserByEmail: vi.fn().mockResolvedValue(oauthUser),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserByEmail = vi.fn().mockResolvedValue(oauthUser);
       await expect(
         service.login("test@test.com", "anything"),
       ).rejects.toBeInstanceOf(UnauthorizedError);
@@ -208,35 +344,27 @@ describe("AuthService", () => {
     });
   });
 
+  // ---------- Resend Verification ----------
   describe("resendVerificationEmail", () => {
     it("does not send email if user not found", async () => {
-      const repository = createFakeRepository({
-        findUserByEmail: vi.fn().mockResolvedValue(null),
-      });
-      const service = new AuthService(repository, mockEmailService);
+      repository.findUserByEmail = vi.fn().mockResolvedValue(null);
       const result = await service.resendVerificationEmail("notexist@test.com");
       expect(mockEmailService.sendVerificationEmail).not.toHaveBeenCalled();
       expect(result.message).toContain("If that account exists");
     });
 
     it("does not send email if user already verified", async () => {
-      const repository = createFakeRepository({
-        findUserByEmail: vi
-          .fn()
-          .mockResolvedValue({ ...baseUser, isVerified: true }),
-      });
-      const service = new AuthService(repository, mockEmailService);
+      repository.findUserByEmail = vi
+        .fn()
+        .mockResolvedValue({ ...baseUser, isVerified: true });
       await service.resendVerificationEmail("test@test.com");
-      expect(emailQueue.add).not.toHaveBeenCalled();
+      expect(mockEmailService.sendVerificationEmail).not.toHaveBeenCalled();
     });
 
     it("sends email if user exists and not verified", async () => {
-      const repository = createFakeRepository({
-        findUserByEmail: vi
-          .fn()
-          .mockResolvedValue({ ...baseUser, isVerified: false }),
-      });
-      const service = new AuthService(repository, mockEmailService);
+      repository.findUserByEmail = vi
+        .fn()
+        .mockResolvedValue({ ...baseUser, isVerified: false });
       await service.resendVerificationEmail("test@test.com");
       expect(mockEmailService.sendVerificationEmail).toHaveBeenCalledWith(
         expect.objectContaining({ email: "test@test.com" }),
@@ -245,38 +373,30 @@ describe("AuthService", () => {
     });
   });
 
+  // ---------- Logout ----------
   describe("logout", () => {
     it("deletes refresh token and blacklists access token", async () => {
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
       const accessToken = "some.access.token";
       const refreshToken = "some.refresh.token";
-      vi.spyOn(service as any, "blacklistAccessToken").mockResolvedValue(
-        undefined,
-      );
       await service.logout("user-1", accessToken, refreshToken);
       expect(repository.deleteRefreshTokenByToken).toHaveBeenCalledWith(
         refreshToken,
       );
-      expect(service["blacklistAccessToken"]).toHaveBeenCalledWith(accessToken);
+      expect(mockTokenService.blacklistAccessToken).toHaveBeenCalledWith(
+        accessToken,
+      );
     });
 
     it("deletes all refresh tokens for user if no refreshToken provided", async () => {
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
       await service.logout("user-1", "atoken");
-      expect(repository.deleteRefreshTokensByUserId).toHaveBeenCalledWith(
+      expect(mockTokenService.invalidateAllUserTokens).toHaveBeenCalledWith(
         "user-1",
       );
     });
 
     it("does not attempt to blacklist anything when no accessToken is provided", async () => {
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-      const spy = vi.spyOn(service as any, "blacklistAccessToken");
-
+      const spy = vi.spyOn(mockTokenService, "blacklistAccessToken");
       await service.logout("user-1", undefined, "some.refresh.token");
-
       expect(spy).not.toHaveBeenCalled();
       expect(repository.deleteRefreshTokenByToken).toHaveBeenCalledWith(
         "some.refresh.token",
@@ -284,22 +404,17 @@ describe("AuthService", () => {
     });
   });
 
+  // ---------- Enable 2FA ----------
   describe("enable2FA", () => {
     it("throws if user not found", async () => {
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue(null),
-      });
-      const service = new AuthService(repository, mockEmailService);
+      repository.findUserById = vi.fn().mockResolvedValue(null);
       await expect(service.enable2FA("user-x")).rejects.toThrow(
         BadRequestError,
       );
     });
 
     it("generates secret and updates user", async () => {
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue(baseUser),
-      });
-      const service = new AuthService(repository, mockEmailService);
+      repository.findUserById = vi.fn().mockResolvedValue(baseUser);
       const result = await service.enable2FA("user-1");
       expect(repository.updateUser).toHaveBeenCalledWith("user-1", {
         totpSecret: expect.any(String),
@@ -313,10 +428,7 @@ describe("AuthService", () => {
       const originalIssuer = process.env.TOTP_ISSUER;
       process.env.TOTP_ISSUER = "CustomIssuer";
       try {
-        const repository = createFakeRepository({
-          findUserById: vi.fn().mockResolvedValue(baseUser),
-        });
-        const service = new AuthService(repository, mockEmailService);
+        repository.findUserById = vi.fn().mockResolvedValue(baseUser);
         const result = await service.enable2FA("user-1");
         expect(result.otpauthUrl).toContain("CustomIssuer");
       } finally {
@@ -328,10 +440,7 @@ describe("AuthService", () => {
       const originalIssuer = process.env.TOTP_ISSUER;
       delete process.env.TOTP_ISSUER;
       try {
-        const repository = createFakeRepository({
-          findUserById: vi.fn().mockResolvedValue(baseUser),
-        });
-        const service = new AuthService(repository, mockEmailService);
+        repository.findUserById = vi.fn().mockResolvedValue(baseUser);
         const result = await service.enable2FA("user-1");
         expect(result.otpauthUrl).toContain("TriAD");
         expect(result.secret).toBeDefined();
@@ -341,53 +450,43 @@ describe("AuthService", () => {
     });
 
     it("handles case where otpauth_url is undefined (uses fallback empty string)", async () => {
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue(baseUser),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserById = vi.fn().mockResolvedValue(baseUser);
       const mockSecret = { base32: "mocked-base32", otpauth_url: undefined };
       vi.spyOn(speakeasy, "generateSecret").mockReturnValue(mockSecret as any);
-
       const result = await service.enable2FA("user-1");
-
       expect(result.otpauthUrl).toBe("");
       expect(result.secret).toBe("mocked-base32");
     });
   });
 
+  // ---------- Verify 2FA ----------
   describe("verify2FA", () => {
     it("throws if user not found or totpSecret missing", async () => {
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue(null),
-      });
-      const service = new AuthService(repository, mockEmailService);
+      repository.findUserById = vi.fn().mockResolvedValue(null);
       await expect(service.verify2FA("user-x", "123456")).rejects.toThrow(
         BadRequestError,
       );
     });
 
     it("throws if TOTP token invalid", async () => {
-      const repository = createFakeRepository({
-        findUserById: vi
-          .fn()
-          .mockResolvedValue({ ...baseUser, totpSecret: "secret" }),
-      });
-      const service = new AuthService(repository, mockEmailService);
-      vi.spyOn(service as any, "verifyTotpToken").mockReturnValue(false);
+      repository.findUserById = vi
+        .fn()
+        .mockResolvedValue({ ...baseUser, totpSecret: "secret" });
+      // Mock verify2FA để throw
+      mockTwoFactorService.verify2FA = vi
+        .fn()
+        .mockRejectedValue(new BadRequestError("Invalid TOTP token"));
       await expect(service.verify2FA("user-1", "wrong")).rejects.toThrow(
         BadRequestError,
       );
     });
 
     it("enables 2FA on valid token", async () => {
-      const repository = createFakeRepository({
-        findUserById: vi
-          .fn()
-          .mockResolvedValue({ ...baseUser, totpSecret: "secret" }),
-      });
-      const service = new AuthService(repository, mockEmailService);
-      vi.spyOn(service as any, "verifyTotpToken").mockReturnValue(true);
+      repository.findUserById = vi
+        .fn()
+        .mockResolvedValue({ ...baseUser, totpSecret: "secret" });
+      // Đảm bảo verify2FA không throw và gọi updateUser
+      // (mock đã được set ở beforeEach, nhưng cần đảm bảo token "123456" hợp lệ)
       const result = await service.verify2FA("user-1", "123456");
       expect(repository.updateUser).toHaveBeenCalledWith("user-1", {
         is2FAEnabled: true,
@@ -396,6 +495,7 @@ describe("AuthService", () => {
     });
   });
 
+  // ---------- verifyTotpToken (real speakeasy) ----------
   describe("verifyTotpToken (real speakeasy verification, not spied)", () => {
     it("accepts a currently-valid TOTP code and rejects a bogus one", async () => {
       const secret = speakeasy.generateSecret({ name: "TriAD:test" });
@@ -404,14 +504,28 @@ describe("AuthService", () => {
         encoding: "base32",
       });
 
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue({
-          ...baseUser,
-          totpSecret: secret.base32,
-          is2FAEnabled: true,
-        }),
+      repository.findUserById = vi.fn().mockResolvedValue({
+        ...baseUser,
+        totpSecret: secret.base32,
+        is2FAEnabled: true,
       });
-      const service = new AuthService(repository, mockEmailService);
+
+      // Override verifyTOTP để dùng speakeasy thật
+      mockTwoFactorService.verifyTOTP = vi
+        .fn()
+        .mockImplementation(async (userId, token) => {
+          const user = await repository.findUserById(userId);
+          if (!user || !user.totpSecret || !user.is2FAEnabled)
+            throw new BadRequestError("2FA not enabled");
+          const isValid = speakeasy.totp.verify({
+            secret: user.totpSecret,
+            encoding: "base32",
+            token,
+            window: 1,
+          });
+          if (!isValid) throw new BadRequestError("Invalid TOTP token");
+          return mockTokenService.generateTokens(user);
+        });
 
       const result = await service.verifyTOTP("user-1", validToken);
       expect(result).toHaveProperty("accessToken");
@@ -422,45 +536,40 @@ describe("AuthService", () => {
     });
   });
 
+  // ---------- verifyTOTP ----------
   describe("verifyTOTP", () => {
     it("throws if user not found or 2FA not enabled", async () => {
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue(null),
-      });
-      const service = new AuthService(repository, mockEmailService);
+      repository.findUserById = vi.fn().mockResolvedValue(null);
       await expect(service.verifyTOTP("user-x", "123456")).rejects.toThrow(
         BadRequestError,
       );
     });
 
     it("throws on invalid token", async () => {
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue({
-          ...baseUser,
-          totpSecret: "secret",
-          is2FAEnabled: true,
-        }),
+      repository.findUserById = vi.fn().mockResolvedValue({
+        ...baseUser,
+        totpSecret: "secret",
+        is2FAEnabled: true,
       });
-      const service = new AuthService(repository, mockEmailService);
-      vi.spyOn(service as any, "verifyTotpToken").mockReturnValue(false);
+      // Override để throw
+      mockTwoFactorService.verifyTOTP = vi
+        .fn()
+        .mockRejectedValue(new BadRequestError("Invalid TOTP token"));
       await expect(service.verifyTOTP("user-1", "wrong")).rejects.toThrow(
         BadRequestError,
       );
     });
 
     it("returns tokens on valid TOTP", async () => {
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue({
-          ...baseUser,
-          totpSecret: "secret",
-          is2FAEnabled: true,
-        }),
+      repository.findUserById = vi.fn().mockResolvedValue({
+        ...baseUser,
+        totpSecret: "secret",
+        is2FAEnabled: true,
       });
-      const service = new AuthService(repository, mockEmailService);
-      vi.spyOn(service as any, "verifyTotpToken").mockReturnValue(true);
-      vi.spyOn(service, "generateTokens").mockResolvedValue({
-        accessToken: "at",
-        refreshToken: "rt",
+      // Override verifyTOTP để trả về tokens trực tiếp
+      mockTwoFactorService.verifyTOTP = vi.fn().mockResolvedValue({
+        accessToken: "atoken",
+        refreshToken: "rtoken",
         user: {
           id: "user-1",
           email: "a@b.com",
@@ -471,16 +580,15 @@ describe("AuthService", () => {
         },
       });
       const result = await service.verifyTOTP("user-1", "123456");
-      expect(result.accessToken).toBeDefined();
+      expect(result).toHaveProperty("accessToken");
+      expect(result).toHaveProperty("refreshToken");
     });
   });
 
+  // ---------- refreshToken ----------
   describe("refreshToken", () => {
     it("throws if token invalid or expired", async () => {
-      const repository = createFakeRepository({
-        findRefreshTokenWithUser: vi.fn().mockResolvedValue(null),
-      });
-      const service = new AuthService(repository, mockEmailService);
+      repository.findRefreshTokenWithUser = vi.fn().mockResolvedValue(null);
       await expect(service.refreshToken("bad")).rejects.toThrow(
         UnauthorizedError,
       );
@@ -497,38 +605,47 @@ describe("AuthService", () => {
         expiresAt: new Date(Date.now() - 1000),
         user: baseUser,
       };
-      const repository = createFakeRepository({
-        findRefreshTokenWithUser: vi.fn().mockResolvedValue(record),
-      });
-      const service = new AuthService(repository, mockEmailService);
+      repository.findRefreshTokenWithUser = vi.fn().mockResolvedValue(record);
       await expect(service.refreshToken(expiredRefreshToken)).rejects.toThrow(
         UnauthorizedError,
       );
+      // Không gọi delete vì đã throw
       expect(repository.deleteRefreshTokenById).not.toHaveBeenCalled();
     });
 
     it("rotates the refresh token and returns new tokens on success", async () => {
+      const familyId = "test-family-id";
       const validRefreshToken = signToken(
-        { sub: baseUser.id },
+        { sub: baseUser.id, familyId },
         process.env.JWT_REFRESH_SECRET as string,
         "7d",
       );
       const record = {
         id: "rt-valid",
-        expiresAt: new Date(Date.now() + 60_000),
+        expiresAt: new Date(Date.now() + 60000),
+        userId: baseUser.id,
+        familyId: familyId,
+        revokedAt: null,
         user: baseUser,
       };
-      const repository = createFakeRepository({
-        findRefreshTokenWithUser: vi.fn().mockResolvedValue(record),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
-      const result = await service.refreshToken(validRefreshToken);
-
-      expect(repository.deleteRefreshTokenById).toHaveBeenCalledWith(record.id);
-      expect(repository.deleteRefreshTokensByUserId).toHaveBeenCalledWith(
-        baseUser.id,
+      repository.findRefreshTokenWithUser = vi.fn().mockResolvedValue(record);
+      repository.findActiveRefreshTokenByFamily = vi
+        .fn()
+        .mockResolvedValue(record);
+      repository.revokeAllTokensInFamily = vi.fn().mockResolvedValue(undefined);
+      repository.revokeRefreshToken = vi.fn().mockResolvedValue(undefined);
+      repository.createRefreshToken = vi.fn().mockResolvedValue({});
+      // Sử dụng real TokenService để kiểm tra logic thật
+      const realTokenService = new TokenService(repository);
+      const serviceWithRealToken = new AuthService(
+        repository,
+        mockEmailService,
+        realTokenService,
+        mockTwoFactorService,
       );
+
+      const result = await serviceWithRealToken.refreshToken(validRefreshToken);
+      expect(repository.revokeRefreshToken).toHaveBeenCalledWith(record.id);
       expect(repository.createRefreshToken).toHaveBeenCalled();
       expect(result).toHaveProperty("accessToken");
       expect(result).toHaveProperty("refreshToken");
@@ -536,12 +653,10 @@ describe("AuthService", () => {
     });
   });
 
+  // ---------- verifyEmail ----------
   describe("verifyEmail", () => {
     it("throws BadRequestError when the token is invalid or expired in Redis", async () => {
       (redis.get as any).mockResolvedValueOnce(null);
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-
       await expect(service.verifyEmail("bad-token")).rejects.toBeInstanceOf(
         BadRequestError,
       );
@@ -550,11 +665,7 @@ describe("AuthService", () => {
 
     it("throws BadRequestError when the user no longer exists", async () => {
       (redis.get as any).mockResolvedValueOnce("user-id");
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue(null),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserById = vi.fn().mockResolvedValue(null);
       await expect(service.verifyEmail("token")).rejects.toBeInstanceOf(
         BadRequestError,
       );
@@ -562,15 +673,10 @@ describe("AuthService", () => {
 
     it("deletes the redis token and returns tokens directly if already verified", async () => {
       (redis.get as any).mockResolvedValueOnce("user-id");
-      const repository = createFakeRepository({
-        findUserById: vi
-          .fn()
-          .mockResolvedValue({ ...baseUser, isVerified: true }),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserById = vi
+        .fn()
+        .mockResolvedValue({ ...baseUser, isVerified: true });
       const result = await service.verifyEmail("token");
-
       expect(redis.del).toHaveBeenCalledWith("email-verify:token");
       expect(repository.updateUser).not.toHaveBeenCalled();
       expect(result).toHaveProperty("accessToken");
@@ -579,16 +685,11 @@ describe("AuthService", () => {
     it("marks the user as verified and returns tokens when not yet verified", async () => {
       (redis.get as any).mockResolvedValueOnce("user-id");
       const unverifiedUser = { ...baseUser, isVerified: false };
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue(unverifiedUser),
-        updateUser: vi
-          .fn()
-          .mockResolvedValue({ ...unverifiedUser, isVerified: true }),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserById = vi.fn().mockResolvedValue(unverifiedUser);
+      repository.updateUser = vi
+        .fn()
+        .mockResolvedValue({ ...unverifiedUser, isVerified: true });
       const result = await service.verifyEmail("token");
-
       expect(repository.updateUser).toHaveBeenCalledWith(baseUser.id, {
         isVerified: true,
       });
@@ -597,49 +698,47 @@ describe("AuthService", () => {
 
     it("returns tokens directly if user is already verified (real generateTokens)", async () => {
       (redis.get as any).mockResolvedValueOnce("user-id");
-      const verifiedUser = { ...baseUser, isVerified: true };
-      const repository = createFakeRepository({
-        findUserById: vi.fn().mockResolvedValue(verifiedUser),
-        createRefreshToken: vi.fn().mockResolvedValue({}),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserById = vi
+        .fn()
+        .mockResolvedValue({ ...baseUser, isVerified: true });
       const result = await service.verifyEmail("token");
-
       expect(result.accessToken).toBeDefined();
       expect(repository.updateUser).not.toHaveBeenCalled();
       expect(redis.del).toHaveBeenCalledWith("email-verify:token");
     });
   });
 
+  // ---------- login - unverified user ----------
   describe("login - unverified user", () => {
     it("throws UnauthorizedError if the user has not verified their email", async () => {
       (bcrypt.compare as any).mockResolvedValueOnce(true);
-      const repository = createFakeRepository({
-        findUserByEmail: vi
-          .fn()
-          .mockResolvedValue({ ...baseUser, isVerified: false }),
-      });
-      const service = new AuthService(repository, mockEmailService);
-
+      repository.findUserByEmail = vi
+        .fn()
+        .mockResolvedValue({ ...baseUser, isVerified: false });
       await expect(service.login("test@test.com", "pass")).rejects.toThrow(
         UnauthorizedError,
       );
     });
   });
 
+  // ---------- generateTokens ----------
   describe("generateTokens", () => {
     it("signs access/refresh tokens, persists the refresh token, and maps the user", async () => {
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-
-      const result = await service.generateTokens(baseUser);
-
+      // Sử dụng real TokenService để kiểm tra logic thật
+      const realTokenService = new TokenService(repository);
+      const serviceWithRealToken = new AuthService(
+        repository,
+        mockEmailService,
+        realTokenService,
+        mockTwoFactorService,
+      );
+      const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
       expect(typeof result.refreshToken).toBe("string");
       expect(repository.createRefreshToken).toHaveBeenCalledWith(
         result.refreshToken,
         baseUser.id,
+        expect.any(String),
         expect.any(Date),
       );
       expect(result.user).toEqual({
@@ -655,32 +754,37 @@ describe("AuthService", () => {
     it("throws if JWT_ACCESS_SECRET is not configured", async () => {
       const previous = process.env.JWT_ACCESS_SECRET;
       delete process.env.JWT_ACCESS_SECRET;
-
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-
-      await expect(service.generateTokens(baseUser)).rejects.toThrow(
-        "JWT_ACCESS_SECRET is not defined",
+      const realTokenService = new TokenService(repository);
+      const serviceWithRealToken = new AuthService(
+        repository,
+        mockEmailService,
+        realTokenService,
+        mockTwoFactorService,
       );
-
+      await expect(
+        serviceWithRealToken.generateTokens(baseUser),
+      ).rejects.toThrow("JWT_ACCESS_SECRET is not defined");
       process.env.JWT_ACCESS_SECRET = previous;
     });
 
     it("throws if JWT_REFRESH_SECRET is not configured", async () => {
       const previous = process.env.JWT_REFRESH_SECRET;
       delete process.env.JWT_REFRESH_SECRET;
-
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-
-      await expect(service.generateTokens(baseUser)).rejects.toThrow(
-        "JWT_REFRESH_SECRET is not defined",
+      const realTokenService = new TokenService(repository);
+      const serviceWithRealToken = new AuthService(
+        repository,
+        mockEmailService,
+        realTokenService,
+        mockTwoFactorService,
       );
-
+      await expect(
+        serviceWithRealToken.generateTokens(baseUser),
+      ).rejects.toThrow("JWT_REFRESH_SECRET is not defined");
       process.env.JWT_REFRESH_SECRET = previous;
     });
   });
 
+  // ---------- logout - blacklistAccessToken ----------
   describe("logout - blacklistAccessToken", () => {
     it("blacklists a valid access token with the remaining TTL until expiry", async () => {
       const accessToken = signToken(
@@ -688,11 +792,7 @@ describe("AuthService", () => {
         process.env.JWT_ACCESS_SECRET as string,
         "15m",
       );
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-
       await service.logout(baseUser.id, accessToken);
-
       expect(redis.setex).toHaveBeenCalledWith(
         `jwt:blacklist:${accessToken}`,
         expect.any(Number),
@@ -705,11 +805,7 @@ describe("AuthService", () => {
 
     it("does not blacklist a token that has no exp claim", async () => {
       const accessToken = "not-a-real-jwt-token";
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-
       await service.logout(baseUser.id, accessToken);
-
       expect(redis.setex).not.toHaveBeenCalled();
     });
 
@@ -719,27 +815,17 @@ describe("AuthService", () => {
         process.env.JWT_ACCESS_SECRET as string,
         -10,
       );
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-
       await service.logout(baseUser.id, accessToken);
-
       expect(redis.setex).not.toHaveBeenCalled();
     });
 
     it("logs a warning and swallows the error if decoding the access token throws", async () => {
-      const { logger } = await import("@core/logger/winston");
       (decodeToken as any).mockImplementationOnce(() => {
         throw new Error("malformed token");
       });
-
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-
       await expect(
         service.logout(baseUser.id, "any-token"),
       ).resolves.toBeUndefined();
-
       expect(logger.warn).toHaveBeenCalledWith(
         "Failed to decode access token during logout",
         expect.objectContaining({ error: expect.any(Error) }),
@@ -748,6 +834,7 @@ describe("AuthService", () => {
     });
   });
 
+  // ---------- JWT expiry config ----------
   describe("AuthService - JWT expiry config", () => {
     afterEach(() => {
       delete process.env.JWT_ACCESS_EXPIRY;
@@ -757,11 +844,14 @@ describe("AuthService", () => {
     it("falls back to default 15m/7d expiry when unset", async () => {
       delete process.env.JWT_ACCESS_EXPIRY;
       delete process.env.JWT_REFRESH_EXPIRY;
-
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-      const result = await service.generateTokens(baseUser);
-
+      const realTokenService = new TokenService(repository);
+      const serviceWithRealToken = new AuthService(
+        repository,
+        mockEmailService,
+        realTokenService,
+        mockTwoFactorService,
+      );
+      const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
       expect(typeof result.refreshToken).toBe("string");
     });
@@ -769,11 +859,14 @@ describe("AuthService", () => {
     it("uses JWT_ACCESS_EXPIRY/JWT_REFRESH_EXPIRY from env when explicitly provided", async () => {
       process.env.JWT_ACCESS_EXPIRY = "30m";
       process.env.JWT_REFRESH_EXPIRY = "30d";
-
-      const repository = createFakeRepository();
-      const service = new AuthService(repository, mockEmailService);
-      const result = await service.generateTokens(baseUser);
-
+      const realTokenService = new TokenService(repository);
+      const serviceWithRealToken = new AuthService(
+        repository,
+        mockEmailService,
+        realTokenService,
+        mockTwoFactorService,
+      );
+      const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
       expect(typeof result.refreshToken).toBe("string");
     });

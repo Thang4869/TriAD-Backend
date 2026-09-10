@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { IOrdersService } from "./orders.service";
 import { ForbiddenError } from "@shared/utils/errors";
 import { OrderStatus } from "@prisma/client";
+import { ROLES, Role } from "@shared/types/roles";
 import { asyncHandler } from "@shared/utils/async-handler";
 
 export class OrdersController {
@@ -23,7 +24,7 @@ export class OrdersController {
   });
 
   adminGetOrders = asyncHandler(async (req: Request, res: Response) => {
-    if ((req.user as { role?: string })?.role !== "ADMIN") {
+    if ((req.user as { role?: Role })?.role !== ROLES.ADMIN) {
       throw new ForbiddenError("Admin access required");
     }
     const { status, userId } = req.query as {
@@ -41,7 +42,7 @@ export class OrdersController {
   });
 
   adminUpdateStatus = asyncHandler(async (req: Request, res: Response) => {
-    if ((req.user as { role?: string })?.role !== "ADMIN") {
+    if ((req.user as { role?: Role })?.role !== ROLES.ADMIN) {
       throw new ForbiddenError("Admin access required");
     }
     const { orderId } = req.params;

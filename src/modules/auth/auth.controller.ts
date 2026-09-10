@@ -5,6 +5,11 @@ import { BadRequestError } from "@shared/utils/errors";
 import config from "@config";
 import { asyncHandler } from "@shared/utils/async-handler";
 import { User } from "@prisma/client";
+import {
+  CSRF_COOKIE_NAME,
+  csrfCookieOptions,
+  generateCsrfToken,
+} from "@shared/middlewares/csrf.middleware";
 
 interface OAuthCallbackUser {
   user: User;
@@ -113,6 +118,7 @@ export class AuthController {
 
     res.clearCookie("accessToken", cookieOptions(0));
     res.clearCookie("refreshToken", cookieOptions(0));
+    res.clearCookie(CSRF_COOKIE_NAME, csrfCookieOptions(0));
 
     res.json({ success: true, message: "Logged out successfully" });
   });
@@ -140,12 +146,10 @@ export class AuthController {
     }
     const result = await this.service.verifyTOTP(userId, token);
 
-    // 👇 Type guard đã có sẵn, hãy chắc chắn nó được gọi
     if (!isAuthTokens(result)) {
       throw new BadRequestError("Unexpected result from TOTP verification");
     }
 
-    // Sau guard, TypeScript biết result là AuthTokens
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
     res.json({ success: true, data: { user: result.user } });
   });
@@ -182,6 +186,11 @@ export class AuthController {
       "refreshToken",
       refreshToken,
       cookieOptions(7 * 24 * 60 * 60 * 1000),
+    );
+    res.cookie(
+      CSRF_COOKIE_NAME,
+      generateCsrfToken(),
+      csrfCookieOptions(7 * 24 * 60 * 60 * 1000),
     );
   }
 }

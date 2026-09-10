@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { ReviewsService } from "./reviews.service";
 import { BadRequestError } from "@shared/utils/errors";
 import { asyncHandler } from "@shared/utils/async-handler";
+import { ROLES, Role } from "@shared/types/roles";
 
 export class ReviewsController {
   constructor(private readonly service: ReviewsService) {}
@@ -38,14 +39,14 @@ export class ReviewsController {
 
   delete = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;
-    const isAdmin = (req.user as { role?: string })?.role === "ADMIN";
+    const isAdmin = (req.user as { role?: Role })?.role === ROLES.ADMIN;
     const { reviewId } = req.params;
     const result = await this.service.deleteReview(reviewId, userId, isAdmin);
     res.json({ success: true, data: result });
   });
 
   adminGetAll = asyncHandler(async (req: Request, res: Response) => {
-    if ((req.user as { role?: string })?.role !== "ADMIN") {
+    if ((req.user as { role?: Role })?.role !== ROLES.ADMIN) {
       throw new BadRequestError("Admin access required");
     }
     const page = req.query.page ? Number(req.query.page) : 1;

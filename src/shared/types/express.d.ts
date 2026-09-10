@@ -4,7 +4,7 @@ declare global {
       user?: {
         id: string;
         email: string;
-        role: string;
+        role: import("./roles").Role;
       };
       requestId?: string;
     }

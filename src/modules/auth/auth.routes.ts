@@ -2,6 +2,7 @@ import { Router } from "express";
 import { validate } from "@shared/middlewares/validation.middleware";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
 import { authRateLimiter } from "@shared/middlewares/rate-limit.middleware";
+import { csrfProtection } from "@shared/middlewares/csrf.middleware";
 import { authController } from "@/container";
 import passport from "./strategies/oauth2.strategy";
 import { config } from "@config/index";
@@ -39,8 +40,13 @@ router.post(
   validate(loginSchema),
   authController.login,
 );
-router.post("/refresh", validate(refreshSchema), authController.refresh);
-router.post("/logout", authMiddleware, authController.logout);
+router.post(
+  "/refresh",
+  csrfProtection,
+  validate(refreshSchema),
+  authController.refresh,
+);
+router.post("/logout", authMiddleware, csrfProtection, authController.logout);
 router.post("/2fa/enable", authMiddleware, authController.enable2FA);
 router.post("/2fa/verify", authMiddleware, authController.verify2FA);
 router.post(

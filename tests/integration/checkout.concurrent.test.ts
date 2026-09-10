@@ -24,7 +24,6 @@ describe("Checkout Concurrency", () => {
     const orderId = "order-1";
     const mockOrder = { id: orderId, items: [] };
 
-    // Repository mock (chỉ cần các method được sử dụng)
     const repository = {
       findCachedOrderId: vi.fn().mockResolvedValue(null),
       cacheOrderId: vi.fn().mockResolvedValue(undefined),
@@ -90,10 +89,15 @@ describe("Checkout Concurrency", () => {
       idempotencyService,
     );
 
-    // 🔥 Mock executeWithRetry: lần đầu thành công, lần thứ hai reject
+    const mockOrderEntity = {
+      id: orderId,
+      orderNumber: "ORD-1",
+      total: { getValue: () => 100_000 },
+    };
+
     (checkoutService as any).executeWithRetry = vi
       .fn()
-      .mockResolvedValueOnce({ id: orderId })
+      .mockResolvedValueOnce(mockOrderEntity)
       .mockRejectedValueOnce(new ConflictError("Stock conflict"));
 
     const requests = [

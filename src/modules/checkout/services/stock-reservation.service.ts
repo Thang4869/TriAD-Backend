@@ -4,6 +4,8 @@ import {
   BadRequestError,
   ConflictError,
 } from "@shared/utils/errors";
+import { withSpan } from "@core/tracing/span";
+import { Attributes } from "@opentelemetry/api";
 
 export class StockReservationService {
   constructor(private readonly repository: ICheckoutRepository) {}
@@ -12,12 +14,28 @@ export class StockReservationService {
     tx: TxClient,
     cartItems: { productId: string; quantity: number }[],
   ): Promise<void> {
+    if (cartItems.length === 0) {
+      throw new BadRequestError("Cart is empty");
+    }
+    return withSpan(
+      "checkout.reserve_stock",
+      (setAttributes) => this.doReserveStock(tx, cartItems, setAttributes),
+      { "stock.sku_count": cartItems.length },
+    );
+  }
+
+  private async doReserveStock(
+    tx: TxClient,
+    cartItems: { productId: string; quantity: number }[],
+    setAttributes: (attrs: Attributes) => void,
+  ): Promise<void> {
     const productIds = cartItems.map((item) => item.productId);
     const lockedProducts = await this.repository.lockProductsForUpdate(
       tx,
       productIds,
     );
     const productMap = new Map(lockedProducts.map((p) => [p.id, p]));
+    setAttributes({ "stock.locked_product_count": lockedProducts.length });
 
     for (const item of cartItems) {
       const product = productMap.get(item.productId);

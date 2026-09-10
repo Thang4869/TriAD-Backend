@@ -10,6 +10,7 @@ import { PricingService } from "./domain/pricing.service";
 import { StockReservationService } from "./services/stock-reservation.service";
 import { IdempotencyService } from "./services/idempotency.service";
 import { Order } from "@modules/orders/domain/order.entity";
+import { withSpan } from "@core/tracing/span";
 
 export interface CheckoutInput {
   idempotencyKey?: string;
@@ -32,71 +33,97 @@ export class CheckoutService {
   ) {}
 
   async checkout(userId: string, input: CheckoutInput) {
-    if (input.idempotencyKey) {
-      const idempotentResult =
-        await this.idempotencyService.tryReturnIdempotentOrder(
-          input.idempotencyKey,
+    return withSpan(
+      "checkout.place_order",
+      async (setAttributes) => {
+        if (input.idempotencyKey) {
+          const idempotentResult =
+            await this.idempotencyService.tryReturnIdempotentOrder(
+              input.idempotencyKey,
+            );
+          if (idempotentResult) {
+            setAttributes({ "checkout.idempotent_replay": true });
+            return idempotentResult;
+          }
+        }
+
+        const user = await this.repository.findUserCartForCheckout(userId);
+        if (!user || !user.cart || user.cart.items.length === 0) {
+          throw new BadRequestError("Cart is empty");
+        }
+
+        const cart = user.cart;
+        setAttributes({
+          "checkout.item_count": cart.items.length,
+          "checkout.payment_method": input.paymentMethod,
+        });
+
+        let attemptCount = 0;
+        const persistedOrder = await this.executeWithRetry(async (tx) => {
+          attemptCount += 1;
+          await this.stockService.reserveStock(tx, cart.items);
+
+          const order = Order.create({
+            id: crypto.randomUUID(),
+            userId,
+            orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
+            customerName: `${user.firstName} ${user.lastName}`,
+            customerEmail: user.email,
+            customerPhone: input.phone || user.phone || "",
+            customerAddress: input.address,
+            paymentMethod: input.paymentMethod,
+            notes: input.notes,
+          });
+
+          for (const item of cart.items) {
+            order.addItem(
+              item.productId,
+              item.product.name,
+              item.quantity,
+              new Money(item.product.price),
+            );
+          }
+
+          const pricing = await this.pricingService.calculatePricing(
+            order.subtotal,
+            input.discountCode,
+            tx,
+          );
+          order.applyPricing(pricing);
+          order.place();
+
+          await this.repository.saveNewOrder(
+            tx,
+            order,
+            input.idempotencyKey || "",
+          );
+          await this.repository.clearCartItems(tx, cart.id);
+          return order;
+        });
+
+        setAttributes({
+          "checkout.order_id": persistedOrder.id,
+          "checkout.order_number": persistedOrder.orderNumber,
+          "checkout.retry_attempts": attemptCount,
+          "checkout.total": persistedOrder.total.getValue(),
+        });
+
+        const fullOrder = await this.repository.findOrderWithItems(
+          persistedOrder.id,
         );
-      if (idempotentResult) return idempotentResult;
-    }
+        if (!fullOrder) throw new Error("Failed to retrieve created order");
 
-    const user = await this.repository.findUserCartForCheckout(userId);
-    if (!user || !user.cart || user.cart.items.length === 0) {
-      throw new BadRequestError("Cart is empty");
-    }
+        if (input.idempotencyKey) {
+          await this.idempotencyService.cacheOrderId(
+            input.idempotencyKey,
+            persistedOrder.id,
+          );
+        }
 
-    const cart = user.cart;
-
-    const persistedOrder = await this.executeWithRetry(async (tx) => {
-      await this.stockService.reserveStock(tx, cart.items);
-
-      const order = Order.create({
-        id: crypto.randomUUID(),
-        userId,
-        orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
-        customerName: `${user.firstName} ${user.lastName}`,
-        customerEmail: user.email,
-        customerPhone: input.phone || user.phone || "",
-        customerAddress: input.address,
-        paymentMethod: input.paymentMethod,
-        notes: input.notes,
-      });
-
-      for (const item of cart.items) {
-        order.addItem(
-          item.productId,
-          item.product.name,
-          item.quantity,
-          new Money(item.product.price),
-        );
-      }
-
-      const pricing = await this.pricingService.calculatePricing(
-        order.subtotal,
-        input.discountCode,
-        tx,
-      );
-      order.applyPricing(pricing);
-      order.place();
-
-      await this.repository.saveNewOrder(tx, order, input.idempotencyKey || "");
-      await this.repository.clearCartItems(tx, cart.id);
-      return order;
-    });
-
-    const fullOrder = await this.repository.findOrderWithItems(
-      persistedOrder.id,
+        return { order: fullOrder, idempotent: false };
+      },
+      { "checkout.user_id": userId },
     );
-    if (!fullOrder) throw new Error("Failed to retrieve created order");
-
-    if (input.idempotencyKey) {
-      await this.idempotencyService.cacheOrderId(
-        input.idempotencyKey,
-        persistedOrder.id,
-      );
-    }
-
-    return { order: fullOrder, idempotent: false };
   }
 
   async getOrder(orderId: string, userId: string) {

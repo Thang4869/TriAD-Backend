@@ -2,6 +2,7 @@ import rateLimit from "express-rate-limit";
 import { RedisReply, RedisStore } from "rate-limit-redis";
 import { Request } from "express";
 import redis from "@core/redis/client";
+import { ROLES, Role } from "@shared/types/roles";
 
 export const rateLimiter = (options?: {
   windowMs?: number;
@@ -40,7 +41,7 @@ export const rateLimiter = (options?: {
     skip: (req) => {
       return (
         req.path === "/health" ||
-        (req.user as { role?: string })?.role === "ADMIN"
+        (req.user as { role?: Role })?.role === ROLES.ADMIN
       );
     },
   });

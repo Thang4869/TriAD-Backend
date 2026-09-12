@@ -13,11 +13,16 @@ export const authMiddleware = async (
 ) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const bearerToken =
+      authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.substring(7)
+        : null;
+
+    const token = bearerToken || req.cookies?.accessToken;
+
+    if (!token) {
       throw new UnauthorizedError("No token provided");
     }
-
-    const token = authHeader.substring(7);
 
     const isBlacklisted = await redis.exists(`${BLACKLIST_PREFIX}${token}`);
     if (isBlacklisted) {
@@ -62,6 +67,13 @@ export const optionalAuthMiddleware = async (
 ) => {
   try {
     const authHeader = req.headers.authorization;
+    const bearerToken =
+      authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.substring(7)
+        : null;
+
+    const token = bearerToken || req.cookies?.accessToken;
+
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
 

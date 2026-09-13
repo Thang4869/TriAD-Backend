@@ -2,7 +2,6 @@ import { Container, Lifetime } from "@core/di/container";
 import { TOKENS } from "@core/di/tokens";
 
 import { PrismaProductsRepository } from "@modules/products/products.repository";
-import { ProductsService } from "@modules/products/products.service";
 import { ProductsController } from "@modules/products/products.controller";
 
 import { PrismaAuthRepository } from "@modules/auth/auth.repository";
@@ -144,10 +143,6 @@ container.register(
 );
 
 // ---------- Domain services ----------
-container.register(
-  TOKENS.ProductsService,
-  (c) => new ProductsService(c.resolve(TOKENS.ProductsRepository)),
-);
 container.register(
   TOKENS.AuthService,
   (c) =>

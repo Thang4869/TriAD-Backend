@@ -12,13 +12,17 @@ export interface ProductCore {
   reviewCount: number;
   createdAt: Date;
   updatedAt: Date;
-  reviews?: unknown;
+  reviews?: ReviewSummary[];
 }
 
 export type ProductListItemResponse = Omit<ProductCore, "reviews">;
 
 export interface ProductDetailResponse extends ProductListItemResponse {
-  reviews: unknown;
+  reviews: ReviewSummary[];
+}
+
+export interface ProductDetailResponse extends ProductListItemResponse {
+  reviews: ReviewSummary[];
 }
 
 export function toProductListItem(
@@ -39,6 +43,18 @@ export function toProductDetailResponse(
 ): ProductDetailResponse {
   return {
     ...toProductListItem(product),
-    reviews: product.reviews,
+    reviews: product.reviews || [],
+  };
+}
+
+export interface ReviewSummary {
+  id: string;
+  rating: number;
+  content: string;
+  createdAt: Date;
+  user: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
   };
 }

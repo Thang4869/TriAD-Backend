@@ -3,6 +3,11 @@ import { CatalogService } from "./services/catalog.service";
 import { AdminProductService } from "./services/admin-product.service";
 import { asyncHandler } from "@shared/utils/async-handler";
 import { BadRequestError } from "@shared/utils/errors";
+import {
+  sendSuccess,
+  sendCreated,
+  sendAccepted,
+} from "@shared/utils/api-response";
 
 export class ProductsController {
   constructor(
@@ -10,25 +15,24 @@ export class ProductsController {
     private readonly adminService: AdminProductService,
   ) {}
 
-  // Public endpoints
   getAll = asyncHandler(async (req: Request, res: Response) => {
     const result = await this.catalogService.findAll(req.query);
-    res.json({ success: true, data: result });
+    sendSuccess(res, result);
   });
 
   getById = asyncHandler(async (req: Request, res: Response) => {
     const product = await this.catalogService.findById(req.params.id);
-    res.json({ success: true, data: product });
+    sendSuccess(res, product);
   });
 
   getBySlug = asyncHandler(async (req: Request, res: Response) => {
     const product = await this.catalogService.getBySlug(req.params.slug);
-    res.json({ success: true, data: product });
+    sendSuccess(res, product);
   });
 
   getCategories = asyncHandler(async (_req: Request, res: Response) => {
     const categories = await this.catalogService.getCategories();
-    res.json({ success: true, data: categories });
+    sendSuccess(res, categories);
   });
 
   search = asyncHandler(async (req: Request, res: Response) => {
@@ -38,41 +42,32 @@ export class ProductsController {
       Number(page),
       Number(limit),
     );
-    res.json({ success: true, data: result });
+    sendSuccess(res, result);
   });
 
-  // Admin endpoints
   adminGetAll = asyncHandler(async (req: Request, res: Response) => {
     const result = await this.adminService.adminFindAll(req.query);
-    res.json({ success: true, data: result });
+    sendSuccess(res, result);
   });
 
   adminCreate = asyncHandler(async (req: Request, res: Response) => {
     const product = await this.adminService.create(req.body);
-    res.status(201).json({ success: true, data: product });
+    sendCreated(res, product);
   });
 
   adminUpdate = asyncHandler(async (req: Request, res: Response) => {
     const product = await this.adminService.update(req.params.id, req.body);
-    res.json({ success: true, data: product });
+    sendSuccess(res, product);
   });
 
   adminDelete = asyncHandler(async (req: Request, res: Response) => {
     const product = await this.adminService.delete(req.params.id);
-    res.json({
-      success: true,
-      message: "Product deactivated successfully",
-      data: product,
-    });
+    sendSuccess(res, product, "Product deactivated successfully");
   });
 
   adminRestore = asyncHandler(async (req: Request, res: Response) => {
     const product = await this.adminService.restore(req.params.id);
-    res.json({
-      success: true,
-      message: "Product reactivated successfully",
-      data: product,
-    });
+    sendSuccess(res, product, "Product reactivated successfully");
   });
 
   adminUploadImage = asyncHandler(async (req: Request, res: Response) => {
@@ -81,10 +76,6 @@ export class ProductsController {
       req.params.id,
       req.file.buffer,
     );
-    res.status(202).json({
-      success: true,
-      message: "Image queued for processing",
-      data: result,
-    });
+    sendAccepted(res, result, "Image queued for processing");
   });
 }

@@ -10,6 +10,11 @@ import {
   csrfCookieOptions,
   generateCsrfToken,
 } from "@shared/middlewares/csrf.middleware";
+import {
+  sendSuccess,
+  sendCreated,
+  sendMessage,
+} from "@shared/utils/api-response";
 
 interface OAuthCallbackUser {
   user: User;
@@ -49,31 +54,21 @@ export class AuthController {
 
   register = asyncHandler(async (req: Request, res: Response) => {
     const result = await this.service.register(req.body);
-    res.status(201).json({
-      success: true,
-      data: { user: result.user },
-      message: result.message,
-    });
+    sendCreated(res, { user: result.user }, result.message);
   });
 
   verifyEmail = asyncHandler(async (req: Request, res: Response) => {
     const token = req.query.token as string;
-    if (!token) {
-      throw new BadRequestError("Verification token is required");
-    }
+    if (!token) throw new BadRequestError("Verification token is required");
     const result = await this.service.verifyEmail(token);
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    res.json({
-      success: true,
-      data: { user: result.user },
-      message: "Email verified successfully",
-    });
+    sendSuccess(res, { user: result.user }, "Email verified successfully");
   });
 
   resendVerification = asyncHandler(async (req: Request, res: Response) => {
     const { email } = req.body;
     const result = await this.service.resendVerificationEmail(email);
-    res.json({ success: true, message: result.message });
+    sendMessage(res, result.message);
   });
 
   login = asyncHandler(async (req: Request, res: Response) => {
@@ -81,33 +76,26 @@ export class AuthController {
     const result = await this.service.login(email, password);
 
     if (is2FAResult(result)) {
-      res.json({
-        success: true,
-        data: {
-          requires2FA: true,
-          userId: result.userId,
-          message: result.message,
-        },
+      sendSuccess(res, {
+        requires2FA: true,
+        userId: result.userId,
+        message: result.message,
       });
       return;
     }
-
-    if (!isAuthTokens(result)) {
+    if (!isAuthTokens(result))
       throw new BadRequestError("Unexpected result from login");
-    }
 
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    res.json({ success: true, data: { user: result.user } });
+    sendSuccess(res, { user: result.user });
   });
 
   refresh = asyncHandler(async (req: Request, res: Response) => {
     const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
-    if (!refreshToken) {
-      throw new BadRequestError("Refresh token required");
-    }
+    if (!refreshToken) throw new BadRequestError("Refresh token required");
     const result = await this.service.refreshToken(refreshToken);
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    res.json({ success: true, data: { user: result.user } });
+    sendSuccess(res, { user: result.user });
   });
 
   logout = asyncHandler(async (req: Request, res: Response) => {
@@ -119,39 +107,32 @@ export class AuthController {
     res.clearCookie("accessToken", cookieOptions(0));
     res.clearCookie("refreshToken", cookieOptions(0));
     res.clearCookie(CSRF_COOKIE_NAME, csrfCookieOptions(0));
-
-    res.json({ success: true, message: "Logged out successfully" });
+    sendMessage(res, "Logged out successfully");
   });
 
   enable2FA = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;
     const result = await this.service.enable2FA(userId);
-    res.json({ success: true, data: result });
+    sendSuccess(res, result);
   });
 
   verify2FA = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;
     const { token } = req.body;
-    if (!token) {
-      throw new BadRequestError("Token is required");
-    }
+    if (!token) throw new BadRequestError("Token is required");
     const result = await this.service.verify2FA(userId, token);
-    res.json({ success: true, data: result });
+    sendSuccess(res, result);
   });
 
   verifyTOTP = asyncHandler(async (req: Request, res: Response) => {
     const { userId, token } = req.body;
-    if (!userId || !token) {
+    if (!userId || !token)
       throw new BadRequestError("userId and token are required");
-    }
     const result = await this.service.verifyTOTP(userId, token);
-
-    if (!isAuthTokens(result)) {
+    if (!isAuthTokens(result))
       throw new BadRequestError("Unexpected result from TOTP verification");
-    }
-
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    res.json({ success: true, data: { user: result.user } });
+    sendSuccess(res, { user: result.user });
   });
 
   googleCallback = async (req: Request, res: Response) => {

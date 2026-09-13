@@ -4,6 +4,7 @@ import { ForbiddenError } from "@shared/utils/errors";
 import { OrderStatus } from "@prisma/client";
 import { ROLES, Role } from "@shared/types/roles";
 import { asyncHandler } from "@shared/utils/async-handler";
+import { sendSuccess } from "@shared/utils/api-response";
 
 export class OrdersController {
   constructor(private readonly service: IOrdersService) {}
@@ -13,14 +14,14 @@ export class OrdersController {
     const page = req.query.page ? Number(req.query.page) : 1;
     const limit = req.query.limit ? Number(req.query.limit) : 10;
     const result = await this.service.getOrders(userId, page, limit);
-    res.json({ success: true, data: result });
+    sendSuccess(res, result);
   });
 
   getMyOrder = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;
     const { orderId } = req.params;
     const order = await this.service.getOrderById(orderId, userId);
-    res.json({ success: true, data: order });
+    sendSuccess(res, order);
   });
 
   adminGetOrders = asyncHandler(async (req: Request, res: Response) => {
@@ -38,7 +39,7 @@ export class OrdersController {
       page,
       limit,
     );
-    res.json({ success: true, data: result });
+    sendSuccess(res, result);
   });
 
   adminUpdateStatus = asyncHandler(async (req: Request, res: Response) => {
@@ -52,6 +53,6 @@ export class OrdersController {
       return;
     }
     const updated = await this.service.updateOrderStatus(orderId, status);
-    res.json({ success: true, data: updated });
+    sendSuccess(res, updated);
   });
 }

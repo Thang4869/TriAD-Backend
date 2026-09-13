@@ -1,4 +1,4 @@
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus } from "./order-status";
 import { Money } from "@shared/value-objects/money";
 import {
   OrderPlacedEvent,

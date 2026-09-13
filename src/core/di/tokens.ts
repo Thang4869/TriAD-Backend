@@ -10,7 +10,6 @@ import type { IWishlistRepository } from "@modules/wishlist/wishlist.repository"
 import type { IDashboardRepository } from "@modules/admin/dashboard/dashboard.repository";
 import type { INotificationsRepository } from "@modules/notifications/notifications.repository";
 
-import type { ProductsService } from "@modules/products/products.service";
 import type { AuthService } from "@modules/auth/auth.service";
 import type { CartService } from "@modules/cart/cart.service";
 import type { CheckoutService } from "@modules/checkout/checkout.service";
@@ -66,7 +65,6 @@ export const TOKENS = {
   EventBus: createToken<EventBus>("EventBus"),
 
   // Domain services
-  ProductsService: createToken<ProductsService>("ProductsService"),
   AuthService: createToken<AuthService>("AuthService"),
   CartService: createToken<CartService>("CartService"),
   CheckoutService: createToken<CheckoutService>("CheckoutService"),

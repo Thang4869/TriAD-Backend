@@ -114,8 +114,6 @@ export interface ICheckoutRepository {
     maxUses: number | null,
   ): Promise<boolean>;
 
-  createOrder(tx: TxClient, data: CreateOrderData): Promise<Order>;
-  createOrderItems(tx: TxClient, items: CreateOrderItemData[]): Promise<void>;
   clearCartItems(tx: TxClient, cartId: string): Promise<void>;
 
   saveNewOrder(

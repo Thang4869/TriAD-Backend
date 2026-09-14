@@ -94,10 +94,6 @@ function createFakeRepository(
     decrementProductStock: vi.fn().mockResolvedValue(true),
     findDiscountByCode: vi.fn().mockResolvedValue(null),
     incrementDiscountUsage: vi.fn().mockResolvedValue(true),
-    createOrder: vi
-      .fn()
-      .mockResolvedValue({ id: "order-1", orderNumber: "ORD-123" }),
-    createOrderItems: vi.fn().mockResolvedValue(undefined),
     clearCartItems: vi.fn().mockResolvedValue(undefined),
     findOrdersByUser: vi.fn().mockResolvedValue([]),
     countOrdersByUser: vi.fn().mockResolvedValue(0),

@@ -267,10 +267,12 @@ const orderStatusChangedHandler = container.resolve(
 
 eventBus.subscribe(
   OrderPlacedEvent.eventName,
+  "OrderPlacedHandler",
   orderPlacedHandler.handle.bind(orderPlacedHandler),
 );
 eventBus.subscribe(
   OrderStatusChangedEvent.eventName,
+  "OrderStatusChangedHandler",
   orderStatusChangedHandler.handle.bind(orderStatusChangedHandler),
 );
 

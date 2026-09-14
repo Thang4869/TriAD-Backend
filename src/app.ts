@@ -12,6 +12,8 @@ import { swaggerSpec } from "@config/swagger";
 import config from "@config";
 
 import { rateLimiter } from "@shared/middlewares/rate-limit.middleware";
+import { requestScope } from "@/shared/middlewares/request.scope.middleware ";
+import { container as rootContainer } from "./container";
 import {
   errorHandler,
   notFoundHandler,
@@ -104,6 +106,8 @@ app.use((req, res, next) => {
   (req as AppRequest).requestId = requestId;
   next();
 });
+
+app.use(requestScope(rootContainer));
 
 app.use("/api", rateLimiter());
 

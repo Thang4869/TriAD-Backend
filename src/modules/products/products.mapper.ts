@@ -1,3 +1,15 @@
+export interface ReviewSummary {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: Date;
+  user: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+  };
+}
+
 export interface ProductCore {
   id: string;
   name: string;
@@ -12,49 +24,32 @@ export interface ProductCore {
   reviewCount: number;
   createdAt: Date;
   updatedAt: Date;
-  reviews?: ReviewSummary[];
 }
 
-export type ProductListItemResponse = Omit<ProductCore, "reviews">;
+export type ProductListItemResponse = ProductCore;
 
-export interface ProductDetailResponse extends ProductListItemResponse {
+export interface ProductDetailResponse extends ProductCore {
   reviews: ReviewSummary[];
 }
 
-export interface ProductDetailResponse extends ProductListItemResponse {
-  reviews: ReviewSummary[];
-}
-
-export function toProductListItem(
-  product: ProductCore,
-): ProductListItemResponse {
+export function toProductListItem<
+  T extends ProductCore & { reviews?: unknown },
+>(product: T): ProductListItemResponse {
   const { reviews: _reviews, ...listItem } = product;
   return listItem;
 }
 
-export function toProductListResponse(
-  products: ProductCore[],
-): ProductListItemResponse[] {
+export function toProductListResponse<
+  T extends ProductCore & { reviews?: unknown },
+>(products: T[]): ProductListItemResponse[] {
   return products.map(toProductListItem);
 }
 
 export function toProductDetailResponse(
-  product: ProductCore,
+  product: ProductCore & { reviews: ReviewSummary[] },
 ): ProductDetailResponse {
   return {
     ...toProductListItem(product),
-    reviews: product.reviews || [],
-  };
-}
-
-export interface ReviewSummary {
-  id: string;
-  rating: number;
-  content: string;
-  createdAt: Date;
-  user: {
-    id: string;
-    firstName: string | null;
-    lastName: string | null;
+    reviews: product.reviews,
   };
 }

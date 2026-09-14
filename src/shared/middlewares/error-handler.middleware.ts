@@ -3,10 +3,15 @@ import { logger } from "@core/logger/winston";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
+import {
+  DomainError,
+  DOMAIN_ERROR_STATUS_MAP,
+} from "@shared/domain/errors/domain-error";
 
 interface ErrorResponsePayload {
   success: false;
   error: string;
+  code?: string;
   correlationId: string | string[];
   details?: unknown;
   stack?: string;
@@ -37,8 +42,14 @@ export const errorHandler = (
   let statusCode = 500;
   let message = "Internal server error";
   let details: unknown = undefined;
+  let code: string | undefined;
 
-  if (err instanceof AppError) {
+  if (err instanceof DomainError) {
+    statusCode = DOMAIN_ERROR_STATUS_MAP[err.code] ?? 400;
+    message = err.message;
+    code = err.code;
+    details = err.context;
+  } else if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.isOperational ? err.message : "Internal server error";
   } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -80,17 +91,22 @@ export const errorHandler = (
     message = err.message;
   }
 
-  // log
-  logger.error("Error:", {
+  const logPayload = {
     message: err instanceof Error ? err.message : String(err),
     stack: err instanceof Error ? err.stack : undefined,
     statusCode,
+    code,
     path: req.path,
     method: req.method,
     ip: req.ip,
     userId: (req.user as { id: string })?.id,
     correlationId,
-  });
+  };
+  if (statusCode >= 500) {
+    logger.error("Error:", logPayload);
+  } else {
+    logger.warn("Error:", logPayload);
+  }
 
   // response
   const responsePayload: ErrorResponsePayload = {
@@ -98,6 +114,9 @@ export const errorHandler = (
     error: message,
     correlationId,
   };
+  if (code) {
+    responsePayload.code = code;
+  }
   if (details) {
     responsePayload.details = details;
   }

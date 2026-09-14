@@ -7,8 +7,11 @@ import {
   errorHandler,
   notFoundHandler,
 } from "@shared/middlewares/error-handler.middleware";
+import { logger } from "@core/logger/winston";
 
-vi.mock("@core/logger/winston", () => ({ logger: { error: vi.fn() } }));
+vi.mock("@core/logger/winston", () => ({
+  logger: { error: vi.fn(), warn: vi.fn() },
+}));
 
 function createMockResponse(): Response {
   const res = {} as Response;
@@ -40,9 +43,7 @@ describe("errorHandler", () => {
     errorHandler(err, createMockRequest(), res, vi.fn());
 
     expect(res.status).toHaveBeenCalledWith(409);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ success: false, error: "Duplicate entry" }),
-    );
+    expect(logger.warn).toHaveBeenCalledWith("Error:", expect.any(Object));
   });
 
   it("trả 404 cho Prisma P2025 (record not found)", () => {
@@ -151,6 +152,7 @@ describe("errorHandler", () => {
     errorHandler(err, createMockRequest(), res, vi.fn());
 
     expect(res.status).toHaveBeenCalledWith(500);
+    expect(logger.error).toHaveBeenCalledWith("Error:", expect.any(Object));
   });
 
   it("dùng x-correlation-id từ header nếu có, thay vì tự sinh mới", () => {

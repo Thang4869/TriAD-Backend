@@ -6,6 +6,15 @@ import {
   OrderCancelledEvent,
 } from "@shared/domain/events/order-events";
 import { AggregateRoot } from "@shared/domain/aggregate-root";
+import {
+  OrderNotMutableError,
+  InvalidOrderItemError,
+  InvalidDiscountError,
+  EmptyOrderError,
+  OrderAlreadyPlacedError,
+  InvalidOrderTransitionError,
+  OrderNotCancellableError,
+} from "@shared/domain/errors/domain-error";
 
 export class OrderItem {
   constructor(
@@ -123,10 +132,10 @@ export class Order extends AggregateRoot {
 
   private assertMutable(): void {
     if (this._placed) {
-      throw new Error("Cannot modify an order that has already been placed");
+      throw new OrderNotMutableError("ALREADY_PLACED");
     }
     if (this._status !== OrderStatus.PENDING) {
-      throw new Error("Cannot modify an order that is not PENDING");
+      throw new OrderNotMutableError("NOT_PENDING");
     }
   }
 
@@ -138,7 +147,7 @@ export class Order extends AggregateRoot {
   ): void {
     this.assertMutable();
     if (quantity <= 0) {
-      throw new Error("Quantity must be positive");
+      throw new InvalidOrderItemError("Quantity must be positive");
     }
     const existing = this._items.find((item) => item.productId === productId);
     if (existing) {
@@ -171,7 +180,7 @@ export class Order extends AggregateRoot {
   }): void {
     this.assertMutable();
     if (pricing.discountAmount.getValue() > this.subtotal.getValue()) {
-      throw new Error("Discount cannot exceed order subtotal");
+      throw new InvalidDiscountError("Discount cannot exceed order subtotal");
     }
     this._tax = pricing.tax;
     this._shippingFee = pricing.shippingFee;
@@ -181,10 +190,10 @@ export class Order extends AggregateRoot {
 
   place(): void {
     if (this._placed) {
-      throw new Error("Order has already been placed");
+      throw new OrderAlreadyPlacedError();
     }
     if (this._items.length === 0) {
-      throw new Error("Cannot place an order with no items");
+      throw new EmptyOrderError();
     }
     this._placed = true;
     this.raise(
@@ -219,10 +228,10 @@ export class Order extends AggregateRoot {
 
   cancel(): void {
     if (this._status === OrderStatus.DELIVERED) {
-      throw new Error("Cannot cancel a delivered order");
+      throw new OrderNotCancellableError("DELIVERED");
     }
     if (this._status === OrderStatus.CANCELLED) {
-      throw new Error("Order already cancelled");
+      throw new OrderNotCancellableError("ALREADY_CANCELLED");
     }
     this.transitionStatus(OrderStatus.CANCELLED);
     this.raise(new OrderCancelledEvent(this.id, this.userId));
@@ -231,7 +240,7 @@ export class Order extends AggregateRoot {
   private transitionStatus(newStatus: OrderStatus): void {
     const oldStatus = this._status;
     if (!this.canTransitionTo(oldStatus, newStatus)) {
-      throw new Error(`Cannot transition from ${oldStatus} to ${newStatus}`);
+      throw new InvalidOrderTransitionError(oldStatus, newStatus);
     }
     this._status = newStatus;
     this.raise(

@@ -96,8 +96,9 @@ export class AdminProductService {
     if (!product) throw new NotFoundError("Product not found");
     const entity = Product.hydrate(product);
     entity.deactivate();
+    const result = await this.repository.setActive(id, false);
     await this.publishEvents(entity);
-    return this.repository.setActive(id, false);
+    return result;
   }
 
   async restore(id: string) {
@@ -105,8 +106,9 @@ export class AdminProductService {
     if (!product) throw new NotFoundError("Product not found");
     const entity = Product.hydrate(product);
     entity.activate();
+    const result = await this.repository.setActive(id, true);
     await this.publishEvents(entity);
-    return this.repository.setActive(id, true);
+    return result;
   }
 
   async uploadImage(productId: string, buffer: Buffer) {

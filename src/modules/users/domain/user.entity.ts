@@ -6,6 +6,13 @@ import {
   UserTwoFactorEnabledEvent,
   UserTwoFactorDisabledEvent,
 } from "@shared/domain/events/user-events";
+import {
+  UserAlreadyVerifiedError,
+  TwoFactorAlreadyEnabledError,
+  TwoFactorNotSetUpError,
+  TwoFactorNotEnabledError,
+  WeakPasswordError,
+} from "@shared/domain/errors/domain-error";
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -64,9 +71,7 @@ export class User extends AggregateRoot {
 
   assertPasswordPolicy(plainPassword: string): void {
     if (plainPassword.length < MIN_PASSWORD_LENGTH) {
-      throw new Error(
-        `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
-      );
+      throw new WeakPasswordError(MIN_PASSWORD_LENGTH);
     }
   }
 
@@ -75,25 +80,25 @@ export class User extends AggregateRoot {
   }
 
   verify(): void {
-    if (this._isVerified) throw new Error("User already verified");
+    if (this._isVerified) throw new UserAlreadyVerifiedError();
     this._isVerified = true;
     this.raise(new UserEmailVerifiedEvent(this.id));
   }
 
   startEnabling2FA(secret: string): void {
-    if (this._is2FAEnabled) throw new Error("2FA already enabled");
+    if (this._is2FAEnabled) throw new TwoFactorAlreadyEnabledError();
     this._totpSecret = secret;
   }
 
   confirm2FA(): void {
-    if (!this._totpSecret) throw new Error("2FA not set up");
-    if (this._is2FAEnabled) throw new Error("2FA already enabled");
+    if (!this._totpSecret) throw new TwoFactorNotSetUpError();
+    if (this._is2FAEnabled) throw new TwoFactorAlreadyEnabledError();
     this._is2FAEnabled = true;
     this.raise(new UserTwoFactorEnabledEvent(this.id));
   }
 
   disable2FA(): void {
-    if (!this._is2FAEnabled) throw new Error("2FA is not enabled");
+    if (!this._is2FAEnabled) throw new TwoFactorNotEnabledError();
     this._is2FAEnabled = false;
     this._totpSecret = null;
     this.raise(new UserTwoFactorDisabledEvent(this.id));

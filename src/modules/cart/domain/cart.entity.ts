@@ -5,6 +5,10 @@ import {
   CartClearedEvent,
 } from "@shared/domain/events/cart-events";
 import { AggregateRoot } from "@shared/domain/aggregate-root";
+import {
+  InvalidCartQuantityError,
+  CartItemNotFoundError,
+} from "@shared/domain/errors/domain-error";
 
 export class CartItem {
   constructor(
@@ -19,14 +23,16 @@ export class CartItem {
   }
 
   increase(amount: number): void {
-    if (amount <= 0) throw new Error("Amount must be positive");
+    if (amount <= 0)
+      throw new InvalidCartQuantityError("Amount must be positive");
     this.quantity += amount;
   }
 
   decrease(amount: number): void {
-    if (amount <= 0) throw new Error("Amount must be positive");
+    if (amount <= 0)
+      throw new InvalidCartQuantityError("Amount must be positive");
     if (this.quantity - amount < 0)
-      throw new Error("Quantity cannot be negative");
+      throw new InvalidCartQuantityError("Quantity cannot be negative");
     this.quantity -= amount;
   }
 }
@@ -63,7 +69,8 @@ export class Cart extends AggregateRoot {
     unitPrice: Money,
     quantity: number,
   ): void {
-    if (quantity <= 0) throw new Error("Quantity must be positive");
+    if (quantity <= 0)
+      throw new InvalidCartQuantityError("Quantity must be positive");
     if (this._items.has(productId)) {
       const existing = this._items.get(productId)!;
       existing.increase(quantity);
@@ -79,9 +86,10 @@ export class Cart extends AggregateRoot {
   }
 
   updateItemQuantity(productId: string, quantity: number): void {
-    if (quantity < 0) throw new Error("Quantity cannot be negative");
+    if (quantity < 0)
+      throw new InvalidCartQuantityError("Quantity cannot be negative");
     if (!this._items.has(productId)) {
-      throw new Error(`Item ${productId} not found in cart`);
+      throw new CartItemNotFoundError(productId);
     }
     if (quantity === 0) {
       this.removeItem(productId);

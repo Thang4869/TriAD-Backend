@@ -1,6 +1,13 @@
 import { Money } from "@shared/value-objects/money";
 import { AggregateRoot } from "@shared/domain/aggregate-root";
 import {
+  InvalidPriceError,
+  InsufficientStockError,
+  InvalidStockQuantityError,
+  ProductAlreadyActiveError,
+  ProductAlreadyInactiveError,
+} from "@shared/domain/errors/domain-error";
+import {
   ProductStockDepletedEvent,
   ProductRestockedEvent,
   ProductPriceChangedEvent,
@@ -41,7 +48,8 @@ export class Product extends AggregateRoot {
   }
 
   changePrice(newPrice: Money): void {
-    if (newPrice.getValue() < 0) throw new Error("Price cannot be negative");
+    if (newPrice.getValue() < 0)
+      throw new InvalidPriceError("Price cannot be negative");
     if (newPrice.getValue() === this._price.getValue()) return;
     const oldPrice = this._price.getValue();
     this._price = newPrice;
@@ -51,9 +59,10 @@ export class Product extends AggregateRoot {
   }
 
   reduceStock(quantity: number): void {
-    if (quantity <= 0) throw new Error("Quantity must be positive");
+    if (quantity <= 0)
+      throw new InvalidStockQuantityError("Quantity must be positive");
     if (this._stock < quantity)
-      throw new Error(`Insufficient stock. Available: ${this._stock}`);
+      throw new InsufficientStockError(this._stock, quantity);
     this._stock -= quantity;
     if (this._stock === 0) {
       this.raise(new ProductStockDepletedEvent(this.id, this.name));
@@ -61,19 +70,20 @@ export class Product extends AggregateRoot {
   }
 
   increaseStock(quantity: number): void {
-    if (quantity <= 0) throw new Error("Quantity must be positive");
+    if (quantity <= 0)
+      throw new InvalidStockQuantityError("Quantity must be positive");
     this._stock += quantity;
     this.raise(new ProductRestockedEvent(this.id, quantity, this._stock));
   }
 
   activate(): void {
-    if (this._isActive) throw new Error("Product already active");
+    if (this._isActive) throw new ProductAlreadyActiveError();
     this._isActive = true;
     this.raise(new ProductActivatedEvent(this.id));
   }
 
   deactivate(): void {
-    if (!this._isActive) throw new Error("Product already inactive");
+    if (!this._isActive) throw new ProductAlreadyInactiveError();
     this._isActive = false;
     this.raise(new ProductDeactivatedEvent(this.id));
   }

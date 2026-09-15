@@ -42,6 +42,13 @@ export class EventBus {
     return EventBus.instance;
   }
 
+  /**
+   * @param handlerName Định danh ỔN ĐỊNH của handler (không đổi giữa các lần
+   * deploy) — dùng làm khóa idempotency cùng với eventId. KHÔNG dùng
+   * `fn.name` của một arrow function/bound method vì có thể bị minify hoặc
+   * đổi tên khi refactor; hãy truyền một chuỗi literal rõ ràng, ví dụ
+   * `"OrderPlacedHandler"`.
+   */
   subscribe<T extends DomainEvent>(
     eventName: string,
     handlerName: string,

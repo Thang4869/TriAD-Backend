@@ -52,8 +52,8 @@ export class AuthService {
     });
 
     const user = UserEntity.registered(toEntityData(createdUser));
-    await this.publishEvents(user);
     await this.repository.createCartForUser(user.id);
+    await this.publishEvents(user);
     await this.sendVerificationEmail(createdUser);
 
     return {
@@ -79,11 +79,11 @@ export class AuthService {
 
     const user = UserEntity.hydrate(toEntityData(foundUser));
     user.verify();
-    await this.publishEvents(user);
 
     const updatedUser = await this.repository.updateUser(user.id, {
       isVerified: true,
     });
+    await this.publishEvents(user);
     return this.tokenService.generateTokens(updatedUser);
   }
 

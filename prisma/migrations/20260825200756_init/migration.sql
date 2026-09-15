@@ -268,3 +268,31 @@ UPDATE "refresh_tokens" SET "familyId" = gen_random_uuid()::text WHERE "familyId
 
 -- Sau đó đặt NOT NULL
 ALTER TABLE "refresh_tokens" ALTER COLUMN "familyId" SET NOT NULL;
+
+ALTER TABLE "outbox_events"
+  ADD COLUMN "lockedAt" TIMESTAMP(3),
+  ADD COLUMN "deadLetteredAt" TIMESTAMP(3),
+  ADD COLUMN "lastError" TEXT;
+
+CREATE INDEX "outbox_events_lockedAt_idx" ON "outbox_events" ("lockedAt");
+CREATE INDEX "outbox_events_deadLetteredAt_idx" ON "outbox_events" ("deadLetteredAt");
+
+-- 2) Idempotency per-handler: một event có thể có nhiều handler đăng ký;
+-- bảng này đảm bảo mỗi (event, handler) chỉ tính là "đã xử lý" một lần dù
+-- OutboxRelay có retry toàn bộ event bao nhiêu lần đi nữa (ví dụ handler A
+-- thành công, handler B lỗi -> lần retry kế tiếp chỉ chạy lại B).
+CREATE TABLE "outbox_handler_log" (
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid()::text,
+    "outboxEventId" TEXT NOT NULL,
+    "handlerName" TEXT NOT NULL,
+    "status" TEXT NOT NULL,
+    "error" TEXT,
+    "attemptedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "outbox_handler_log_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "outbox_handler_log_outboxEventId_fkey" FOREIGN KEY ("outboxEventId")
+        REFERENCES "outbox_events"("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX "outbox_handler_log_event_handler_key"
+  ON "outbox_handler_log" ("outboxEventId", "handlerName");

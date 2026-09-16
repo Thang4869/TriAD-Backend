@@ -123,11 +123,12 @@ export class Order extends AggregateRoot {
   }
 
   get total(): Money {
-    const raw = this.subtotal
-      .add(this._tax)
-      .add(this._shippingFee)
-      .subtract(this._discountAmount);
-    return new Money(Math.max(0, raw.getValue()));
+    const raw =
+      this.subtotal.getValue() +
+      this._tax.getValue() +
+      this._shippingFee.getValue() -
+      this._discountAmount.getValue();
+    return new Money(Math.max(0, raw));
   }
 
   private assertMutable(): void {

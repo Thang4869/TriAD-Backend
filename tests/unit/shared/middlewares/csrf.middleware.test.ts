@@ -8,13 +8,17 @@ import {
 } from "@shared/middlewares/csrf.middleware";
 import { ForbiddenError } from "@shared/utils/errors";
 
-const configMock = { isProduction: false };
+// vi.mock() được Vitest hoist lên ĐẦU file, TRƯỚC khi `const configMock = ...` chạy.
+// vi.hoisted() đảm bảo object này tồn tại sẵn ngay khi factory được gọi (fix TDZ).
+const { configMock } = vi.hoisted(() => ({
+  configMock: { isProduction: false },
+}));
 
 vi.mock("@config", () => ({
   default: configMock,
-  get isProduction() {
-    return configMock.isProduction;
-  },
+  // Cung cấp luôn named export `config` cho mọi consumer dùng
+  // `import { config } from "@config"` (ví dụ auth.routes.ts, app.ts).
+  config: configMock,
 }));
 
 function run(req: Partial<Request>): NextFunction {

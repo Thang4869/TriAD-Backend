@@ -17,19 +17,8 @@ vi.mock("@core/redis/client", () => ({
   default: { exists: vi.fn() },
 }));
 
-vi.mock("jsonwebtoken", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("jsonwebtoken")>();
-  const mocked = {
-    ...actual,
-    verify: vi.fn(),
-  };
-  return {
-    ...mocked,
-    default: mocked, // middleware dùng `import jwt from "jsonwebtoken"` → cần default
-  };
-});
+const jwtVerifySpy = vi.spyOn(jwt, "verify");
 
-const mockedJwt = vi.mocked(jwt);
 const mockedRedis = vi.mocked(redis);
 const mockedPrisma = prisma as unknown as {
   user: {
@@ -55,9 +44,10 @@ function createReq(overrides: Partial<Request> = {}): Request {
 describe("authMiddleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    jwtVerifySpy.mockReset();
     process.env.JWT_ACCESS_SECRET = "test-secret";
     mockedRedis.exists.mockResolvedValue(0 as never);
-    mockedJwt.verify.mockReturnValue({
+    jwtVerifySpy.mockReturnValue({
       sub: "user-1",
       email: "a@b.com",
       role: "USER",
@@ -71,7 +61,7 @@ describe("authMiddleware", () => {
 
     await authMiddleware(req, {} as Response, next);
 
-    expect(mockedJwt.verify).toHaveBeenCalledWith("valid.token", "test-secret");
+    expect(jwtVerifySpy).toHaveBeenCalledWith("valid.token", "test-secret");
     expect(req.user).toEqual({
       id: "user-1",
       email: "a@b.com",
@@ -86,10 +76,7 @@ describe("authMiddleware", () => {
 
     await authMiddleware(req, {} as Response, next);
 
-    expect(mockedJwt.verify).toHaveBeenCalledWith(
-      "cookie.token",
-      "test-secret",
-    );
+    expect(jwtVerifySpy).toHaveBeenCalledWith("cookie.token", "test-secret");
     expect(next).toHaveBeenCalledWith();
   });
 
@@ -101,10 +88,7 @@ describe("authMiddleware", () => {
 
     await authMiddleware(req, {} as Response, vi.fn());
 
-    expect(mockedJwt.verify).toHaveBeenCalledWith(
-      "cookie.token",
-      "test-secret",
-    );
+    expect(jwtVerifySpy).toHaveBeenCalledWith("cookie.token", "test-secret");
   });
 
   it("không có token nào → UnauthorizedError 'No token provided'", async () => {
@@ -131,14 +115,14 @@ describe("authMiddleware", () => {
     expect(mockedRedis.exists).toHaveBeenCalledWith(
       "jwt:blacklist:revoked.token",
     );
-    expect(mockedJwt.verify).not.toHaveBeenCalled();
+    expect(jwtVerifySpy).not.toHaveBeenCalled();
     const error = vi.mocked(next).mock
       .calls[0][0] as unknown as UnauthorizedError;
     expect(error.message).toBe("Token revoked");
   });
 
   it("token sai chữ ký (JsonWebTokenError) được đổi thành 'Invalid token'", async () => {
-    mockedJwt.verify.mockImplementation(() => {
+    jwtVerifySpy.mockImplementation(() => {
       throw new jwt.JsonWebTokenError("invalid signature");
     });
     const next = vi.fn() as NextFunction;
@@ -204,9 +188,10 @@ describe("authMiddleware", () => {
 describe("optionalAuthMiddleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    jwtVerifySpy.mockReset();
     process.env.JWT_ACCESS_SECRET = "test-secret";
     mockedRedis.exists.mockResolvedValue(0 as never);
-    mockedJwt.verify.mockReturnValue({ sub: "user-1" } as never);
+    jwtVerifySpy.mockReturnValue({ sub: "user-1" } as never);
     mockedPrisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       email: "a@b.com",
@@ -231,12 +216,12 @@ describe("optionalAuthMiddleware", () => {
     await optionalAuthMiddleware(req, {} as Response, next);
 
     expect(req.user).toBeUndefined();
-    expect(mockedJwt.verify).not.toHaveBeenCalled();
+    expect(jwtVerifySpy).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith();
   });
 
   it("token hỏng không làm fail request — nuốt lỗi và đi tiếp như guest", async () => {
-    mockedJwt.verify.mockImplementation(() => {
+    jwtVerifySpy.mockImplementation(() => {
       throw new jwt.JsonWebTokenError("bad");
     });
     const req = createReq({ headers: { authorization: "Bearer bad.token" } });
@@ -256,7 +241,7 @@ describe("optionalAuthMiddleware", () => {
 
     await optionalAuthMiddleware(req, {} as Response, vi.fn());
 
-    expect(mockedJwt.verify).not.toHaveBeenCalled();
+    expect(jwtVerifySpy).not.toHaveBeenCalled();
     expect(req.user).toBeUndefined();
   });
 

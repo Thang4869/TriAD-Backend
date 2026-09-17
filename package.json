@@ -78,6 +78,8 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^10.13.2",
+    "@testcontainers/redis": "^10.13.2",
     "@types/async-retry": "^1.4.9",
     "@types/body-parser": "^1.19.6",
     "@types/compression": "^1.8.1",
@@ -97,8 +99,6 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
-    "@testcontainers/postgresql": "^10.13.2",
-    "@testcontainers/redis": "^10.13.2",
     "@vitest/coverage-v8": "^4.1.11",
     "@vitest/ui": "^4.1.11",
     "cross-env": "^10.1.0",
@@ -113,7 +113,7 @@
     "tsc-alias": "^1.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.3.3",
-    "vite-tsconfig-paths": "^5.1.4",
+    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.11"
   },
   "_moduleAliases": {

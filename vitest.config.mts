@@ -1,21 +1,9 @@
 import { defineConfig } from "vitest/config";
+import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
-  resolve: {
-    tsconfigPaths: true,
-  },
+  plugins: [tsconfigPaths()],
   test: {
-    globals: true,
-    environment: "node",
-    root: "./",
-    include: ["tests/**/*.test.ts"],
-    setupFiles: ["./tests/setup.ts"],
-    coverage: {
-      provider: "v8",
-      reporter: ["text", "html"],
-      exclude: ["node_modules/", "dist/", "tests/", "**/*.d.ts"],
-    },
-    pool: "forks",
-    maxWorkers: 1,
+    projects: ["./vitest.unit.config.mts", "./vitest.integration.config.mts"],
   },
 });

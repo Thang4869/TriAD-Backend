@@ -2,8 +2,8 @@ import { defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
-  plugins: [tsconfigPaths()],
   test: {
     projects: ["./vitest.unit.config.mts", "./vitest.integration.config.mts"],
   },
+  plugins: [tsconfigPaths()],
 });

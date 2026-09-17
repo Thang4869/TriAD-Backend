@@ -11,9 +11,12 @@ export default async function setup({ provide }: TestProject) {
     .withDatabase("triad_test")
     .withUsername("postgres")
     .withPassword("postgres")
+    .withReuse()
     .start();
 
-  redisContainer = await new RedisContainer("redis:7-alpine").start();
+  redisContainer = await new RedisContainer("redis:7-alpine")
+    .withReuse()
+    .start();
 
   const databaseUrl = postgresContainer.getConnectionUri();
   const redisUrl = `redis://${redisContainer.getHost()}:${redisContainer.getMappedPort(6379)}`;

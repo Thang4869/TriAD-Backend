@@ -1,11 +1,11 @@
 import { defineConfig } from "vitest/config";
-import tsconfigPaths from "vite-tsconfig-paths";
 import os from "node:os";
+import tsconfigPaths from "vite-tsconfig-paths";
 
 const CPU_COUNT = os.cpus().length;
 
 export default defineConfig({
-  plugins: [tsconfigPaths()],
+  plugins: [tsconfigPaths()], 
   test: {
     name: "unit",
     include: ["tests/unit/**/*.test.ts"],

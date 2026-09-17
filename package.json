@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc-alias",
     "start": "node -r tsconfig-paths/register dist/server.js",
-    "dev": "cross-env TS_NODE_BASEURL=./ kill-port 5000 && cross-env TS_NODE_BASEURL=./ nodemon --exec ts-node -r tsconfig-paths/register src/server.ts",
+    "dev": "cross-env TS_NODE_BASEURL=./ kill-port 5000 && cross-env TS_NODE_BASEURL=./ TS_NODE_FILES=true nodemon --exec ts-node -r tsconfig-paths/register src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

@@ -45,4 +45,24 @@ describe("validation middleware", () => {
       "String must contain at least 3 character(s)",
     );
   });
+
+  it("should forward non-ZodError errors to next as-is", () => {
+    const unexpectedError = new Error("schema parse blew up unexpectedly");
+    const brokenSchema = {
+      parse: vi.fn(() => {
+        throw unexpectedError;
+      }),
+    } as unknown as z.ZodSchema;
+
+    const req = {
+      body: {},
+      query: {},
+      params: {},
+    } as unknown as Request;
+    const res = {} as Response;
+    const next = vi.fn();
+
+    validate(brokenSchema)(req, res, next);
+    expect(next).toHaveBeenCalledWith(unexpectedError);
+  });
 });

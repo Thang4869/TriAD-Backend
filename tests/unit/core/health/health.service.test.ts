@@ -50,6 +50,15 @@ describe("HealthService", () => {
     expect(result.error).toContain("Timed out after");
   });
 
+  it("should report database down with 'Unknown error' when a non-Error value is thrown", async () => {
+    vi.mocked(prisma.$queryRaw).mockImplementationOnce(
+      () => Promise.reject("just a string, not an Error") as any,
+    );
+    const result = await service.checkDatabase();
+    expect(result.status).toBe("down");
+    expect(result.error).toBe("Unknown error");
+  });
+
   it("should check redis successfully", async () => {
     vi.mocked(redis.ping).mockResolvedValue("PONG");
     const result = await service.checkRedis();
@@ -64,9 +73,27 @@ describe("HealthService", () => {
     expect(result.status).toBe("down");
   });
 
+  it("should mark redis down when ping responds with an unexpected value (not PONG)", async () => {
+    vi.mocked(redis.ping).mockResolvedValueOnce("WEIRD" as any);
+    const result = await service.checkRedis();
+    expect(result.status).toBe("down");
+    expect(result.error).toContain("Unexpected Redis ping response");
+  });
+
   it("should check queues successfully", async () => {
     const result = await service.checkQueues();
     expect(result.status).toBe("up");
+  });
+
+  it("should mark queues down when a queue client connection rejects", async () => {
+    const { imageQueue } = await import("@core/queue/bull");
+    const originalClient = imageQueue.client;
+    (imageQueue as any).client = Promise.reject(new Error("queue unreachable"));
+
+    const result = await service.checkQueues();
+    expect(result.status).toBe("down");
+
+    (imageQueue as any).client = originalClient;
   });
 
   it("should return overall readiness", async () => {

@@ -6,6 +6,8 @@ import {
 } from "@shared/middlewares/rate-limit.middleware";
 import { Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
+import { RedisStore } from "rate-limit-redis";
+import redis from "@core/redis/client";
 
 vi.mock("express-rate-limit", () => ({
   default: vi.fn().mockImplementation((_options) => {
@@ -15,6 +17,12 @@ vi.mock("express-rate-limit", () => ({
 
 vi.mock("rate-limit-redis", () => ({
   RedisStore: vi.fn(),
+}));
+
+vi.mock("@core/redis/client", () => ({
+  default: {
+    call: vi.fn(),
+  },
 }));
 
 describe("rate-limit middleware", () => {
@@ -83,5 +91,82 @@ describe("rate-limit middleware", () => {
       (call) => call?.[0]?.windowMs === 60 * 60 * 1000 && call?.[0]?.max === 10,
     );
     expect(found).toBe(true);
+  });
+
+  it("should forward commands to redis via the RedisStore sendCommand bridge", async () => {
+    rateLimiter();
+    const storeOptions = vi.mocked(RedisStore).mock.calls.at(-1)?.[0] as
+      { sendCommand: (...args: string[]) => Promise<unknown> } | undefined;
+    expect(storeOptions?.sendCommand).toBeDefined();
+
+    vi.mocked(redis.call).mockResolvedValueOnce("OK");
+    const result = await storeOptions?.sendCommand("INCR", "some-key");
+
+    expect(redis.call).toHaveBeenCalledWith("INCR", "some-key");
+    expect(result).toBe("OK");
+  });
+
+  it("should use the provided custom keyGenerator instead of the default", () => {
+    const customKeyGenerator = vi.fn().mockReturnValue("custom-key");
+    rateLimiter({ keyGenerator: customKeyGenerator });
+    const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
+
+    expect(options?.keyGenerator).toBe(customKeyGenerator);
+  });
+
+  describe("default keyGenerator", () => {
+    it("returns req.ip when present", () => {
+      rateLimiter();
+      const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
+      const keyGenFn = options?.keyGenerator as (req: Request) => string;
+
+      const req = { ip: "10.0.0.1", headers: {} } as unknown as Request;
+      expect(keyGenFn(req)).toBe("10.0.0.1");
+    });
+
+    it("falls back to x-forwarded-for string header when req.ip is missing", () => {
+      rateLimiter();
+      const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
+      const keyGenFn = options?.keyGenerator as (req: Request) => string;
+
+      const req = {
+        ip: undefined,
+        headers: { "x-forwarded-for": "203.0.113.5" },
+      } as unknown as Request;
+      expect(keyGenFn(req)).toBe("203.0.113.5");
+    });
+
+    it("uses the first entry when x-forwarded-for is an array", () => {
+      rateLimiter();
+      const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
+      const keyGenFn = options?.keyGenerator as (req: Request) => string;
+
+      const req = {
+        ip: undefined,
+        headers: { "x-forwarded-for": ["203.0.113.5", "203.0.113.6"] },
+      } as unknown as Request;
+      expect(keyGenFn(req)).toBe("203.0.113.5");
+    });
+
+    it("returns 'unknown' when x-forwarded-for array is empty", () => {
+      rateLimiter();
+      const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
+      const keyGenFn = options?.keyGenerator as (req: Request) => string;
+
+      const req = {
+        ip: undefined,
+        headers: { "x-forwarded-for": [] },
+      } as unknown as Request;
+      expect(keyGenFn(req)).toBe("unknown");
+    });
+
+    it("returns 'unknown' when neither req.ip nor x-forwarded-for exist", () => {
+      rateLimiter();
+      const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
+      const keyGenFn = options?.keyGenerator as (req: Request) => string;
+
+      const req = { ip: undefined, headers: {} } as unknown as Request;
+      expect(keyGenFn(req)).toBe("unknown");
+    });
   });
 });

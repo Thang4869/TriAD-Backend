@@ -70,4 +70,26 @@ describe("idempotencyMiddleware", () => {
       JSON.stringify({ status: 200, data: { success: true } }),
     );
   });
+
+  it("should NOT cache the response when statusCode is outside 2xx", async () => {
+    req.headers = { "idempotency-key": "key3" };
+    (res as any).statusCode = 404;
+    const middleware = idempotencyMiddleware();
+    await middleware(req as Request, res as Response, next);
+
+    (res as any).json({ error: "not found" });
+    expect(redis.setex).not.toHaveBeenCalled();
+  });
+
+  it("should silently ignore errors when caching the response fails", async () => {
+    req.headers = { "idempotency-key": "key4" };
+    vi.mocked(redis.setex).mockRejectedValueOnce(new Error("redis down"));
+    const middleware = idempotencyMiddleware();
+    await middleware(req as Request, res as Response, next);
+
+    expect(() => (res as any).json({ success: true })).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(redis.setex).toHaveBeenCalled();
+  });
 });

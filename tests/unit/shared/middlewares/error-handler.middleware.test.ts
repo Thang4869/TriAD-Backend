@@ -8,6 +8,10 @@ import {
   notFoundHandler,
 } from "@shared/middlewares/error-handler.middleware";
 import { logger } from "@core/logger/winston";
+import {
+  EmptyOrderError,
+  CartItemNotFoundError,
+} from "@shared/domain/errors/domain-error";
 
 vi.mock("@core/logger/winston", () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
@@ -32,6 +36,36 @@ function createMockRequest(overrides: Partial<Request> = {}): Request {
 
 describe("errorHandler", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("trả status theo DOMAIN_ERROR_STATUS_MAP và kèm code, details cho DomainError", () => {
+    const err = new EmptyOrderError();
+    const res = createMockResponse();
+
+    errorHandler(err, createMockRequest(), res, vi.fn());
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: "Cannot place an order with no items",
+        code: "ORDER.EMPTY",
+      }),
+    );
+  });
+
+  it("trả details từ context của DomainError và status map riêng cho mã lỗi (404)", () => {
+    const err = new CartItemNotFoundError("prod-1");
+    const res = createMockResponse();
+
+    errorHandler(err, createMockRequest(), res, vi.fn());
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "CART.ITEM_NOT_FOUND",
+        details: { productId: "prod-1" },
+      }),
+    );
+  });
 
   it("trả 409 cho Prisma P2002 (unique constraint violation)", () => {
     const err = new Prisma.PrismaClientKnownRequestError("Unique constraint", {

@@ -57,6 +57,15 @@ describe("requestLogger middleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
+  it("should return the body as-is when it is not an object (e.g. empty/undefined)", () => {
+    req.body = undefined;
+    requestLogger(req as Request, res as Response, next);
+    expect(logger.info).toHaveBeenCalledWith(
+      "Incoming POST /api/login",
+      expect.objectContaining({ body: undefined }),
+    );
+  });
+
   it("should log response duration on end", () => {
     requestLogger(req as Request, res as Response, next);
     res.end?.();

@@ -46,8 +46,6 @@ describe("withCircuitBreaker", () => {
       resetTimeout: 10_000,
     });
 
-    // Đủ số lần lỗi để opossum mở mạch (mặc định cần >= 10 request trong volume window,
-    // nhưng lỗi liên tiếp với threshold 1% sẽ mở ngay khi đủ mẫu).
     for (let i = 0; i < 12; i++) {
       await wrapped().catch(() => undefined);
     }
@@ -55,7 +53,6 @@ describe("withCircuitBreaker", () => {
     const callsBefore = fn.mock.calls.length;
     await wrapped().catch(() => undefined);
 
-    // Khi mạch đã mở, hàm gốc không còn được gọi nữa.
     expect(fn.mock.calls.length).toBe(callsBefore);
     expect(logger.warn).toHaveBeenCalledWith(
       "Circuit breaker opened for breaker-open",
@@ -69,6 +66,37 @@ describe("withCircuitBreaker", () => {
     );
 
     await expect(wrapped()).rejects.toThrow();
+  });
+
+  it("chuyển half-open rồi close khi resetTimeout hết hạn và request kế tiếp thành công", async () => {
+    let shouldFail = true;
+    const fn = vi.fn(async () => {
+      if (shouldFail) throw new Error("still failing");
+      return "recovered";
+    });
+    const wrapped = withCircuitBreaker(fn, {
+      name: "half-open-flow",
+      errorThresholdPercentage: 1,
+      resetTimeout: 50,
+    });
+
+    for (let i = 0; i < 12; i++) {
+      await wrapped().catch(() => undefined);
+    }
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Circuit breaker opened for half-open-flow",
+    );
+
+    shouldFail = false;
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    await expect(wrapped()).resolves.toBe("recovered");
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Circuit breaker half-open for half-open-flow",
+    );
+    expect(logger.info).toHaveBeenCalledWith(
+      "Circuit breaker closed for half-open-flow",
+    );
   });
 });
 

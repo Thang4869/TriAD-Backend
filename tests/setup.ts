@@ -1,54 +1,70 @@
-import { beforeAll, afterAll, afterEach } from "vitest";
-import dotenv from "dotenv";
+import { beforeAll, afterAll, afterEach, inject } from "vitest";
+import { execSync } from "node:child_process";
 
-dotenv.config({ path: ".env.test" });
+const baseDatabaseUrl = inject("databaseUrl");
+const redisUrl = inject("redisUrl");
 
-import prisma from "../src/core/database/prisma";
-import redis from "../src/core/redis/client";
+// Mỗi worker dùng 1 schema riêng, tránh TRUNCATE chéo nhau
+const workerId = process.env.VITEST_WORKER_ID ?? "1";
+const schema = `test_w${workerId}`;
 
+// DATABASE_URL phải có ?schema=<schema> để Prisma dùng đúng schema
+const url = new URL(baseDatabaseUrl);
+url.searchParams.set("schema", schema);
+process.env.DATABASE_URL = url.toString();
+process.env.REDIS_URL = redisUrl;
+process.env.QUEUE_REDIS_URL = redisUrl;
+
+// Tạo schema trước khi Prisma kết nối
 beforeAll(async () => {
-  await prisma.$connect();
-  await redis.ping();
+  const { PrismaClient } = await import("@prisma/client");
+  const adminClient = new PrismaClient({
+    datasources: { db: { url: baseDatabaseUrl } },
+  });
+  await adminClient.$executeRawUnsafe(
+    `CREATE SCHEMA IF NOT EXISTS "${schema}"`,
+  );
+  await adminClient.$disconnect();
+
+  // Migrate schema mới bằng prisma db push (nhanh hơn migrate deploy)
+  execSync(`npx prisma db push --skip-generate --accept-data-loss`, {
+    env: { ...process.env, DATABASE_URL: url.toString() },
+    stdio: "inherit",
+  });
 });
+
+import prisma from "@core/database/prisma";
+import redis from "@core/redis/client";
 
 afterAll(async () => {
   await prisma.$disconnect();
   await redis.quit();
   try {
-    const { emailWorker, imageWorker } = await import("../src/core/queue/bull");
+    const { emailWorker, imageWorker } = await import("@core/queue/bull");
     await emailWorker.close();
     await imageWorker.close();
   } catch {
-    // If the workers haven't been initialized, we can ignore the error.
+    // ignore
   }
 });
 
 afterEach(async () => {
-  await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`DELETE FROM "order_items";`;
-    await tx.$executeRaw`DELETE FROM "orders";`;
-    await tx.$executeRaw`DELETE FROM "cart_items";`;
-    await tx.$executeRaw`DELETE FROM "carts";`;
-    await tx.$executeRaw`DELETE FROM "reviews";`;
-    await tx.$executeRaw`DELETE FROM "notifications";`;
-    await tx.$executeRaw`DELETE FROM "refresh_tokens";`;
-    await tx.$executeRaw`DELETE FROM "users";`;
-    await tx.$executeRaw`DELETE FROM "products";`;
-  });
-
-  const tables = [
-    "wishlist_items",
-    "cart_items",
-    "carts",
-    "order_items",
-    "orders",
-    "reviews",
-    "notifications",
-    "refresh_tokens",
-    "users",
-    "products",
-  ];
-  for (const table of tables) {
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);
-  }
+  // Chỉ TRUNCATE schema của worker này, không đụng worker khác
+  await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE
+      "outbox_handler_log",
+      "outbox_events",
+      "wishlist_items",
+      "cart_items",
+      "carts",
+      "order_items",
+      "orders",
+      "reviews",
+      "notifications",
+      "refresh_tokens",
+      "discounts",
+      "users",
+      "products"
+    RESTART IDENTITY CASCADE;
+  `);
 });

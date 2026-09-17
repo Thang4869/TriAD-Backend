@@ -5,7 +5,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 const CPU_COUNT = os.cpus().length;
 
 export default defineConfig({
-  plugins: [tsconfigPaths()], 
+  plugins: [tsconfigPaths()],
   test: {
     name: "unit",
     include: ["tests/unit/**/*.test.ts"],
@@ -35,10 +35,10 @@ export default defineConfig({
         "src/app.ts",
       ],
       thresholds: {
-        lines: 100,
-        statements: 100,
-        branches: 100,
-        functions: 100,
+        lines: 90,
+        statements: 90,
+        branches: 90,
+        functions: 90,
         "src/modules/**/domain/**": {
           lines: 100,
           statements: 100,

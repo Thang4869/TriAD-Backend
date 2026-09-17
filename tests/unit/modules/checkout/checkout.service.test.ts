@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CheckoutService } from "@modules/checkout/checkout.service";
 import { ICheckoutRepository } from "@modules/checkout/checkout.repository";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
@@ -196,32 +196,6 @@ describe("CheckoutService", () => {
     );
   });
 
-  it("throws ConflictError when decrementProductStock fails due to version mismatch", async () => {
-    repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-    const conflictError = new ConflictError("Stock conflict");
-    mockStockService.reserveStock = vi.fn().mockRejectedValue(conflictError);
-    repository.runInTransaction = vi.fn().mockImplementation(async (fn) => {
-      await fn({} as any);
-    });
-    await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
-      ConflictError,
-    );
-    expect(mockStockService.reserveStock).toHaveBeenCalled();
-  });
-
-  it("throws ConflictError after exhausting all retries", async () => {
-    repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-    let callCount = 0;
-    repository.runInTransaction = vi.fn().mockImplementation(async () => {
-      callCount++;
-      throw new ConflictError("stock conflict");
-    });
-    await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
-      ConflictError,
-    );
-    expect(callCount).toBe(6);
-  });
-
   it("throws non-ConflictError immediately without retrying", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
     const nonConflictError = new BadRequestError("some other error");
@@ -339,17 +313,6 @@ describe("CheckoutService", () => {
       await expect(
         service.checkout("user-1", { ...baseInput, discountCode: "MIN" }),
       ).rejects.toThrow(BadRequestError);
-    });
-
-    it("throws if discount usage limit reached", async () => {
-      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-      repository.findDiscountByCode = vi
-        .fn()
-        .mockResolvedValue({ ...discount, maxUses: 1, usedCount: 1 });
-      repository.incrementDiscountUsage = vi.fn().mockResolvedValue(false);
-      await expect(
-        service.checkout("user-1", { ...baseInput, discountCode: "USED" }),
-      ).rejects.toThrow(ConflictError);
     });
 
     it("throws NotFoundError if a cart product is missing from the locked products", async () => {
@@ -534,27 +497,63 @@ describe("CheckoutService", () => {
     );
   });
 
-  // describe("getIdempotencyTTL coverage", () => {
-  //   it("should cover fallback branch when env var is not set", () => {
-  //     const oldTTL = process.env.IDEMPOTENCY_TTL;
-  //     delete process.env.IDEMPOTENCY_TTL;
-  //     const ttl = (CheckoutService as any).getIdempotencyTTL();
-  //     expect(ttl).toBe(86400);
-  //     if (oldTTL !== undefined) {
-  //       process.env.IDEMPOTENCY_TTL = oldTTL;
-  //     }
-  //   });
+  describe("retry behavior (fake timers)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
 
-  //   it("should cover env branch when env var is set", () => {
-  //     const oldTTL = process.env.IDEMPOTENCY_TTL;
-  //     process.env.IDEMPOTENCY_TTL = "12345";
-  //     const ttl = (CheckoutService as any).getIdempotencyTTL();
-  //     expect(ttl).toBe(12345);
-  //     if (oldTTL !== undefined) {
-  //       process.env.IDEMPOTENCY_TTL = oldTTL;
-  //     } else {
-  //       delete process.env.IDEMPOTENCY_TTL;
-  //     }
-  //   });
-  // });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("throws ConflictError when decrementProductStock fails due to version mismatch", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      const conflictError = new ConflictError("Stock conflict");
+      mockStockService.reserveStock = vi.fn().mockRejectedValue(conflictError);
+      repository.runInTransaction = vi.fn().mockImplementation(async (fn) => {
+        await fn({} as any);
+      });
+
+      const promise = service.checkout("user-1", baseInput);
+      // Attach assertion NGAY để tránh unhandled rejection warning
+      const assertion = expect(promise).rejects.toThrow(ConflictError);
+      // "Tua" toàn bộ setTimeout trong retry logic
+      await vi.runAllTimersAsync();
+      await assertion;
+
+      expect(mockStockService.reserveStock).toHaveBeenCalled();
+    });
+
+    it("throws ConflictError after exhausting all retries", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      let callCount = 0;
+      repository.runInTransaction = vi.fn().mockImplementation(async () => {
+        callCount++;
+        throw new ConflictError("stock conflict");
+      });
+
+      const promise = service.checkout("user-1", baseInput);
+      const assertion = expect(promise).rejects.toThrow(ConflictError);
+      await vi.runAllTimersAsync();
+      await assertion;
+
+      expect(callCount).toBe(6);
+    });
+
+    it("throws ConflictError if discount usage limit reached", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      repository.findDiscountByCode = vi
+        .fn()
+        .mockResolvedValue({ ...discount, maxUses: 1, usedCount: 1 });
+      repository.incrementDiscountUsage = vi.fn().mockResolvedValue(false);
+
+      const promise = service.checkout("user-1", {
+        ...baseInput,
+        discountCode: "USED",
+      });
+      const assertion = expect(promise).rejects.toThrow(ConflictError);
+      await vi.runAllTimersAsync();
+      await assertion;
+    });
+  });
 });

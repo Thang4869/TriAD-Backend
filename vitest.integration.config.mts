@@ -9,8 +9,8 @@ export default defineConfig({
     globalSetup: ["./tests/integration/global-setup.ts"],
     setupFiles: ["./tests/integration/setup.ts"],
 
-    fileParallelism: false,
     pool: "forks",
+    fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 60_000,
   },

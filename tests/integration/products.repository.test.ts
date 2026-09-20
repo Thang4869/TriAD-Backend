@@ -292,7 +292,7 @@ describe("PrismaProductsRepository (integration)", () => {
     expect(result).toBeNull();
   });
 
-  describe.skip("searchFullText", () => {
+  describe("searchFullText", () => {
     beforeEach(async () => {
       const suffix = Date.now();
       await prisma.product.createMany({

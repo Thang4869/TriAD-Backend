@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import prisma from "@core/database/prisma";
 import { PrismaCheckoutRepository } from "@modules/checkout/checkout.repository";
+import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
+import { Money } from "@shared/value-objects/money";
 
 vi.mock("@core/redis/client", () => ({
   default: { get: vi.fn(), setex: vi.fn() },
@@ -315,6 +317,63 @@ describe("PrismaCheckoutRepository (integration)", () => {
 
     expect(orderWithItems?.items).toHaveLength(1);
     expect(remainingCartItems).toBe(0);
+  });
+
+  it("saveNewOrder tạo order + orderItems + ghi domain event trong 1 lần gọi", async () => {
+    const order = OrderAggregate.create({
+      id: `order-${Date.now()}`,
+      userId,
+      orderNumber: `ORD-SAVE-${Date.now()}`,
+      customerName: "Nguyễn Văn A",
+      customerEmail: "a@test.com",
+      customerPhone: "0123456789",
+      customerAddress: "123 Đường ABC",
+      paymentMethod: "COD",
+    });
+    order.addItem(productId, "Checkout Product", 2, new Money(100));
+    order.place();
+
+    const idempotencyKey = `idem-save-${Date.now()}`;
+    const created = await repository.runInTransaction(async (tx) => {
+      return repository.saveNewOrder(tx, order, idempotencyKey);
+    });
+
+    expect(created.id).toBe(order.id);
+    expect(created.orderNumber).toBe(order.orderNumber);
+    expect(created.idempotencyKey).toBe(idempotencyKey);
+    expect(created.customerName).toBe("Nguyễn Văn A");
+    expect(created.subtotal).toBe(200);
+    expect(created.total).toBe(200);
+
+    const orderWithItems = await repository.findOrderWithItems(created.id);
+    expect(orderWithItems?.items).toHaveLength(1);
+    expect(orderWithItems?.items[0].productId).toBe(productId);
+    expect(orderWithItems?.items[0].quantity).toBe(2);
+    expect(orderWithItems?.items[0].price).toBe(100);
+    expect(orderWithItems?.items[0].total).toBe(200);
+  });
+
+  it("saveNewOrder cho phép notes/discountCode undefined và discountAmount = 0", async () => {
+    const order = OrderAggregate.create({
+      id: `order-nodiscount-${Date.now()}`,
+      userId,
+      orderNumber: `ORD-ND-${Date.now()}`,
+      customerName: "B",
+      customerEmail: "b@test.com",
+      customerPhone: "0987654321",
+      customerAddress: "456 Đường XYZ",
+      paymentMethod: "COD",
+    });
+    order.addItem(productId, "Checkout Product", 1, new Money(100));
+    order.place();
+
+    const created = await repository.runInTransaction(async (tx) =>
+      repository.saveNewOrder(tx, order, `idem-nd-${Date.now()}`),
+    );
+
+    expect(created.discountAmount).toBe(0);
+    expect(created.discountCode).toBeNull();
+    expect(created.notes).toBeNull();
   });
 
   it("findOrdersByUser/countOrdersByUser/findOrderByUserAndId chỉ trả order của đúng user", async () => {

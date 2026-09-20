@@ -6,11 +6,13 @@ import { OrderStatus } from "@prisma/client";
 describe("PrismaDashboardRepository (integration, real DB)", () => {
   const repository = new PrismaDashboardRepository();
   let userId: string;
+  let suffix: string;
 
   beforeEach(async () => {
+    suffix = `-${Date.now()}`;
     const user = await prisma.user.create({
       data: {
-        email: `dashboard-repo-${Date.now()}@test.com`,
+        email: `dashboard-repo-${Date.now()}@test${suffix}.com`,
         password: "hashed",
         firstName: "Dash",
         lastName: "Test",
@@ -49,7 +51,7 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
         shippingFee: 0,
         discountAmount: 0,
         paymentStatus: "PENDING",
-        idempotencyKey: "test-key-1",
+        idempotencyKey: `dash-top-${suffix}`,
       },
     });
     await prisma.order.create({
@@ -68,7 +70,7 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
         shippingFee: 0,
         discountAmount: 0,
         paymentStatus: "PENDING",
-        idempotencyKey: "test-key-2",
+        idempotencyKey: `dash-top-${suffix}-2`,
       },
     });
 
@@ -79,9 +81,8 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
   });
 
   it("getTotalRevenue() trả về 0 khi không có order nào trong khoảng thời gian", async () => {
-    const sinceDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const sinceDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const total = await repository.getTotalRevenue(sinceDate);
-
     expect(total).toBe(0);
   });
 
@@ -132,7 +133,8 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
     });
 
     const result = await repository.getLowStockProducts(10);
-
+    const own = result.filter((p) => p.name.startsWith("Low Stock"));
+    expect(own.map((p) => p.name)).toEqual(["Low Stock A", "Low Stock B"]);
     const names = result.map((p) => p.name);
     expect(names).toContain("Low Stock A");
     expect(names).toContain("Low Stock B");
@@ -164,7 +166,7 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
           shippingFee: 0,
           discountAmount: 0,
           paymentStatus: "PENDING",
-          idempotencyKey: `status-key-${Date.now()}-${i}`,
+          idempotencyKey: `dash-rev-${suffix}-${i}`,
         },
       });
     }
@@ -252,15 +254,15 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
           customerAddress: "addr",
           customerPhone: "0123456789",
           customerName: "Test",
-          customerEmail: "test@test.com",
+          customerEmail: `test${suffix}@test.com`,
           paymentMethod: "COD",
+          idempotencyKey: `dash-rev-${suffix}-${i}`,
           orderNumber: `ORD-${Date.now()}-${i}`,
           subtotal: 100 + i * 10,
           tax: 0,
           shippingFee: 0,
           discountAmount: 0,
           paymentStatus: "PENDING",
-          idempotencyKey: `key-${i}`,
           createdAt: date,
         },
       });
@@ -305,15 +307,15 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
         customerAddress: "addr",
         customerPhone: "0123456789",
         customerName: "Test",
-        customerEmail: "test@test.com",
+        customerEmail: `test${suffix}@test.com`,
         paymentMethod: "COD",
+        idempotencyKey: `dash-top-${suffix}-1`,
         orderNumber: `ORD-top-${Date.now()}`,
         subtotal: 300,
         tax: 0,
         shippingFee: 0,
         discountAmount: 0,
         paymentStatus: "PENDING",
-        idempotencyKey: `key-top`,
       },
     });
 

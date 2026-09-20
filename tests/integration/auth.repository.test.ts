@@ -148,5 +148,141 @@ describe("PrismaAuthRepository (integration)", () => {
       expect(remaining).toBe(0);
       expect(otherRemaining).toBe(1);
     });
+
+    it("findRefreshTokenByFamily trả về bản ghi mới nhất trong family theo userId", async () => {
+      const familyId = `family-${Date.now()}`;
+      const older = await repository.createRefreshToken(
+        `rt-old-${Date.now()}`,
+        userId,
+        familyId,
+        new Date(Date.now() + 100000),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const newer = await repository.createRefreshToken(
+        `rt-new-${Date.now()}`,
+        userId,
+        familyId,
+        new Date(Date.now() + 100000),
+      );
+
+      const found = await repository.findRefreshTokenByFamily(familyId, userId);
+
+      expect(found?.id).toBe(newer.id);
+      expect(found?.id).not.toBe(older.id);
+    });
+
+    it("findRefreshTokenByFamily trả về null nếu không có token nào trong family", async () => {
+      const found = await repository.findRefreshTokenByFamily(
+        `no-such-family-${Date.now()}`,
+        userId,
+      );
+
+      expect(found).toBeNull();
+    });
+
+    it("findRefreshTokenByToken trả về đúng bản ghi theo token, null nếu không có", async () => {
+      const token = `rt-by-token-${Date.now()}`;
+      const created = await repository.createRefreshToken(
+        token,
+        userId,
+        "family-id",
+        new Date(Date.now() + 100000),
+      );
+
+      await expect(
+        repository.findRefreshTokenByToken(token),
+      ).resolves.toMatchObject({ id: created.id });
+      await expect(
+        repository.findRefreshTokenByToken(`nonexistent-${Date.now()}`),
+      ).resolves.toBeNull();
+    });
+
+    it("findRefreshTokenByFamilyAndToken trả về đúng bản ghi khớp cả familyId lẫn token", async () => {
+      const familyId = `family-fat-${Date.now()}`;
+      const token = `rt-fat-${Date.now()}`;
+      const created = await repository.createRefreshToken(
+        token,
+        userId,
+        familyId,
+        new Date(Date.now() + 100000),
+      );
+
+      await expect(
+        repository.findRefreshTokenByFamilyAndToken(familyId, token),
+      ).resolves.toMatchObject({ id: created.id });
+      await expect(
+        repository.findRefreshTokenByFamilyAndToken("wrong-family", token),
+      ).resolves.toBeNull();
+    });
+
+    it("findActiveRefreshTokenByFamily chỉ trả về token chưa revoke và chưa hết hạn", async () => {
+      const familyId = `family-active-${Date.now()}`;
+      const created = await repository.createRefreshToken(
+        `rt-active-${Date.now()}`,
+        userId,
+        familyId,
+        new Date(Date.now() + 100000),
+      );
+
+      const found = await repository.findActiveRefreshTokenByFamily(familyId);
+      expect(found?.id).toBe(created.id);
+
+      await repository.revokeRefreshToken(created.id);
+
+      await expect(
+        repository.findActiveRefreshTokenByFamily(familyId),
+      ).resolves.toBeNull();
+    });
+
+    it("revokeRefreshToken đánh dấu revokedAt cho đúng bản ghi theo id", async () => {
+      const created = await repository.createRefreshToken(
+        `rt-revoke-${Date.now()}`,
+        userId,
+        "family-id",
+        new Date(Date.now() + 100000),
+      );
+      expect(created.revokedAt).toBeNull();
+
+      await repository.revokeRefreshToken(created.id);
+
+      const updated = await prisma.refreshToken.findUnique({
+        where: { id: created.id },
+      });
+      expect(updated?.revokedAt).not.toBeNull();
+    });
+
+    it("revokeAllTokensInFamily đánh dấu revokedAt cho mọi token trong family, không ảnh hưởng family khác", async () => {
+      const familyId = `family-revoke-all-${Date.now()}`;
+      const otherFamilyId = `family-other-${Date.now()}`;
+      const a = await repository.createRefreshToken(
+        `rt-fam-a-${Date.now()}`,
+        userId,
+        familyId,
+        new Date(Date.now() + 100000),
+      );
+      const b = await repository.createRefreshToken(
+        `rt-fam-b-${Date.now()}`,
+        userId,
+        familyId,
+        new Date(Date.now() + 100000),
+      );
+      const other = await repository.createRefreshToken(
+        `rt-fam-other-${Date.now()}`,
+        userId,
+        otherFamilyId,
+        new Date(Date.now() + 100000),
+      );
+
+      await repository.revokeAllTokensInFamily(familyId);
+
+      const [ra, rb, rOther] = await Promise.all([
+        prisma.refreshToken.findUnique({ where: { id: a.id } }),
+        prisma.refreshToken.findUnique({ where: { id: b.id } }),
+        prisma.refreshToken.findUnique({ where: { id: other.id } }),
+      ]);
+      expect(ra?.revokedAt).not.toBeNull();
+      expect(rb?.revokedAt).not.toBeNull();
+      expect(rOther?.revokedAt).toBeNull();
+    });
   });
 });

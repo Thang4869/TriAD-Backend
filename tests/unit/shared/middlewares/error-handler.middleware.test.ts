@@ -11,6 +11,7 @@ import { logger } from "@core/logger/winston";
 import {
   EmptyOrderError,
   CartItemNotFoundError,
+  DomainError,
 } from "@shared/domain/errors/domain-error";
 
 vi.mock("@core/logger/winston", () => ({
@@ -64,6 +65,21 @@ describe("errorHandler", () => {
         code: "CART.ITEM_NOT_FOUND",
         details: { productId: "prod-1" },
       }),
+    );
+  });
+
+  it("mặc định status 400 khi mã lỗi DomainError không có trong DOMAIN_ERROR_STATUS_MAP", () => {
+    class UnmappedDomainError extends DomainError {
+      readonly code = "SOME.UNMAPPED_CODE";
+    }
+    const err = new UnmappedDomainError("unmapped");
+    const res = createMockResponse();
+
+    errorHandler(err, createMockRequest(), res, vi.fn());
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "SOME.UNMAPPED_CODE" }),
     );
   });
 

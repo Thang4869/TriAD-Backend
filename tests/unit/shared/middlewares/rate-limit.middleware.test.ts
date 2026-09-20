@@ -49,6 +49,25 @@ describe("rate-limit middleware", () => {
     );
   });
 
+  it("should fall back to RATE_LIMIT_WINDOW_MS/RATE_LIMIT_MAX env vars when no options given", () => {
+    const originalWindow = process.env.RATE_LIMIT_WINDOW_MS;
+    const originalMax = process.env.RATE_LIMIT_MAX;
+    process.env.RATE_LIMIT_WINDOW_MS = "12345";
+    process.env.RATE_LIMIT_MAX = "77";
+    try {
+      rateLimiter();
+      expect(rateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          windowMs: 12345,
+          max: 77,
+        }),
+      );
+    } finally {
+      process.env.RATE_LIMIT_WINDOW_MS = originalWindow;
+      process.env.RATE_LIMIT_MAX = originalMax;
+    }
+  });
+
   it("should skip health and admin users", () => {
     rateLimiter();
     const options = vi.mocked(rateLimit).mock.calls[0]?.[0];

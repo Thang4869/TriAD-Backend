@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Product } from "@modules/products/domain/product.entity";
 import { Money } from "@shared/value-objects/money";
 import {
+  InvalidPriceError,
   InvalidStockQuantityError,
   InsufficientStockError,
   ProductAlreadyActiveError,
@@ -79,6 +80,21 @@ describe("Product.changePrice", () => {
     product.changePrice(new Money(0));
 
     expect(product.price.getValue()).toBe(0);
+  });
+
+  it("từ chối giá âm (kiểm tra phòng thủ ở tầng domain, ngoài Money)", () => {
+    const product = newProduct();
+    // Money tự nó đã chặn số âm ở constructor, nên để bao phủ được nhánh
+    // phòng thủ "newPrice.getValue() < 0" trong Product.changePrice, ta giả
+    // lập một giá trị kiểu Money có getValue() trả về số âm.
+    const fakeNegativePrice = { getValue: () => -1 } as unknown as Money;
+
+    expect(() => product.changePrice(fakeNegativePrice)).toThrow(
+      InvalidPriceError,
+    );
+    expect(() => product.changePrice(fakeNegativePrice)).toThrow(
+      "Price cannot be negative",
+    );
   });
 });
 

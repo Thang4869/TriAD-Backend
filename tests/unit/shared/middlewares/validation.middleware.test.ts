@@ -54,6 +54,29 @@ describe("validation middleware", () => {
     expect(req.params).toBe(originalParams);
   });
 
+  it("giữ nguyên req.body gốc khi schema không khai báo key 'body' (fallback || cho body)", () => {
+    // Schema chỉ validate "query", không khai báo "body" nên
+    // schema.parse() trả về validated.body = undefined, buộc middleware
+    // phải fallback về req.body ban đầu (nhánh còn lại của validated.body || req.body).
+    const queryOnlySchema = z.object({
+      query: z.object({ page: z.string().optional() }),
+    });
+    const originalBody = { name: "unchanged" };
+    const req = {
+      body: originalBody,
+      query: { page: "2" },
+      params: {},
+    } as unknown as Request;
+    const res = {} as Response;
+    const next = vi.fn();
+
+    validate(queryOnlySchema)(req, res, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(req.body).toBe(originalBody);
+    expect(req.query).toEqual({ page: "2" });
+  });
+
   it("should throw BadRequestError on validation failure", () => {
     const req = {
       body: { name: "Jo" },

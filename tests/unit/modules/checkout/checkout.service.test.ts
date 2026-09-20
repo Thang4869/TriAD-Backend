@@ -217,6 +217,15 @@ describe("CheckoutService", () => {
       );
     });
 
+    it("throws if order was persisted but cannot be re-fetched right after (data-integrity guard)", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      // findOrderWithItems mặc định trả null (xem createFakeRepository) để mô
+      // phỏng tình huống order vừa lưu xong nhưng không đọc lại được ngay.
+      await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
+        "Failed to retrieve created order",
+      );
+    });
+
     it("returns idempotent result if cached", async () => {
       mockIdempotencyService.tryReturnIdempotentOrder = vi
         .fn()

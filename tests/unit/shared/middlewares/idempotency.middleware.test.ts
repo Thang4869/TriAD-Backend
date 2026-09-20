@@ -71,6 +71,25 @@ describe("idempotencyMiddleware", () => {
     );
   });
 
+  it("should use IDEMPOTENCY_TTL from env when explicitly set", async () => {
+    const original = process.env.IDEMPOTENCY_TTL;
+    process.env.IDEMPOTENCY_TTL = "3600";
+    try {
+      req.headers = { "idempotency-key": "key2-env-ttl" };
+      const middleware = idempotencyMiddleware();
+      await middleware(req as Request, res as Response, next);
+
+      (res as any).json({ success: true });
+      expect(redis.setex).toHaveBeenCalledWith(
+        "idempotent:key2-env-ttl",
+        3600,
+        JSON.stringify({ status: 200, data: { success: true } }),
+      );
+    } finally {
+      process.env.IDEMPOTENCY_TTL = original;
+    }
+  });
+
   it("should NOT cache the response when statusCode is outside 2xx", async () => {
     req.headers = { "idempotency-key": "key3" };
     (res as any).statusCode = 404;

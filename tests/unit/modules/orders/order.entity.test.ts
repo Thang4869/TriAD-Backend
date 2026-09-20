@@ -109,6 +109,33 @@ describe("Order.addItem", () => {
       OrderNotMutableError,
     );
   });
+
+  it("không cho sửa đơn đã chuyển trạng thái khỏi PENDING dù chưa place", () => {
+    // Order.create() -> _placed = false, status = PENDING.
+    // confirm() chuyển status sang PROCESSING mà KHÔNG đi qua place(),
+    // nên _placed vẫn là false -> assertMutable phải rơi vào nhánh "NOT_PENDING".
+    const order = Order.create({
+      id: "o1",
+      userId: "u1",
+      orderNumber: "ORD-1",
+      customerName: "A",
+      customerEmail: "a@test.com",
+      customerPhone: "0900000000",
+      customerAddress: "HN",
+      paymentMethod: "COD",
+    });
+    order.addItem("p1", "Áo", 1, new Money(10));
+    order.confirm();
+
+    expect(() => order.addItem("p2", "Quần", 1, new Money(1))).toThrow(
+      OrderNotMutableError,
+    );
+    try {
+      order.addItem("p2", "Quần", 1, new Money(1));
+    } catch (err) {
+      expect((err as Error).message).toContain("not PENDING");
+    }
+  });
 });
 
 describe("Order.removeItem", () => {

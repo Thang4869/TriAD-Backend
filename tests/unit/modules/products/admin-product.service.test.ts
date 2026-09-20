@@ -169,6 +169,19 @@ describe("AdminProductService.update", () => {
     ).rejects.toThrow(BadRequestError);
   });
 
+  it("đổi sang slug mới còn trống thì cho phép update", async () => {
+    const repository = createRepository({
+      findBySlugId: vi.fn().mockResolvedValue(null),
+    });
+
+    await createService(repository).service.update("prod-1", {
+      slug: "slug-moi-con-trong",
+    } as never);
+
+    expect(repository.findBySlugId).toHaveBeenCalledWith("slug-moi-con-trong");
+    expect(repository.update).toHaveBeenCalled();
+  });
+
   it("giữ nguyên slug cũ thì không cần kiểm tra trùng", async () => {
     const repository = createRepository();
 

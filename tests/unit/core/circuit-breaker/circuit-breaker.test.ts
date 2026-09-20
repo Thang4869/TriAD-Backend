@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import CircuitBreakerCtor from "opossum";
 import {
   withCircuitBreaker,
   withRetry,
@@ -97,6 +98,31 @@ describe("withCircuitBreaker", () => {
     expect(logger.info).toHaveBeenCalledWith(
       "Circuit breaker closed for half-open-flow",
     );
+  });
+
+  it("ghi log cảnh báo khi breaker phát sự kiện fallback", () => {
+    const onSpy = vi.spyOn(CircuitBreakerCtor.prototype, "on");
+
+    withCircuitBreaker(async () => "x", { name: "fallback-test" });
+
+    // opossum tự đăng ký listener "fallback" nội bộ khi khởi tạo breaker,
+    // nên lấy lần đăng ký "fallback" CUỐI CÙNG (chính là listener của chúng ta
+    // được gắn sau khi breaker đã được tạo).
+    const fallbackCall = [...onSpy.mock.calls]
+      .reverse()
+      .find(
+        ([event]: [string, (...args: any[]) => void]) => event === "fallback",
+      );
+    expect(fallbackCall).toBeDefined();
+
+    const fallbackHandler = fallbackCall?.[1] as () => void;
+    fallbackHandler();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Circuit breaker fallback for fallback-test",
+    );
+
+    onSpy.mockRestore();
   });
 });
 

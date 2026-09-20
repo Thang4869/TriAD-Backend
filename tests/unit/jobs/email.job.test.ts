@@ -88,4 +88,23 @@ describe("email.job", () => {
       }),
     );
   });
+
+  it("should send verify-email template with empty greeting when name is missing", async () => {
+    const job = {
+      data: {
+        to: "test@test.com",
+        subject: "Verify",
+        template: "verify-email",
+        data: { verifyUrl: "https://example.com/verify" },
+      },
+    };
+    await processEmail(job);
+    const transporter = (nodemailer.createTransport as any).mock.results[0]
+      .value;
+    expect(transporter.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        html: expect.stringContaining("<p>Hi ,</p>"),
+      }),
+    );
+  });
 });

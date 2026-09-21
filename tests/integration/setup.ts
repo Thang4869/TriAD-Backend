@@ -45,6 +45,23 @@ beforeAll(async () => {
 
   await prisma.$connect();
   await redis.ping?.();
+  await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE
+      "outbox_handler_log",
+      "outbox_events",
+      "wishlist_items",
+      "cart_items",
+      "carts",
+      "order_items",
+      "orders",
+      "reviews",
+      "notifications",
+      "refresh_tokens",
+      "discounts",
+      "users",
+      "products"
+    RESTART IDENTITY CASCADE;
+  `);
 });
 
 afterAll(async () => {

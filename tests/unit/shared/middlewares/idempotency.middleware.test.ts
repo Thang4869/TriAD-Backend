@@ -86,7 +86,11 @@ describe("idempotencyMiddleware", () => {
         JSON.stringify({ status: 200, data: { success: true } }),
       );
     } finally {
-      process.env.IDEMPOTENCY_TTL = original;
+      if (original === undefined) {
+        delete process.env.IDEMPOTENCY_TTL;
+      } else {
+        process.env.IDEMPOTENCY_TTL = original;
+      }
     }
   });
 
@@ -144,7 +148,11 @@ describe("idempotencyMiddleware", () => {
         JSON.stringify({ status: 200, data: { success: true } }),
       );
     } finally {
-      process.env.IDEMPOTENCY_TTL = originalTtl;
+      if (originalTtl === undefined) {
+        delete process.env.IDEMPOTENCY_TTL;
+      } else {
+        process.env.IDEMPOTENCY_TTL = originalTtl;
+      }
     }
   });
 

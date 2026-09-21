@@ -49,6 +49,16 @@ describe("rate-limit middleware", () => {
     );
   });
 
+  it("should preserve explicitly provided zero values", () => {
+    rateLimiter({ windowMs: 0, max: 0 });
+    expect(rateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        windowMs: 0,
+        max: 0,
+      }),
+    );
+  });
+
   it("should fall back to RATE_LIMIT_WINDOW_MS/RATE_LIMIT_MAX env vars when no options given", () => {
     const originalWindow = process.env.RATE_LIMIT_WINDOW_MS;
     const originalMax = process.env.RATE_LIMIT_MAX;
@@ -60,6 +70,25 @@ describe("rate-limit middleware", () => {
         expect.objectContaining({
           windowMs: 12345,
           max: 77,
+        }),
+      );
+    } finally {
+      process.env.RATE_LIMIT_WINDOW_MS = originalWindow;
+      process.env.RATE_LIMIT_MAX = originalMax;
+    }
+  });
+
+  it("should use built-in defaults when rate limit env vars are absent", () => {
+    const originalWindow = process.env.RATE_LIMIT_WINDOW_MS;
+    const originalMax = process.env.RATE_LIMIT_MAX;
+    delete process.env.RATE_LIMIT_WINDOW_MS;
+    delete process.env.RATE_LIMIT_MAX;
+    try {
+      rateLimiter();
+      expect(rateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          windowMs: 60000,
+          max: 100,
         }),
       );
     } finally {
@@ -186,6 +215,25 @@ describe("rate-limit middleware", () => {
 
       const req = { ip: undefined, headers: {} } as unknown as Request;
       expect(keyGenFn(req)).toBe("unknown");
+    });
+
+    it("should use RATE_LIMIT_WINDOW_MS and RATE_LIMIT_MAX from environment when set", () => {
+      const originalWindow = process.env.RATE_LIMIT_WINDOW_MS;
+      const originalMax = process.env.RATE_LIMIT_MAX;
+      process.env.RATE_LIMIT_WINDOW_MS = "120000";
+      process.env.RATE_LIMIT_MAX = "200";
+
+      rateLimiter();
+
+      expect(rateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          windowMs: 120000,
+          max: 200,
+        }),
+      );
+
+      process.env.RATE_LIMIT_WINDOW_MS = originalWindow;
+      process.env.RATE_LIMIT_MAX = originalMax;
     });
   });
 });

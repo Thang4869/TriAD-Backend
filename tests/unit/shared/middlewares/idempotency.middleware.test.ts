@@ -111,4 +111,58 @@ describe("idempotencyMiddleware", () => {
     await Promise.resolve();
     expect(redis.setex).toHaveBeenCalled();
   });
+
+  it("should cache a response when the cache write resolves", async () => {
+    req.headers = { "idempotency-key": "key4-success" };
+    vi.mocked(redis.setex).mockResolvedValueOnce("OK");
+    const middleware = idempotencyMiddleware();
+    await middleware(req as Request, res as Response, next);
+
+    (res as any).json({ success: true });
+    await Promise.resolve();
+
+    expect(redis.setex).toHaveBeenCalledWith(
+      "idempotent:key4-success",
+      86400,
+      JSON.stringify({ status: 200, data: { success: true } }),
+    );
+  });
+
+  it("should use the default TTL when IDEMPOTENCY_TTL is absent", async () => {
+    const originalTtl = process.env.IDEMPOTENCY_TTL;
+    delete process.env.IDEMPOTENCY_TTL;
+    try {
+      req.headers = { "idempotency-key": "key-default-ttl" };
+      const middleware = idempotencyMiddleware();
+      await middleware(req as Request, res as Response, next);
+
+      (res as any).json({ success: true });
+
+      expect(redis.setex).toHaveBeenCalledWith(
+        "idempotent:key-default-ttl",
+        86400,
+        JSON.stringify({ status: 200, data: { success: true } }),
+      );
+    } finally {
+      process.env.IDEMPOTENCY_TTL = originalTtl;
+    }
+  });
+
+  it("should use IDEMPOTENCY_TTL from environment when set", async () => {
+    const originalTtl = process.env.IDEMPOTENCY_TTL;
+    process.env.IDEMPOTENCY_TTL = "3600";
+
+    req.headers = { "idempotency-key": "key5" };
+    const middleware = idempotencyMiddleware();
+    await middleware(req as Request, res as Response, next);
+
+    (res as any).json({ success: true });
+    expect(redis.setex).toHaveBeenCalledWith(
+      "idempotent:key5",
+      3600,
+      JSON.stringify({ status: 200, data: { success: true } }),
+    );
+
+    process.env.IDEMPOTENCY_TTL = originalTtl;
+  });
 });

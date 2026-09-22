@@ -1,0 +1,27 @@
+groups:
+  - name: triad-backend-reliability
+    rules:
+      - alert: TriadOutboxLagHigh
+        expr: triad_backend_outbox_lag_seconds > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Outbox delivery is lagging
+          description: The oldest unpublished event is older than one minute.
+      - alert: TriadOutboxDeliveryFailures
+        expr: increase(triad_backend_outbox_events_failed_total[10m]) > 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Outbox delivery failures are increasing
+          description: More than ten outbox deliveries failed during the last ten minutes.
+      - alert: TriadStockReservationFailures
+        expr: increase(triad_backend_stock_reservation_failed_total[10m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Stock reservation failures are elevated
+          description: Checkout inventory reservations are failing at an elevated rate.

@@ -206,6 +206,8 @@ model OutboxEvent {
 
   // Bổ sung từ ALTER TABLE trong migration
   lockedAt       DateTime?
+  lockOwner      String?
+  leaseUntil     DateTime?
   deadLetteredAt DateTime?
   lastError      String?
 
@@ -214,6 +216,7 @@ model OutboxEvent {
   @@index([publishedAt, attempts])
   @@index([aggregateId])
   @@index([lockedAt])
+  @@index([leaseUntil])
   @@index([deadLetteredAt])
   @@map("outbox_events")
 }

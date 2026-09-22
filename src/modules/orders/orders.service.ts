@@ -10,6 +10,7 @@ import { Order } from "./domain/order.entity";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { OrderStatusChangedEvent } from "@shared/domain/events/order-events";
 import { logger } from "@core/logger/winston";
+import { OrderHistoryReadPort } from "./application/order-history-read.port";
 
 export interface IOrdersService {
   getOrders(
@@ -42,13 +43,20 @@ export interface IOrdersService {
 }
 
 export class OrdersService implements IOrdersService {
-  constructor(private readonly repository: IOrdersRepository) {}
+  private readonly readPort: OrderHistoryReadPort;
+
+  constructor(
+    private readonly repository: IOrdersRepository,
+    readPort: OrderHistoryReadPort = repository,
+  ) {
+    this.readPort = readPort;
+  }
 
   async getOrders(userId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
     const [orders, total] = await Promise.all([
-      this.repository.findByUser(userId, skip, limit),
-      this.repository.countByUser(userId),
+      this.readPort.findByUser(userId, skip, limit),
+      this.readPort.countByUser(userId),
     ]);
 
     return {
@@ -61,7 +69,7 @@ export class OrdersService implements IOrdersService {
   }
 
   async getOrderById(orderId: string, userId: string) {
-    const order = await this.repository.findByIdAndUser(orderId, userId);
+    const order = await this.readPort.findByIdAndUser(orderId, userId);
     if (!order) {
       throw new NotFoundError("Order not found");
     }

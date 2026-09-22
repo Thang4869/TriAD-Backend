@@ -2,6 +2,11 @@ import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
 import { ICheckoutRepository, TxClient } from "../checkout.repository";
 import { BadRequestError, ConflictError } from "@shared/utils/errors";
+import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
+import {
+  FeatureFlag,
+  FeatureFlagPort,
+} from "@shared/application/feature-flags/feature-flag.port";
 
 export interface PricingResult {
   tax: Money;
@@ -11,7 +16,10 @@ export interface PricingResult {
 }
 
 export class PricingService {
-  constructor(private readonly repository: ICheckoutRepository) {}
+  constructor(
+    private readonly repository: ICheckoutRepository,
+    private readonly featureFlags: FeatureFlagPort = new EnvironmentFeatureFlags(),
+  ) {}
 
   async calculatePricing(
     subtotal: Money,
@@ -29,7 +37,10 @@ export class PricingService {
     let discountAmount = new Money(0);
     let appliedDiscountCode: string | undefined = undefined;
 
-    if (discountCode) {
+    if (
+      discountCode &&
+      this.featureFlags.isEnabled(FeatureFlag.DiscountSystem)
+    ) {
       const discount = await this.repository.findDiscountByCode(
         tx,
         discountCode,

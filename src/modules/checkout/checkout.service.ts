@@ -11,6 +11,12 @@ import { StockReservationService } from "./services/stock-reservation.service";
 import { IdempotencyService } from "./services/idempotency.service";
 import { Order } from "@modules/orders/domain/order.entity";
 import { withSpan } from "@core/tracing/span";
+import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
+import {
+  FeatureFlag,
+  FeatureFlagPort,
+} from "@shared/application/feature-flags/feature-flag.port";
+import { ordersPlaced } from "@core/metrics/metrics.registry";
 
 export interface CheckoutInput {
   idempotencyKey?: string;
@@ -30,6 +36,7 @@ export class CheckoutService {
     private readonly pricingService: PricingService,
     private readonly stockService: StockReservationService,
     private readonly idempotencyService: IdempotencyService,
+    private readonly featureFlags: FeatureFlagPort = new EnvironmentFeatureFlags(),
   ) {}
 
   async checkout(userId: string, input: CheckoutInput) {
@@ -56,6 +63,10 @@ export class CheckoutService {
         setAttributes({
           "checkout.item_count": cart.items.length,
           "checkout.payment_method": input.paymentMethod,
+          "checkout.new_flow": this.featureFlags.isEnabled(
+            FeatureFlag.NewCheckoutFlow,
+            { userId },
+          ),
         });
 
         let attemptCount = 0;
@@ -119,6 +130,8 @@ export class CheckoutService {
             persistedOrder.id,
           );
         }
+
+        ordersPlaced.inc();
 
         return { order: fullOrder, idempotent: false };
       },

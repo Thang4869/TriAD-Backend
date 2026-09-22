@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NotFoundError } from "@shared/utils/errors";
 import { Rating } from "@shared/value-objects/rating";
-import { IProductsRepository } from "../products.repository";
+import { ProductCatalogReadPort } from "../application/product-catalog-read.port";
 import { ProductSpecificationBuilder } from "../domain/specifications/product-specification";
 import {
   toProductListResponse,
@@ -12,7 +12,7 @@ const MAX_PAGE_LIMIT = 50;
 const DEFAULT_PUBLIC_LIMIT = 12;
 
 export class CatalogService {
-  constructor(private readonly repository: IProductsRepository) {}
+  constructor(private readonly repository: ProductCatalogReadPort) {}
 
   async findAll(params: {
     page?: number;

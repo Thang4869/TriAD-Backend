@@ -35,3 +35,39 @@ export const queueJobsFailed = new client.Counter({
   labelNames: ["queue_name"],
   registers: [metricsRegistry],
 });
+
+export const ordersPlaced = new client.Counter({
+  name: "triad_backend_orders_placed_total",
+  help: "Orders successfully placed",
+  registers: [metricsRegistry],
+});
+
+export const stockReservationFailed = new client.Counter({
+  name: "triad_backend_stock_reservation_failed_total",
+  help: "Stock reservation failures",
+  registers: [metricsRegistry],
+});
+
+export const outboxEventsClaimed = new client.Counter({
+  name: "triad_backend_outbox_events_claimed_total",
+  help: "Outbox events claimed for delivery",
+  registers: [metricsRegistry],
+});
+
+export const outboxEventsPublished = new client.Counter({
+  name: "triad_backend_outbox_events_published_total",
+  help: "Outbox events published successfully",
+  registers: [metricsRegistry],
+});
+
+export const outboxEventsFailed = new client.Counter({
+  name: "triad_backend_outbox_events_failed_total",
+  help: "Outbox event delivery failures",
+  registers: [metricsRegistry],
+});
+
+export const outboxLagSeconds = new client.Gauge({
+  name: "triad_backend_outbox_lag_seconds",
+  help: "Age in seconds of the oldest unpublished outbox event",
+  registers: [metricsRegistry],
+});

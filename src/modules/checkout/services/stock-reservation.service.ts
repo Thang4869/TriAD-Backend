@@ -6,6 +6,7 @@ import {
 } from "@shared/utils/errors";
 import { withSpan } from "@core/tracing/span";
 import { Attributes } from "@opentelemetry/api";
+import { stockReservationFailed } from "@core/metrics/metrics.registry";
 
 export class StockReservationService {
   constructor(private readonly repository: ICheckoutRepository) {}
@@ -17,11 +18,16 @@ export class StockReservationService {
     if (cartItems.length === 0) {
       throw new BadRequestError("Cart is empty");
     }
-    return withSpan(
-      "checkout.reserve_stock",
-      (setAttributes) => this.doReserveStock(tx, cartItems, setAttributes),
-      { "stock.sku_count": cartItems.length },
-    );
+    try {
+      return await withSpan(
+        "checkout.reserve_stock",
+        (setAttributes) => this.doReserveStock(tx, cartItems, setAttributes),
+        { "stock.sku_count": cartItems.length },
+      );
+    } catch (error) {
+      stockReservationFailed.inc();
+      throw error;
+    }
   }
 
   private async doReserveStock(

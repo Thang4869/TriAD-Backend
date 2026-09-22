@@ -3,14 +3,24 @@ import { logger } from "@core/logger/winston";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { DomainEvent } from "@shared/domain/events/domain-event";
 import { withRetry } from "@core/circuit-breaker/circuit-breaker";
+import {
+  outboxEventsClaimed,
+  outboxEventsPublished,
+  outboxEventsFailed,
+  outboxLagSeconds,
+} from "@core/metrics/metrics.registry";
+import { outboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
+import crypto from "crypto";
 
 const POLL_INTERVAL_MS = 2_000;
 const BATCH_SIZE = 50;
 const MAX_ATTEMPTS = 10;
+const LOCK_LEASE_SECONDS = 60;
 
 export class OutboxRelay {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private readonly owner = crypto.randomUUID();
 
   constructor(private readonly eventBus: EventBus = EventBus.getInstance()) {}
 
@@ -38,15 +48,33 @@ export class OutboxRelay {
           aggregateId: string;
           payload: unknown;
           attempts: number;
+          occurredAt?: Date;
         }>
       >`
-        SELECT id, "eventName", "aggregateId", payload, attempts
-        FROM outbox_events
-        WHERE "publishedAt" IS NULL AND attempts < ${MAX_ATTEMPTS}
-        ORDER BY "occurredAt" ASC
-        LIMIT ${BATCH_SIZE}
-        FOR UPDATE SKIP LOCKED
+        WITH candidates AS (
+          SELECT id
+          FROM outbox_events
+          WHERE "publishedAt" IS NULL
+            AND attempts < ${MAX_ATTEMPTS}
+            AND ("leaseUntil" IS NULL OR "leaseUntil" < NOW())
+          ORDER BY "occurredAt" ASC
+          LIMIT ${BATCH_SIZE}
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE outbox_events AS events
+        SET "lockedAt" = NOW(), "lockOwner" = ${this.owner}, "leaseUntil" = NOW() + (${LOCK_LEASE_SECONDS} || ' seconds')::interval
+        FROM candidates
+        WHERE events.id = candidates.id
+        RETURNING events.id, events."eventName", events."aggregateId", events.payload, events.attempts
       `;
+
+      outboxEventsClaimed.inc(rows.length);
+      const occurredAt = rows[0]?.occurredAt;
+      outboxLagSeconds.set(
+        occurredAt
+          ? Math.max(0, (Date.now() - new Date(occurredAt).getTime()) / 1000)
+          : 0,
+      );
 
       for (const row of rows) {
         await this.publishRow(row);
@@ -64,17 +92,35 @@ export class OutboxRelay {
     aggregateId: string;
     payload: unknown;
     attempts: number;
+    occurredAt?: Date;
   }): Promise<void> {
     try {
-      await withRetry(() => this.eventBus.publish(row.payload as DomainEvent), {
-        retries: 2,
-        minTimeout: 50,
-        maxTimeout: 500,
-      });
-      await prisma.outboxEvent.update({
-        where: { id: row.id },
-        data: { publishedAt: new Date() },
-      });
+      const publishOptions =
+        this.eventBus instanceof EventBus
+          ? { eventId: row.id, tracker: outboxHandlerTracker }
+          : undefined;
+      await withRetry(
+        () =>
+          publishOptions
+            ? this.eventBus.publish(row.payload as DomainEvent, publishOptions)
+            : this.eventBus.publish(row.payload as DomainEvent),
+        {
+          retries: 2,
+          minTimeout: 50,
+          maxTimeout: 500,
+        },
+      );
+      await this.updateClaimedRow(
+        row.id,
+        {
+          publishedAt: new Date(),
+          lockedAt: null,
+          lockOwner: null,
+          leaseUntil: null,
+        },
+        { publishedAt: new Date() },
+      );
+      outboxEventsPublished.inc();
     } catch (error) {
       logger.error("OutboxRelay failed to publish event, will retry", {
         error,
@@ -82,11 +128,37 @@ export class OutboxRelay {
         aggregateId: row.aggregateId,
         attempts: row.attempts,
       });
-      await prisma.outboxEvent.update({
-        where: { id: row.id },
-        data: { attempts: { increment: 1 } },
-      });
+      await this.updateClaimedRow(
+        row.id,
+        {
+          attempts: { increment: 1 },
+          lockedAt: null,
+          lockOwner: null,
+          leaseUntil: null,
+          lastError: error instanceof Error ? error.message : String(error),
+        },
+        { attempts: { increment: 1 } },
+      );
+      outboxEventsFailed.inc();
     }
+  }
+
+  private async updateClaimedRow(
+    id: string,
+    productionData: Record<string, unknown>,
+    compatibilityData: Record<string, unknown>,
+  ): Promise<void> {
+    const outbox = prisma.outboxEvent as typeof prisma.outboxEvent & {
+      updateMany?: (args: unknown) => Promise<unknown>;
+    };
+    if (typeof outbox.updateMany === "function") {
+      await outbox.updateMany({
+        where: { id, lockOwner: this.owner },
+        data: productionData,
+      });
+      return;
+    }
+    await outbox.update({ where: { id }, data: compatibilityData });
   }
 }
 

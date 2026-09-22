@@ -1,4 +1,4 @@
-import { IDashboardRepository } from "./dashboard.repository";
+import { DashboardReadPort } from "./application/dashboard-read.port";
 
 const DEFAULT_LOW_STOCK_THRESHOLD = 10;
 const DEFAULT_TOP_PRODUCTS_LIMIT = 5;
@@ -16,7 +16,7 @@ export interface IDashboardService {
 }
 
 export class DashboardService implements IDashboardService {
-  constructor(private readonly repository: IDashboardRepository) {}
+  constructor(private readonly repository: DashboardReadPort) {}
 
   async getStats(): Promise<DashboardStats> {
     const since30Days = this.daysAgo(DEFAULT_REVENUE_WINDOW_DAYS);

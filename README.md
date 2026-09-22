@@ -228,14 +228,65 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
 ---
 
-## 9. Future Improvements (Tech Lead Roadmap)
+## 9. Architecture Decision Records
 
-1. **CQRS** tách Read Model (có thể dùng PostgreSQL materialized view hoặc Elasticsearch).
-2. **Saga / Process Manager** cho multi-step workflows phức tạp hơn (refund, inventory adjustment).
-3. **Feature Flags** + gradual rollout.
-4. **Contract Testing** (Pact) giữa Frontend và Backend.
-5. **Chaos Engineering** nhẹ (fault injection cho Outbox & external services).
-6. **Multi-tenancy** nếu scale sang B2B.
+### ADR-001: Modular Monolith trước Microservices
+
+Các bounded context được tách bằng module, port và DI ngay trong một process. Cách này giữ transaction boundary và local debugging đơn giản khi team còn cần thay đổi domain nhanh; Outbox và Saga tạo khả năng tách service sau này mà không buộc hệ thống trả giá vận hành microservices quá sớm.
+
+### ADR-002: Transactional Outbox + CQRS read ports
+
+Domain events được ghi cùng transaction với aggregate. Relay claim event bằng `SKIP LOCKED` và lease trước khi publish, nên nhiều instance không xử lý cùng row trong một lease. Catalog, Dashboard và Order History dùng read-only ports, giữ nguyên API response trong khi có thể thay adapter bằng projection/materialized view.
+
+### ADR-003: Saga cho workflow phân tán
+
+Checkout và Cancellation/Refund là process manager có state machine, resume và compensation. Payment, inventory và email được biểu diễn qua ports để adapter thật có thể thêm timeout, retry, circuit breaker và bulkhead mà không làm bẩn domain.
+
+## 10. Diagrams
+
+### C4 Context
+
+```mermaid
+flowchart LR
+	Customer[Customer / Admin] --> API[TriAD Backend API]
+	API --> DB[(PostgreSQL)]
+	API --> Redis[(Redis)]
+	API --> External[Payment / Email / Image providers]
+```
+
+### C4 Container
+
+```mermaid
+flowchart TB
+	API[Express Presentation] --> App[Application Services / CQRS]
+	App --> Domain[Domain Aggregates / Value Objects]
+	App --> Ports[Ports: repositories, payment, email, flags]
+	Ports --> Adapters[Prisma, Redis, BullMQ, Cloudinary]
+	Adapters --> DB[(PostgreSQL + Outbox)]
+	DB --> Relay[Outbox Relay]
+	Relay --> Bus[Event Bus / Saga Process Managers]
+```
+
+### C4 Component: Checkout
+
+```mermaid
+stateDiagram-v2
+	[*] --> StockReserved
+	StockReserved --> OrderPlaced
+	OrderPlaced --> PaymentAuthorized
+	PaymentAuthorized --> Completed
+	StockReserved --> Compensated: failure
+	OrderPlaced --> Compensated: failure
+	PaymentAuthorized --> Compensated: failure
+```
+
+## 11. Reliability and Verification
+
+- `CheckoutSaga` and `CancellationRefundSaga` have unit fault-injection tests, persisted state and compensation paths.
+- `ops/prometheus/alerts.yml` contains sample rules for outbox lag, delivery failures and stock reservation failures.
+- Run `npm run typecheck`, `npm run test:unit`, and `npm run test:integration` before deployment.
+
+Remaining production integration work is intentionally adapter-specific: a real payment provider contract, a durable saga state adapter, Pact/OpenAPI consumer verification, and CI chaos jobs require the deployment environment and frontend contract. The ports and state machines keep those additions isolated from the domain.
 
 ---
 

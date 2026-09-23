@@ -283,6 +283,8 @@ stateDiagram-v2
 ## 11. Reliability and Verification
 
 - `CheckoutSaga` and `CancellationRefundSaga` have unit fault-injection tests, persisted state and compensation paths.
+- Production factories wire both Sagas to the PostgreSQL `saga_states` store; tests continue to inject the in-memory port.
+- `.github/workflows/quality-gates.yml` runs typecheck, OpenAPI contract verification, unit tests, build and the Outbox chaos probe.
 - `ops/prometheus/alerts.yml` contains sample rules for outbox lag, delivery failures and stock reservation failures.
 - Run `npm run typecheck`, `npm run test:unit`, and `npm run test:integration` before deployment.
 

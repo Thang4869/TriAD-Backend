@@ -8,6 +8,11 @@ import {
   SagaStateStore,
 } from "@shared/application/saga/saga-state";
 import { withSpan } from "@core/tracing/span";
+import {
+  checkoutFailed,
+  checkoutSucceeded,
+  sagaCompensations,
+} from "@core/metrics/metrics.registry";
 
 export type CheckoutSagaStep =
   | "STARTED"
@@ -77,7 +82,10 @@ export class CheckoutSaga {
           step: "STOCK_RESERVED",
           reservationId: await executeSagaStep(
             "checkout.reserve-stock",
-            () => this.ports.reserveStock(input),
+            () =>
+              withSpan("saga.checkout.reserve_stock", () =>
+                this.ports.reserveStock(input),
+              ),
             STEP_POLICY,
             deadlineAt,
           ),
@@ -90,7 +98,10 @@ export class CheckoutSaga {
           step: "ORDER_PLACED",
           orderId: await executeSagaStep(
             "checkout.place-order",
-            () => this.ports.placeOrder(input),
+            () =>
+              withSpan("saga.checkout.place_order", () =>
+                this.ports.placeOrder(input),
+              ),
             STEP_POLICY,
             deadlineAt,
           ),
@@ -103,7 +114,10 @@ export class CheckoutSaga {
           step: "PAYMENT_AUTHORIZED",
           paymentId: await executeSagaStep(
             "checkout.authorize-payment",
-            () => this.ports.authorizePayment(input, state.orderId!),
+            () =>
+              withSpan("saga.checkout.authorize_payment", () =>
+                this.ports.authorizePayment(input, state.orderId!),
+              ),
             STEP_POLICY,
             deadlineAt,
           ),
@@ -127,8 +141,10 @@ export class CheckoutSaga {
       }
       state = { ...state, step: "COMPLETED" };
       await this.stateStore.save(input.sagaId, state);
+      checkoutSucceeded.inc();
       return state;
     } catch (error) {
+      checkoutFailed.inc();
       await this.compensate(state);
       throw error;
     }
@@ -136,25 +152,37 @@ export class CheckoutSaga {
 
   private async compensate(state: CheckoutSagaState): Promise<void> {
     if (state.paymentId) {
+      sagaCompensations.inc({ saga: "checkout", step: "refund-payment" });
       await executeSagaStep(
         "checkout.refund-payment",
-        () => this.ports.refundPayment(state.paymentId!),
+        () =>
+          withSpan("saga.checkout.refund_payment", () =>
+            this.ports.refundPayment(state.paymentId!),
+          ),
         STEP_POLICY,
         state.deadlineAt ?? Date.now() + SAGA_TIMEOUT_MS,
       );
     }
     if (state.orderId) {
+      sagaCompensations.inc({ saga: "checkout", step: "cancel-order" });
       await executeSagaStep(
         "checkout.cancel-order",
-        () => this.ports.cancelOrder(state.orderId!),
+        () =>
+          withSpan("saga.checkout.cancel_order", () =>
+            this.ports.cancelOrder(state.orderId!),
+          ),
         STEP_POLICY,
         state.deadlineAt ?? Date.now() + SAGA_TIMEOUT_MS,
       );
     }
     if (state.reservationId) {
+      sagaCompensations.inc({ saga: "checkout", step: "release-stock" });
       await executeSagaStep(
         "checkout.release-stock",
-        () => this.ports.releaseStock(state.reservationId!),
+        () =>
+          withSpan("saga.checkout.release_stock", () =>
+            this.ports.releaseStock(state.reservationId!),
+          ),
         STEP_POLICY,
         state.deadlineAt ?? Date.now() + SAGA_TIMEOUT_MS,
       );

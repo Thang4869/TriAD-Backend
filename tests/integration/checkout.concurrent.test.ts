@@ -80,7 +80,9 @@ describe("Checkout Concurrency", () => {
       repository,
       pricingService,
       stockService,
-      undefined,
+      {
+        isEnabled: () => false,
+      },
     );
 
     const mockOrderEntity = {

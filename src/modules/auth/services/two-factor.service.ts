@@ -1,7 +1,7 @@
 import speakeasy from "speakeasy";
 import { BadRequestError } from "@shared/utils/errors";
 import { UnauthorizedError } from "@shared/utils/errors";
-import redis from "@core/redis/client";
+import { TokenStorePort } from "../application/ports/token-store.port";
 import { IAuthRepository } from "../auth.repository";
 import { TokenService } from "./token.service";
 import { AuthUserResponse } from "../auth.mapper";
@@ -12,6 +12,7 @@ export class TwoFactorService {
   constructor(
     private readonly authRepository: IAuthRepository,
     private readonly tokenService: TokenService,
+    private readonly tokenStore: TokenStorePort,
   ) {}
 
   async enable2FA(
@@ -85,8 +86,9 @@ export class TwoFactorService {
 
     const timestep = Math.floor(Date.now() / 30_000);
     const replayKey = `auth:2fa:totp:${userId}:${timestep}`;
-    const accepted = await redis.set(replayKey, "1", "EX", 90, "NX");
-    if (accepted !== "OK") {
+    const accepted = await this.tokenStore.setIfAbsent(replayKey, "1", 90);
+
+    if (!accepted) {
       throw new UnauthorizedError("TOTP token already used");
     }
 

@@ -118,6 +118,7 @@ container.register(
     new TwoFactorService(
       c.resolve(TOKENS.AuthRepository),
       c.resolve(TOKENS.TokenService),
+      new RedisTokenStore(),
     ),
 );
 

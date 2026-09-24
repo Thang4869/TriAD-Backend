@@ -6,4 +6,10 @@ export interface TokenStorePort {
   delete(key: string): Promise<void>;
 
   getAndDelete(key: string): Promise<string | null>;
+
+  setIfAbsent(
+    key: string,
+    value: string,
+    expiresInSeconds: number,
+  ): Promise<boolean>;
 }

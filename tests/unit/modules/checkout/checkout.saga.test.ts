@@ -37,7 +37,7 @@ describe("CheckoutSaga", () => {
 
   it("compensates completed forward steps when payment fails", async () => {
     const actionPorts = ports();
-    vi.mocked(actionPorts.authorizePayment).mockRejectedValueOnce(
+    vi.mocked(actionPorts.authorizePayment).mockRejectedValue(
       new Error("payment down"),
     );
 

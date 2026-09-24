@@ -7,7 +7,7 @@ import { logger } from "@core/logger/winston";
 vi.mock("@core/database/prisma", () => ({
   default: {
     $queryRaw: vi.fn(),
-    outboxEvent: { update: vi.fn() },
+    outboxEvent: { updateMany: vi.fn() },
   },
 }));
 
@@ -23,11 +23,13 @@ vi.mock("@core/circuit-breaker/circuit-breaker", () => ({
 const mockedPrisma = prisma as unknown as {
   $queryRaw: ReturnType<typeof vi.fn>;
   outboxEvent: {
-    update: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
   };
 };
 
-function createEventBus(publish = vi.fn().mockResolvedValue(undefined)) {
+function createEventBus(
+  publish = vi.fn().mockResolvedValue({ success: true, failedHandlers: [] }),
+) {
   return { publish } as unknown as EventBus;
 }
 
@@ -35,14 +37,20 @@ const ROW = {
   id: "outbox-1",
   eventName: "OrderPlaced",
   aggregateId: "order-1",
-  payload: { eventName: "OrderPlaced", aggregateId: "order-1" },
+  payload: {
+    eventName: "OrderPlaced",
+    aggregateId: "order-1",
+    occurredAt: new Date().toISOString(),
+  },
   attempts: 0,
 };
 
 describe("OutboxRelay.pollOnce", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedPrisma.outboxEvent.update.mockResolvedValue({} as never);
+    mockedPrisma.outboxEvent.updateMany.mockResolvedValue({
+      count: 1,
+    } as never);
   });
 
   it("không publish gì khi không có row chờ xử lý", async () => {
@@ -52,30 +60,39 @@ describe("OutboxRelay.pollOnce", () => {
     await new OutboxRelay(createEventBus(publish)).pollOnce();
 
     expect(publish).not.toHaveBeenCalled();
-    expect(mockedPrisma.outboxEvent.update).not.toHaveBeenCalled();
+    expect(mockedPrisma.outboxEvent.updateMany).not.toHaveBeenCalled();
   });
 
   it("publish payload lên EventBus rồi đánh dấu publishedAt", async () => {
     mockedPrisma.$queryRaw.mockResolvedValue([ROW] as never);
-    const publish = vi.fn().mockResolvedValue(undefined);
+    const publish = vi
+      .fn()
+      .mockResolvedValue({ success: true, failedHandlers: [] });
 
     await new OutboxRelay(createEventBus(publish)).pollOnce();
 
-    expect(publish).toHaveBeenCalledWith(ROW.payload);
-    const updateArg = mockedPrisma.outboxEvent.update.mock.calls[0][0];
-    expect(updateArg.where).toEqual({ id: "outbox-1" });
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({ eventName: "OrderPlaced" }),
+      expect.any(Object),
+    );
+    const updateArg = mockedPrisma.outboxEvent.updateMany.mock.calls[0][0];
+    expect(updateArg.where).toEqual(
+      expect.objectContaining({ id: "outbox-1" }),
+    );
     expect(updateArg.data.publishedAt).toBeInstanceOf(Date);
   });
 
   it("xử lý tuần tự nhiều row trong một batch", async () => {
     const rows = [ROW, { ...ROW, id: "outbox-2" }, { ...ROW, id: "outbox-3" }];
     mockedPrisma.$queryRaw.mockResolvedValue(rows as never);
-    const publish = vi.fn().mockResolvedValue(undefined);
+    const publish = vi
+      .fn()
+      .mockResolvedValue({ success: true, failedHandlers: [] });
 
     await new OutboxRelay(createEventBus(publish)).pollOnce();
 
     expect(publish).toHaveBeenCalledTimes(3);
-    expect(mockedPrisma.outboxEvent.update).toHaveBeenCalledTimes(3);
+    expect(mockedPrisma.outboxEvent.updateMany).toHaveBeenCalledTimes(3);
   });
 
   it("publish lỗi thì tăng attempts thay vì đánh dấu đã publish", async () => {
@@ -84,13 +101,36 @@ describe("OutboxRelay.pollOnce", () => {
 
     await new OutboxRelay(createEventBus(publish)).pollOnce();
 
-    expect(mockedPrisma.outboxEvent.update).toHaveBeenCalledWith({
-      where: { id: "outbox-1" },
-      data: { attempts: { increment: 1 } },
-    });
+    expect(mockedPrisma.outboxEvent.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ attempts: { increment: 1 } }),
+      }),
+    );
     expect(logger.error).toHaveBeenCalledWith(
       "OutboxRelay failed to publish event, will retry",
       expect.objectContaining({ eventName: "OrderPlaced" }),
+    );
+  });
+
+  it("handler failure result keeps the event retryable", async () => {
+    mockedPrisma.$queryRaw.mockResolvedValue([
+      { ...ROW, occurredAt: new Date(Date.now() - 1000) },
+    ] as never);
+    const publish = vi
+      .fn()
+      .mockResolvedValue({ success: false, failedHandlers: ["HandlerB"] });
+
+    await new OutboxRelay(createEventBus(publish)).pollOnce();
+
+    expect(mockedPrisma.outboxEvent.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ attempts: { increment: 1 } }),
+      }),
+    );
+    expect(mockedPrisma.outboxEvent.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ publishedAt: expect.any(Date) }),
+      }),
     );
   });
 
@@ -102,12 +142,12 @@ describe("OutboxRelay.pollOnce", () => {
     const publish = vi
       .fn()
       .mockRejectedValueOnce(new Error("bus down"))
-      .mockResolvedValue(undefined);
+      .mockResolvedValue({ success: true, failedHandlers: [] });
 
     await new OutboxRelay(createEventBus(publish)).pollOnce();
 
     expect(publish).toHaveBeenCalledTimes(2);
-    expect(mockedPrisma.outboxEvent.update).toHaveBeenCalledTimes(2);
+    expect(mockedPrisma.outboxEvent.updateMany).toHaveBeenCalledTimes(2);
   });
 
   it("lỗi truy vấn DB được log chứ không ném ra (timer không bị chết)", async () => {

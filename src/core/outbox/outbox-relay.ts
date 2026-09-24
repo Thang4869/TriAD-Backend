@@ -7,6 +7,7 @@ import {
   outboxEventsClaimed,
   outboxEventsPublished,
   outboxEventsFailed,
+  outboxEventsDeadLettered,
   outboxLagSeconds,
 } from "@core/metrics/metrics.registry";
 import { outboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
@@ -62,10 +63,10 @@ export class OutboxRelay {
           FOR UPDATE SKIP LOCKED
         )
         UPDATE outbox_events AS events
-        SET "lockedAt" = NOW(), "lockOwner" = ${this.owner}, "leaseUntil" = NOW() + (${LOCK_LEASE_SECONDS} || ' seconds')::interval
+            SET "lockedAt" = NOW(), "lockOwner" = ${this.owner}, "leaseUntil" = NOW() + (${LOCK_LEASE_SECONDS} || ' seconds')::interval
         FROM candidates
         WHERE events.id = candidates.id
-        RETURNING events.id, events."eventName", events."aggregateId", events.payload, events.attempts
+        RETURNING events.id, events."eventName", events."aggregateId", events.payload, events.attempts, events."occurredAt"
       `;
 
       outboxEventsClaimed.inc(rows.length);
@@ -95,31 +96,27 @@ export class OutboxRelay {
     occurredAt?: Date;
   }): Promise<void> {
     try {
-      const publishOptions =
-        this.eventBus instanceof EventBus
-          ? { eventId: row.id, tracker: outboxHandlerTracker }
-          : undefined;
-      await withRetry(
+      const result = await withRetry(
         () =>
-          publishOptions
-            ? this.eventBus.publish(row.payload as DomainEvent, publishOptions)
-            : this.eventBus.publish(row.payload as DomainEvent),
+          this.eventBus.publish(deserializeDomainEvent(row.payload), {
+            eventId: row.id,
+            tracker: outboxHandlerTracker,
+          }),
         {
           retries: 2,
           minTimeout: 50,
           maxTimeout: 500,
         },
       );
-      await this.updateClaimedRow(
-        row.id,
-        {
-          publishedAt: new Date(),
-          lockedAt: null,
-          lockOwner: null,
-          leaseUntil: null,
-        },
-        { publishedAt: new Date() },
-      );
+      if (!result.success) {
+        throw new Error(`Handlers failed: ${result.failedHandlers.join(", ")}`);
+      }
+      await this.updateClaimedRow(row.id, {
+        publishedAt: new Date(),
+        lockedAt: null,
+        lockOwner: null,
+        leaseUntil: null,
+      });
       outboxEventsPublished.inc();
     } catch (error) {
       logger.error("OutboxRelay failed to publish event, will retry", {
@@ -128,38 +125,43 @@ export class OutboxRelay {
         aggregateId: row.aggregateId,
         attempts: row.attempts,
       });
-      await this.updateClaimedRow(
-        row.id,
-        {
-          attempts: { increment: 1 },
-          lockedAt: null,
-          lockOwner: null,
-          leaseUntil: null,
-          lastError: error instanceof Error ? error.message : String(error),
-        },
-        { attempts: { increment: 1 } },
-      );
+      const attempts = row.attempts + 1;
+      const deadLettered = attempts >= MAX_ATTEMPTS;
+      await this.updateClaimedRow(row.id, {
+        attempts: { increment: 1 },
+        lockedAt: null,
+        lockOwner: null,
+        leaseUntil: deadLettered
+          ? null
+          : new Date(Date.now() + Math.min(60_000, 1000 * 2 ** row.attempts)),
+        deadLetteredAt: deadLettered ? new Date() : null,
+        lastError: error instanceof Error ? error.message : String(error),
+      });
+      if (deadLettered) outboxEventsDeadLettered.inc();
       outboxEventsFailed.inc();
     }
   }
 
   private async updateClaimedRow(
     id: string,
-    productionData: Record<string, unknown>,
-    compatibilityData: Record<string, unknown>,
+    data: Record<string, unknown>,
   ): Promise<void> {
-    const outbox = prisma.outboxEvent as typeof prisma.outboxEvent & {
-      updateMany?: (args: unknown) => Promise<unknown>;
-    };
-    if (typeof outbox.updateMany === "function") {
-      await outbox.updateMany({
-        where: { id, lockOwner: this.owner },
-        data: productionData,
-      });
-      return;
-    }
-    await outbox.update({ where: { id }, data: compatibilityData });
+    await prisma.outboxEvent.updateMany({
+      where: { id, lockOwner: this.owner },
+      data,
+    });
   }
+}
+
+function deserializeDomainEvent(payload: unknown): DomainEvent {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid outbox event payload");
+  }
+  const event = payload as DomainEvent;
+  return {
+    ...event,
+    occurredAt: new Date(event.occurredAt),
+  };
 }
 
 export const outboxRelay = new OutboxRelay();

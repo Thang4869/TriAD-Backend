@@ -8,7 +8,6 @@ import {
 import { ICheckoutRepository, TxClient } from "./checkout.repository";
 import { PricingService } from "./domain/pricing.service";
 import { StockReservationService } from "./services/stock-reservation.service";
-import { IdempotencyService } from "./services/idempotency.service";
 import { Order } from "@modules/orders/domain/order.entity";
 import { withSpan } from "@core/tracing/span";
 import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
@@ -35,7 +34,7 @@ export class CheckoutService {
     private readonly repository: ICheckoutRepository,
     private readonly pricingService: PricingService,
     private readonly stockService: StockReservationService,
-    private readonly idempotencyService: IdempotencyService,
+    _legacyIdempotencyService: unknown,
     private readonly featureFlags: FeatureFlagPort = new EnvironmentFeatureFlags(),
   ) {}
 
@@ -43,17 +42,6 @@ export class CheckoutService {
     return withSpan(
       "checkout.place_order",
       async (setAttributes) => {
-        if (input.idempotencyKey) {
-          const idempotentResult =
-            await this.idempotencyService.tryReturnIdempotentOrder(
-              input.idempotencyKey,
-            );
-          if (idempotentResult) {
-            setAttributes({ "checkout.idempotent_replay": true });
-            return idempotentResult;
-          }
-        }
-
         const user = await this.repository.findUserCartForCheckout(userId);
         if (!user || !user.cart || user.cart.items.length === 0) {
           throw new BadRequestError("Cart is empty");
@@ -103,11 +91,7 @@ export class CheckoutService {
           order.applyPricing(pricing);
           order.place();
 
-          await this.repository.saveNewOrder(
-            tx,
-            order,
-            input.idempotencyKey || "",
-          );
+          await this.repository.saveNewOrder(tx, order, input.idempotencyKey);
           await this.repository.clearCartItems(tx, cart.id);
           return order;
         });
@@ -123,13 +107,6 @@ export class CheckoutService {
           persistedOrder.id,
         );
         if (!fullOrder) throw new Error("Failed to retrieve created order");
-
-        if (input.idempotencyKey) {
-          await this.idempotencyService.cacheOrderId(
-            input.idempotencyKey,
-            persistedOrder.id,
-          );
-        }
 
         ordersPlaced.inc();
 

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StockReservationService } from "@modules/checkout/services/stock-reservation.service";
-import { IdempotencyService } from "@modules/checkout/services/idempotency.service";
 import {
   ICheckoutRepository,
   TxClient,
@@ -185,80 +184,5 @@ describe("StockReservationService.reserveStock", () => {
     ]);
 
     expect(repository.decrementProductStock).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("IdempotencyService", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("key rỗng thì bỏ qua, không truy vấn cache", async () => {
-    const repository = createRepository();
-
-    const result = await new IdempotencyService(
-      repository,
-    ).tryReturnIdempotentOrder("");
-
-    expect(result).toBeNull();
-    expect(repository.findCachedOrderId).not.toHaveBeenCalled();
-  });
-
-  it("chưa có cache thì trả null (cho phép tạo đơn mới)", async () => {
-    const repository = createRepository();
-
-    await expect(
-      new IdempotencyService(repository).tryReturnIdempotentOrder("key-1"),
-    ).resolves.toBeNull();
-  });
-
-  it("có cache và đơn còn tồn tại thì trả lại đơn cũ, đánh dấu idempotent", async () => {
-    const order = { id: "order-1", items: [] };
-    const repository = createRepository({
-      findCachedOrderId: vi.fn().mockResolvedValue("order-1"),
-      findOrderWithItems: vi.fn().mockResolvedValue(order),
-    });
-
-    const result = await new IdempotencyService(
-      repository,
-    ).tryReturnIdempotentOrder("key-1");
-
-    expect(result).toEqual({ order, idempotent: true });
-  });
-
-  it("cache trỏ tới đơn đã bị xoá thì trả null thay vì lỗi", async () => {
-    const repository = createRepository({
-      findCachedOrderId: vi.fn().mockResolvedValue("order-1"),
-      findOrderWithItems: vi.fn().mockResolvedValue(null),
-    });
-
-    await expect(
-      new IdempotencyService(repository).tryReturnIdempotentOrder("key-1"),
-    ).resolves.toBeNull();
-  });
-
-  it("cacheOrderId dùng TTL mặc định 86400 giây khi thiếu biến môi trường", async () => {
-    delete process.env.IDEMPOTENCY_TTL;
-    const repository = createRepository();
-
-    await new IdempotencyService(repository).cacheOrderId("key-1", "order-1");
-
-    expect(repository.cacheOrderId).toHaveBeenCalledWith(
-      "key-1",
-      "order-1",
-      86_400,
-    );
-  });
-
-  it("cacheOrderId đọc TTL từ biến môi trường IDEMPOTENCY_TTL", async () => {
-    process.env.IDEMPOTENCY_TTL = "60";
-    const repository = createRepository();
-
-    await new IdempotencyService(repository).cacheOrderId("key-1", "order-1");
-
-    expect(repository.cacheOrderId).toHaveBeenCalledWith(
-      "key-1",
-      "order-1",
-      60,
-    );
-    delete process.env.IDEMPOTENCY_TTL;
   });
 });

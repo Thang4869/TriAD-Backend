@@ -30,6 +30,12 @@ export class ConflictError extends AppError {
   }
 }
 
+export class UnprocessableEntityError extends AppError {
+  constructor(message: string) {
+    super(message, 422);
+  }
+}
+
 export class RateLimitError extends AppError {
   constructor(message: string = "Too many requests") {
     super(message, 429);

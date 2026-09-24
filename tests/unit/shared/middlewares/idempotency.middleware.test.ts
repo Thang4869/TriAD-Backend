@@ -2,12 +2,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { idempotencyMiddleware } from "@shared/middlewares/idempotency.middleware";
 import { Request, Response, NextFunction } from "express";
 import redis from "@core/redis/client";
-import { BadRequestError } from "@shared/utils/errors";
+import {
+  BadRequestError,
+  ConflictError,
+  UnprocessableEntityError,
+} from "@shared/utils/errors";
+import crypto from "crypto";
 
 vi.mock("@core/redis/client", () => ({
   default: {
     get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue("OK"),
     setex: vi.fn().mockResolvedValue("OK"),
+    del: vi.fn().mockResolvedValue(1),
   },
 }));
 
@@ -46,14 +53,99 @@ describe("idempotencyMiddleware", () => {
   });
 
   it("should return cached response if exists", async () => {
-    const cached = JSON.stringify({ status: 200, data: { id: "order-1" } });
+    const requestHash = crypto.createHash("sha256").update("{}").digest("hex");
+    const cached = JSON.stringify({
+      state: "COMPLETED",
+      requestHash,
+      status: 200,
+      data: { id: "order-1" },
+    });
     vi.mocked(redis.get).mockResolvedValueOnce(cached);
     req.headers = { "idempotency-key": "key1" };
+    req.originalUrl = "/api/checkout/";
     const middleware = idempotencyMiddleware();
     await middleware(req as Request, res as Response, next);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ id: "order-1" });
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("must not replay user A response to user B with the same key", async () => {
+    const cached = JSON.stringify({
+      status: 200,
+      data: { orderId: "user-a-order" },
+    });
+    vi.mocked(redis.get).mockImplementationOnce(async (key) =>
+      String(key) === "idempotent:shared-key" ? cached : null,
+    );
+    req.headers = { "idempotency-key": "shared-key" };
+    req.user = { id: "user-b", email: "b@example.com", role: "USER" };
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("replays the same user's identical request", async () => {
+    const requestHash = crypto
+      .createHash("sha256")
+      .update('{"amount":1}')
+      .digest("hex");
+    vi.mocked(redis.get).mockResolvedValueOnce(
+      JSON.stringify({
+        state: "COMPLETED",
+        requestHash,
+        status: 201,
+        data: { id: "order-1" },
+      }),
+    );
+    req.user = { id: "user-a", email: "a@example.com", role: "USER" };
+    req.originalUrl = "/api/checkout/";
+    req.body = { amount: 1 };
+    req.headers = { "idempotency-key": "same-key" };
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 when the same key is reused with a different body", async () => {
+    const requestHash = crypto
+      .createHash("sha256")
+      .update('{"amount":1}')
+      .digest("hex");
+    vi.mocked(redis.get).mockResolvedValueOnce(
+      JSON.stringify({
+        state: "COMPLETED",
+        requestHash,
+        status: 201,
+        data: { id: "order-1" },
+      }),
+    );
+    req.user = { id: "user-a", email: "a@example.com", role: "USER" };
+    req.originalUrl = "/api/checkout/";
+    req.body = { amount: 2 };
+    req.headers = { "idempotency-key": "same-key" };
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(
+      UnprocessableEntityError,
+    );
+  });
+
+  it("returns 409 when an identical request is already in progress", async () => {
+    const requestHash = crypto.createHash("sha256").update("{}").digest("hex");
+    vi.mocked(redis.get).mockResolvedValueOnce(
+      JSON.stringify({ state: "IN_PROGRESS", requestHash }),
+    );
+    req.headers = { "idempotency-key": "progress-key" };
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(ConflictError);
   });
 
   it("should attach idempotencyKey to body and override res.json to cache", async () => {
@@ -65,9 +157,9 @@ describe("idempotencyMiddleware", () => {
 
     (res as any).json({ success: true });
     expect(redis.setex).toHaveBeenCalledWith(
-      "idempotent:key2",
+      "idempotency:anonymous:unknown:key2",
       expect.any(Number),
-      JSON.stringify({ status: 200, data: { success: true } }),
+      expect.stringContaining('"state":"COMPLETED"'),
     );
   });
 
@@ -81,9 +173,9 @@ describe("idempotencyMiddleware", () => {
 
       (res as any).json({ success: true });
       expect(redis.setex).toHaveBeenCalledWith(
-        "idempotent:key2-env-ttl",
-        3600,
-        JSON.stringify({ status: 200, data: { success: true } }),
+        "idempotency:anonymous:unknown:key2-env-ttl",
+        86400,
+        expect.stringContaining('"state":"COMPLETED"'),
       );
     } finally {
       if (original === undefined) {
@@ -126,9 +218,9 @@ describe("idempotencyMiddleware", () => {
     await Promise.resolve();
 
     expect(redis.setex).toHaveBeenCalledWith(
-      "idempotent:key4-success",
+      "idempotency:anonymous:unknown:key4-success",
       86400,
-      JSON.stringify({ status: 200, data: { success: true } }),
+      expect.stringContaining('"state":"COMPLETED"'),
     );
   });
 
@@ -143,9 +235,9 @@ describe("idempotencyMiddleware", () => {
       (res as any).json({ success: true });
 
       expect(redis.setex).toHaveBeenCalledWith(
-        "idempotent:key-default-ttl",
+        "idempotency:anonymous:unknown:key-default-ttl",
         86400,
-        JSON.stringify({ status: 200, data: { success: true } }),
+        expect.stringContaining('"state":"COMPLETED"'),
       );
     } finally {
       if (originalTtl === undefined) {
@@ -166,9 +258,9 @@ describe("idempotencyMiddleware", () => {
 
     (res as any).json({ success: true });
     expect(redis.setex).toHaveBeenCalledWith(
-      "idempotent:key5",
-      3600,
-      JSON.stringify({ status: 200, data: { success: true } }),
+      "idempotency:anonymous:unknown:key5",
+      86400,
+      expect.stringContaining('"state":"COMPLETED"'),
     );
 
     process.env.IDEMPOTENCY_TTL = originalTtl;

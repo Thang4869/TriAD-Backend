@@ -1,5 +1,4 @@
 import prisma from "@core/database/prisma";
-import redis from "@core/redis/client";
 import { Prisma, Order } from "@prisma/client";
 import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import { persistDomainEvents } from "@core/unit-of-work/unit-of-work";
@@ -7,7 +6,6 @@ import { PaymentMethod, PaymentStatus } from "@prisma/client";
 
 export type TxClient = Prisma.TransactionClient;
 
-const IDEMPOTENCY_KEY_PREFIX = "idempotent:";
 const TRANSACTION_TIMEOUT_MS = 10_000;
 
 export type UserCartForCheckout = Prisma.UserGetPayload<{
@@ -67,7 +65,7 @@ export interface CreateOrderData {
   customerPhone: string;
   customerAddress: string;
   notes?: string;
-  idempotencyKey: string;
+  idempotencyKey?: string;
 }
 
 export interface CreateOrderItemData {
@@ -81,13 +79,6 @@ export interface CreateOrderItemData {
 // ---------- Repository contract ----------
 
 export interface ICheckoutRepository {
-  findCachedOrderId(idempotencyKey: string): Promise<string | null>;
-  cacheOrderId(
-    idempotencyKey: string,
-    orderId: string,
-    ttlSeconds: number,
-  ): Promise<void>;
-
   findOrderWithItems(orderId: string): Promise<OrderWithItems | null>;
   findUserCartForCheckout(userId: string): Promise<UserCartForCheckout | null>;
 
@@ -119,7 +110,7 @@ export interface ICheckoutRepository {
   saveNewOrder(
     tx: TxClient,
     order: OrderAggregate,
-    idempotencyKey: string,
+    idempotencyKey?: string,
   ): Promise<Order>;
 
   findOrdersByUser(
@@ -137,25 +128,6 @@ export interface ICheckoutRepository {
 // ---------- Prisma implementation ----------
 
 export class PrismaCheckoutRepository implements ICheckoutRepository {
-  async findCachedOrderId(idempotencyKey: string): Promise<string | null> {
-    const cached = await redis.get(
-      `${IDEMPOTENCY_KEY_PREFIX}${idempotencyKey}`,
-    );
-    return cached ? (JSON.parse(cached) as string) : null;
-  }
-
-  async cacheOrderId(
-    idempotencyKey: string,
-    orderId: string,
-    ttlSeconds: number,
-  ): Promise<void> {
-    await redis.setex(
-      `${IDEMPOTENCY_KEY_PREFIX}${idempotencyKey}`,
-      ttlSeconds,
-      JSON.stringify(orderId),
-    );
-  }
-
   async findOrderWithItems(orderId: string): Promise<OrderWithItems | null> {
     return prisma.order.findUnique({
       where: { id: orderId },
@@ -240,7 +212,7 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
   async saveNewOrder(
     tx: TxClient,
     order: OrderAggregate,
-    idempotencyKey: string,
+    idempotencyKey?: string,
   ): Promise<Order> {
     const created = await tx.order.create({
       data: {
@@ -261,7 +233,7 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
         customerPhone: order.customerPhone,
         customerAddress: order.customerAddress,
         notes: order.notes,
-        idempotencyKey,
+        ...(idempotencyKey ? { idempotencyKey } : {}),
       },
     });
 

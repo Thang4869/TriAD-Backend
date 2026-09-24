@@ -3,7 +3,6 @@ import { CheckoutService } from "../../src/modules/checkout/checkout.service";
 import { ICheckoutRepository } from "../../src/modules/checkout/checkout.repository";
 import { PricingService } from "../../src/modules/checkout/domain/pricing.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
-import { IdempotencyService } from "@/modules/checkout/services/idempotency.service";
 import { ConflictError } from "@shared/utils/errors";
 
 vi.mock("@core/redis/client", () => ({
@@ -77,16 +76,11 @@ describe("Checkout Concurrency", () => {
       reserveStock: vi.fn().mockResolvedValue(undefined),
     } as unknown as StockReservationService;
 
-    const idempotencyService = {
-      tryReturnIdempotentOrder: vi.fn().mockResolvedValue(null),
-      cacheOrderId: vi.fn().mockResolvedValue(undefined),
-    } as unknown as IdempotencyService;
-
     const checkoutService = new CheckoutService(
       repository,
       pricingService,
       stockService,
-      idempotencyService,
+      undefined,
     );
 
     const mockOrderEntity = {

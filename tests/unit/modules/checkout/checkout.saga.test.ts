@@ -5,6 +5,7 @@ import {
   CheckoutSagaState,
 } from "@modules/checkout/application/checkout.saga";
 import { InMemorySagaStateStore } from "@shared/application/saga/saga-state";
+import { SagaTimeoutError } from "@shared/application/saga/saga-state";
 
 const input = {
   sagaId: "saga-1",
@@ -62,5 +63,26 @@ describe("CheckoutSaga", () => {
 
     expect(actionPorts.reserveStock).not.toHaveBeenCalled();
     expect(actionPorts.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("times out a stuck step and preserves compensation state", async () => {
+    const actionPorts = ports();
+    vi.mocked(actionPorts.reserveStock).mockImplementation(
+      () => new Promise<string>(() => undefined),
+    );
+    const store = new InMemorySagaStateStore<CheckoutSagaState>();
+    await store.save("saga-timeout", {
+      sagaId: "saga-timeout",
+      step: "STARTED",
+      deadlineAt: Date.now() + 5,
+    });
+
+    await expect(
+      new CheckoutSaga(actionPorts, store).execute({
+        ...input,
+        sagaId: "saga-timeout",
+      }),
+    ).rejects.toBeInstanceOf(SagaTimeoutError);
+    expect((await store.load("saga-timeout"))?.step).toBe("COMPENSATED");
   });
 });

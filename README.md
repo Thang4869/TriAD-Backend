@@ -234,9 +234,17 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
 Các bounded context được tách bằng module, port và DI ngay trong một process. Cách này giữ transaction boundary và local debugging đơn giản khi team còn cần thay đổi domain nhanh; Outbox và Saga tạo khả năng tách service sau này mà không buộc hệ thống trả giá vận hành microservices quá sớm.
 
-### ADR-002: Transactional Outbox + CQRS read ports
+### ADR-002: Transactional Outbox + CQRS projections
 
-Domain events được ghi cùng transaction với aggregate. Relay claim event bằng `SKIP LOCKED` và lease trước khi publish, nên nhiều instance không xử lý cùng row trong một lease. Catalog, Dashboard và Order History dùng read-only ports, giữ nguyên API response trong khi có thể thay adapter bằng projection/materialized view.
+Domain events được ghi cùng transaction với aggregate. Relay claim event bằng `SKIP LOCKED` và lease trước khi publish, nên nhiều instance không xử lý cùng row trong một lease. Catalog, Dashboard và Order History có dedicated projection tables được cập nhật bởi idempotent handlers. API response giữ nguyên để frontend không phải đổi hợp đồng.
+
+### ADR-003: Production Saga orchestration
+
+Checkout và Cancellation/Refund lưu state bằng Prisma, retry từng step với exponential backoff, timeout từng step và deadline toàn Saga. Compensation được gọi qua cùng policy để chịu được retry và process restart.
+
+## 10. Principal Architecture
+
+Mermaid C4 context/container/component diagrams, decision records, trade-offs, production commands, chaos testing và operational guidance nằm tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### ADR-003: Saga cho workflow phân tán
 

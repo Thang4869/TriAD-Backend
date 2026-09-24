@@ -1,4 +1,6 @@
 import { Role } from "@shared/types/roles";
+import { Email } from "@shared/value-objects/email";
+import { PhoneNumber } from "@shared/value-objects/phone-number";
 import { AggregateRoot } from "@shared/domain/aggregate-root";
 import {
   UserRegisteredEvent,
@@ -21,19 +23,19 @@ export class User extends AggregateRoot {
   private _isVerified: boolean;
   private _is2FAEnabled: boolean;
   private _totpSecret: string | null;
-  private _phone: string | null;
+  private _phone: PhoneNumber | null;
 
   private constructor(
     id: string,
-    public readonly email: string,
-    public firstName: string,
-    public lastName: string,
+    private readonly _email: Email,
+    private _firstName: string,
+    private _lastName: string,
     password: string | null,
     public readonly role: Role,
     isVerified: boolean,
     is2FAEnabled: boolean,
     totpSecret: string | null,
-    phone: string | null,
+    phone: PhoneNumber | null,
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
   ) {
@@ -45,8 +47,19 @@ export class User extends AggregateRoot {
     this._phone = phone;
   }
 
+  get email(): string {
+    return this._email.getValue();
+  }
+
+  get firstName(): string {
+    return this._firstName;
+  }
+  get lastName(): string {
+    return this._lastName;
+  }
+
   get fullName(): string {
-    return `${this.firstName} ${this.lastName}`.trim();
+    return `${this._firstName} ${this._lastName}`.trim();
   }
 
   get isVerified(): boolean {
@@ -58,7 +71,7 @@ export class User extends AggregateRoot {
   }
 
   get phone(): string | null {
-    return this._phone;
+    return this._phone?.getValue() ?? null;
   }
 
   get passwordHash(): string | null {
@@ -105,9 +118,9 @@ export class User extends AggregateRoot {
   }
 
   updateProfile(firstName?: string, lastName?: string, phone?: string): void {
-    if (firstName) this.firstName = firstName;
-    if (lastName) this.lastName = lastName;
-    if (phone !== undefined) this._phone = phone;
+    if (firstName) this._firstName = firstName;
+    if (lastName) this._lastName = lastName;
+    if (phone !== undefined) this._phone = new PhoneNumber(phone);
   }
 
   static hydrate(data: {
@@ -126,7 +139,7 @@ export class User extends AggregateRoot {
   }): User {
     return new User(
       data.id,
-      data.email,
+      new Email(data.email),
       data.firstName,
       data.lastName,
       data.password,
@@ -134,7 +147,7 @@ export class User extends AggregateRoot {
       data.isVerified,
       data.is2FAEnabled,
       data.totpSecret,
-      data.phone,
+      data.phone ? new PhoneNumber(data.phone) : null,
       data.createdAt,
       data.updatedAt,
     );

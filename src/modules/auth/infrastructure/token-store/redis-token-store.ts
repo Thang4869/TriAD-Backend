@@ -27,4 +27,14 @@ export class RedisTokenStore implements TokenStorePort {
 
     return typeof result === "string" ? result : null;
   }
+
+  async setIfAbsent(
+    key: string,
+    value: string,
+    expiresInSeconds: number,
+  ): Promise<boolean> {
+    const result = await redis.set(key, value, "EX", expiresInSeconds, "NX");
+
+    return result === "OK";
+  }
 }

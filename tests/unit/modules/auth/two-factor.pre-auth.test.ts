@@ -6,13 +6,18 @@ import type { IAuthRepository } from "@modules/auth/auth.repository";
 import config from "@config";
 import { encryptTotpSecret } from "@modules/auth/services/totp-secret.crypto";
 
-const { redisMock } = vi.hoisted(() => ({
-  redisMock: { set: vi.fn() },
-}));
-
-vi.mock("@core/redis/client", () => ({ default: redisMock }));
+function createTokenStore() {
+  return {
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    getAndDelete: vi.fn().mockResolvedValue(null),
+    setIfAbsent: vi.fn().mockResolvedValue(true),
+  };
+}
 
 const rawTotpSecret = "JBSWY3DPEHPK3PXP";
+
 const user = {
   id: "user-1",
   email: "user@example.com",
@@ -28,6 +33,7 @@ describe("TOTP pre-authentication", () => {
     const repository = {
       findUserById: vi.fn().mockResolvedValue(user),
     } as unknown as IAuthRepository;
+
     const tokenService = {
       consumeTwoFactorPreAuthToken: vi
         .fn()
@@ -38,13 +44,19 @@ describe("TOTP pre-authentication", () => {
         user,
       }),
     } as unknown as TokenService;
-    const service = new TwoFactorService(repository, tokenService);
+
+    const service = new TwoFactorService(
+      repository,
+      tokenService,
+      createTokenStore(),
+    );
 
     const validTotp = speakeasy.totp({
       secret: rawTotpSecret,
       encoding: "base32",
       time: Math.floor(Date.now() / 1000),
     });
+
     await expect(service.verifyTOTP("user-1", validTotp)).rejects.toThrow(
       "Pre-authentication token required",
     );
@@ -54,14 +66,24 @@ describe("TOTP pre-authentication", () => {
     const repository = {
       findUserById: vi.fn().mockResolvedValue(user),
     } as unknown as IAuthRepository;
+
     const tokenService = {
       consumeTwoFactorPreAuthToken: vi.fn().mockResolvedValue("user-1"),
-      generateTokens: vi
-        .fn()
-        .mockResolvedValue({ accessToken: "a", refreshToken: "r", user }),
+      generateTokens: vi.fn().mockResolvedValue({
+        accessToken: "a",
+        refreshToken: "r",
+        user,
+      }),
     } as unknown as TokenService;
-    redisMock.set.mockResolvedValueOnce("OK").mockResolvedValueOnce(null);
-    const service = new TwoFactorService(repository, tokenService);
+
+    const tokenStore = createTokenStore();
+
+    tokenStore.setIfAbsent
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    const service = new TwoFactorService(repository, tokenService, tokenStore);
+
     const validTotp = speakeasy.totp({
       secret: rawTotpSecret,
       encoding: "base32",
@@ -70,7 +92,10 @@ describe("TOTP pre-authentication", () => {
 
     await expect(
       service.verifyTOTP("pre-auth", validTotp),
-    ).resolves.toMatchObject({ accessToken: "a" });
+    ).resolves.toMatchObject({
+      accessToken: "a",
+    });
+
     await expect(service.verifyTOTP("pre-auth-2", validTotp)).rejects.toThrow(
       "already used",
     );
@@ -82,6 +107,7 @@ describe("TOTP pre-authentication", () => {
       const repository = {
         findUserById: vi.fn(),
       } as unknown as IAuthRepository;
+
       const tokenService = {
         consumeTwoFactorPreAuthToken: vi
           .fn()
@@ -89,11 +115,17 @@ describe("TOTP pre-authentication", () => {
             new Error("Invalid or expired pre-authentication token"),
           ),
       } as unknown as TokenService;
-      const service = new TwoFactorService(repository, tokenService);
+
+      const service = new TwoFactorService(
+        repository,
+        tokenService,
+        createTokenStore(),
+      );
 
       await expect(service.verifyTOTP("bad-token", "123456")).rejects.toThrow(
         /pre-authentication token/i,
       );
+
       expect(repository.findUserById).not.toHaveBeenCalled();
     },
   );

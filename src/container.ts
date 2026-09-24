@@ -63,6 +63,7 @@ import { TwoFactorService } from "./modules/auth/services/two-factor.service";
 import { AdminProductService } from "./modules/products/services/admin-product.service";
 import { CatalogService } from "./modules/products/services/catalog.service";
 import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
+import { RedisTokenStore } from "@modules/auth/infrastructure/token-store/redis-token-store";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -108,7 +109,8 @@ container.register(
 // ---------- Auth sub-services ----------
 container.register(
   TOKENS.TokenService,
-  (c) => new TokenService(c.resolve(TOKENS.AuthRepository)),
+  (c) =>
+    new TokenService(c.resolve(TOKENS.AuthRepository), new RedisTokenStore()),
 );
 container.register(
   TOKENS.TwoFactorService,

@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import redis from "@core/redis/client";
+import { TokenStorePort } from "../application/ports/token-store.port";
 import { SECURITY } from "@shared/constants/security.constant";
 import { signToken, verifyToken, decodeToken } from "@shared/utils/jwt";
 import { UnauthorizedError } from "@shared/utils/errors";
@@ -15,21 +15,28 @@ export interface PreAuthClaims {
 }
 
 export class TokenService {
-  constructor(private readonly authRepository: IAuthRepository) {}
+  constructor(
+    private readonly authRepository: IAuthRepository,
+    private readonly tokenStore: TokenStorePort,
+  ) {}
 
   async issueTwoFactorPreAuthToken(userId: string): Promise<string> {
     const jti = crypto.randomUUID();
+
     const token = signToken(
       { sub: userId, purpose: "2fa", jti },
       config.JWT_PREAUTH_SECRET,
       "5m",
     );
-    await redis.setex(`auth:2fa:preauth:${jti}`, 300, userId);
+
+    await this.tokenStore.set(`auth:2fa:preauth:${jti}`, userId, 300);
+
     return token;
   }
 
   async consumeTwoFactorPreAuthToken(token: string): Promise<string> {
     let claims: PreAuthClaims;
+
     try {
       claims = verifyToken<PreAuthClaims>(token, config.JWT_PREAUTH_SECRET);
     } catch {
@@ -37,18 +44,19 @@ export class TokenService {
         "Invalid or expired pre-authentication token",
       );
     }
+
     if (claims.purpose !== "2fa" || !claims.sub || !claims.jti) {
       throw new UnauthorizedError("Invalid pre-authentication token");
     }
+
     const key = `auth:2fa:preauth:${claims.jti}`;
-    const consumed = await redis.eval(
-      "local value = redis.call('get', KEYS[1]); if value then redis.call('del', KEYS[1]); return value end; return false",
-      1,
-      key,
-    );
+
+    const consumed = await this.tokenStore.getAndDelete(key);
+
     if (consumed !== claims.sub) {
       throw new UnauthorizedError("Pre-authentication token already used");
     }
+
     return claims.sub;
   }
 
@@ -84,14 +92,22 @@ export class TokenService {
     };
   }> {
     const accessToken = signToken(
-      { sub: user.id, email: user.email, role: user.role },
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+      },
       TokenService.ACCESS_SECRET,
       TokenService.ACCESS_EXPIRY,
     );
 
     const finalFamilyId = familyId || crypto.randomUUID();
+
     const refreshToken = signToken(
-      { sub: user.id, familyId: finalFamilyId },
+      {
+        sub: user.id,
+        familyId: finalFamilyId,
+      },
       TokenService.REFRESH_SECRET,
       TokenService.REFRESH_EXPIRY,
     );
@@ -123,26 +139,32 @@ export class TokenService {
     user: AuthUserResponse;
   }> {
     try {
-      const { sub, familyId } = verifyToken<{ sub: string; familyId: string }>(
-        refreshToken,
-        TokenService.REFRESH_SECRET,
-      );
+      const { sub, familyId } = verifyToken<{
+        sub: string;
+        familyId: string;
+      }>(refreshToken, TokenService.REFRESH_SECRET);
 
       const tokenRecord =
         await this.authRepository.findRefreshTokenWithUser(refreshToken);
+
       if (!tokenRecord) {
         throw new UnauthorizedError("Invalid refresh token");
       }
+
       if (tokenRecord.revokedAt !== null) {
         await this.authRepository.revokeAllTokensInFamily(tokenRecord.familyId);
+
         throw new UnauthorizedError("Token revoked - possible theft detected");
       }
+
       if (tokenRecord.expiresAt < new Date()) {
         throw new UnauthorizedError("Refresh token expired");
       }
+
       if (tokenRecord.familyId !== familyId) {
         throw new UnauthorizedError("Family ID mismatch");
       }
+
       if (tokenRecord.userId !== sub) {
         throw new UnauthorizedError("User ID mismatch");
       }
@@ -151,14 +173,18 @@ export class TokenService {
         await this.authRepository.findActiveRefreshTokenByFamily(
           tokenRecord.familyId,
         );
+
       const REFRESH_GRACE_PERIOD_SECONDS = 30;
+
       if (latestToken && latestToken.id !== tokenRecord.id) {
         const timeDiff =
           (Date.now() - new Date(latestToken.createdAt).getTime()) / 1000;
+
         if (timeDiff >= REFRESH_GRACE_PERIOD_SECONDS) {
           await this.authRepository.revokeAllTokensInFamily(
             tokenRecord.familyId,
           );
+
           throw new UnauthorizedError(
             "Token has been superseded - possible theft",
           );
@@ -166,9 +192,13 @@ export class TokenService {
       }
 
       await this.authRepository.revokeRefreshToken(tokenRecord.id);
+
       return this.generateTokens(tokenRecord.user, tokenRecord.familyId);
     } catch (error) {
-      if (error instanceof UnauthorizedError) throw error;
+      if (error instanceof UnauthorizedError) {
+        throw error;
+      }
+
       throw new UnauthorizedError("Invalid refresh token");
     }
   }
@@ -179,14 +209,18 @@ export class TokenService {
 
   async blacklistAccessToken(accessToken: string): Promise<void> {
     try {
-      const decoded = decodeToken(accessToken) as { exp: number } | null;
+      const decoded = decodeToken(accessToken) as {
+        exp: number;
+      } | null;
+
       if (decoded?.exp) {
         const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+
         if (ttl > 0) {
-          await redis.setex(
+          await this.tokenStore.set(
             `${SECURITY.BLACKLIST_KEY_PREFIX}${accessToken}`,
-            ttl,
             "1",
+            ttl,
           );
         }
       }

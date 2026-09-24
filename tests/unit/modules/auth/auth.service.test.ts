@@ -72,6 +72,13 @@ function createFakeRepository(overrides = {}): IAuthRepository {
   };
 }
 
+const createTokenStore = () => ({
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn().mockResolvedValue(undefined),
+  delete: vi.fn().mockResolvedValue(undefined),
+  getAndDelete: vi.fn().mockResolvedValue(null),
+});
+
 // ---------- Base user ----------
 const baseUser: User = {
   id: "user-id",
@@ -638,7 +645,7 @@ describe("AuthService", () => {
       repository.revokeRefreshToken = vi.fn().mockResolvedValue(undefined);
       repository.createRefreshToken = vi.fn().mockResolvedValue({});
       // Sử dụng real TokenService để kiểm tra logic thật
-      const realTokenService = new TokenService(repository);
+      const realTokenService = new TokenService(repository, createTokenStore());
       const serviceWithRealToken = new AuthService(
         repository,
         mockEmailService,
@@ -727,7 +734,7 @@ describe("AuthService", () => {
   describe("generateTokens", () => {
     it("signs access/refresh tokens, persists the refresh token, and maps the user", async () => {
       // Sử dụng real TokenService để kiểm tra logic thật
-      const realTokenService = new TokenService(repository);
+      const realTokenService = new TokenService(repository, createTokenStore());
       const serviceWithRealToken = new AuthService(
         repository,
         mockEmailService,
@@ -814,7 +821,7 @@ describe("AuthService", () => {
     it("falls back to default 15m/7d expiry when unset", async () => {
       delete process.env.JWT_ACCESS_EXPIRY;
       delete process.env.JWT_REFRESH_EXPIRY;
-      const realTokenService = new TokenService(repository);
+      const realTokenService = new TokenService(repository, createTokenStore());
       const serviceWithRealToken = new AuthService(
         repository,
         mockEmailService,
@@ -829,7 +836,7 @@ describe("AuthService", () => {
     it("uses JWT_ACCESS_EXPIRY/JWT_REFRESH_EXPIRY from env when explicitly provided", async () => {
       process.env.JWT_ACCESS_EXPIRY = "30m";
       process.env.JWT_REFRESH_EXPIRY = "30d";
-      const realTokenService = new TokenService(repository);
+      const realTokenService = new TokenService(repository, createTokenStore());
       const serviceWithRealToken = new AuthService(
         repository,
         mockEmailService,

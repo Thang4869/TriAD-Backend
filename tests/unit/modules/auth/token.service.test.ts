@@ -6,7 +6,6 @@ import type {
 } from "@modules/auth/auth.repository";
 import { UnauthorizedError } from "@shared/utils/errors";
 import { signToken, verifyToken, decodeToken } from "@shared/utils/jwt";
-import redis from "@core/redis/client";
 import { SECURITY } from "@shared/constants/security.constant";
 import config from "@config";
 
@@ -14,10 +13,6 @@ vi.mock("@shared/utils/jwt", () => ({
   signToken: vi.fn(),
   verifyToken: vi.fn(),
   decodeToken: vi.fn(),
-}));
-
-vi.mock("@core/redis/client", () => ({
-  default: { setex: vi.fn().mockResolvedValue("OK") },
 }));
 
 const user = {
@@ -51,6 +46,15 @@ function createRepo(overrides: Partial<IAuthRepository> = {}): IAuthRepository {
   } as IAuthRepository;
 }
 
+function createTokenStore() {
+  return {
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    getAndDelete: vi.fn().mockResolvedValue(null),
+  };
+}
+
 function tokenRecord(
   overrides: Partial<RefreshTokenWithUser> = {},
 ): RefreshTokenWithUser {
@@ -72,6 +76,7 @@ const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
   vi.clearAllMocks();
+
   Object.assign(config, {
     JWT_ACCESS_SECRET: "access-secret",
     JWT_REFRESH_SECRET: "refresh-secret",
@@ -82,6 +87,7 @@ beforeEach(() => {
   vi.mocked(signToken).mockImplementation((_p, secret) =>
     secret === "access-secret" ? "ACCESS" : "REFRESH",
   );
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   vi.mocked(verifyToken).mockReturnValue({
     familyId: "fam-1",
@@ -96,7 +102,7 @@ afterEach(() => {
 describe("TokenService.generateTokens", () => {
   it("ký access + refresh token và lưu refresh token xuống DB", async () => {
     const repo = createRepo();
-    const service = new TokenService(repo);
+    const service = new TokenService(repo, createTokenStore());
 
     const result = await service.generateTokens(user);
 
@@ -110,6 +116,7 @@ describe("TokenService.generateTokens", () => {
       role: "USER",
       is2FAEnabled: false,
     });
+
     expect(repo.createRefreshToken).toHaveBeenCalledWith(
       "REFRESH",
       "user-1",
@@ -119,17 +126,25 @@ describe("TokenService.generateTokens", () => {
   });
 
   it("dùng expiry mặc định 15m / 7d khi env không đặt", async () => {
-    await new TokenService(createRepo()).generateTokens(user);
+    await new TokenService(createRepo(), createTokenStore()).generateTokens(
+      user,
+    );
 
     expect(signToken).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ sub: "user-1", role: "USER" }),
+      expect.objectContaining({
+        sub: "user-1",
+        role: "USER",
+      }),
       "access-secret",
       "15m",
     );
+
     expect(signToken).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ sub: "user-1" }),
+      expect.objectContaining({
+        sub: "user-1",
+      }),
       "refresh-secret",
       "7d",
     );
@@ -141,7 +156,9 @@ describe("TokenService.generateTokens", () => {
       JWT_REFRESH_EXPIRY: "2d",
     });
 
-    await new TokenService(createRepo()).generateTokens(user);
+    await new TokenService(createRepo(), createTokenStore()).generateTokens(
+      user,
+    );
 
     expect(signToken).toHaveBeenNthCalledWith(
       1,
@@ -149,6 +166,7 @@ describe("TokenService.generateTokens", () => {
       "access-secret",
       "5m",
     );
+
     expect(signToken).toHaveBeenNthCalledWith(
       2,
       expect.anything(),
@@ -158,30 +176,42 @@ describe("TokenService.generateTokens", () => {
   });
 
   it("tái sử dụng familyId được truyền vào (token rotation)", async () => {
-    await new TokenService(createRepo()).generateTokens(user, "fam-existing");
+    await new TokenService(createRepo(), createTokenStore()).generateTokens(
+      user,
+      "fam-existing",
+    );
 
     expect(signToken).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ familyId: "fam-existing" }),
+      expect.objectContaining({
+        familyId: "fam-existing",
+      }),
       "refresh-secret",
       "7d",
     );
   });
 
   it("sinh familyId mới khi không truyền", async () => {
-    await new TokenService(createRepo()).generateTokens(user);
+    await new TokenService(createRepo(), createTokenStore()).generateTokens(
+      user,
+    );
 
     const payload = vi.mocked(signToken).mock.calls[1][0] as {
       familyId: string;
     };
+
     expect(payload.familyId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("ép is2FAEnabled về false khi giá trị là null/undefined", async () => {
-    const result = await new TokenService(createRepo()).generateTokens({
+    const result = await new TokenService(
+      createRepo(),
+      createTokenStore(),
+    ).generateTokens({
       ...user,
       is2FAEnabled: null,
     });
+
     expect(result.user.is2FAEnabled).toBe(false);
   });
 });
@@ -192,7 +222,11 @@ describe("TokenService.refreshToken", () => {
       findRefreshTokenWithUser: vi.fn().mockResolvedValue(tokenRecord()),
     });
 
-    const result = await new TokenService(repo).refreshToken("refresh-token");
+    const tokenStore = createTokenStore();
+
+    const result = await new TokenService(repo, tokenStore).refreshToken(
+      "refresh-token",
+    );
 
     expect(repo.revokeRefreshToken).toHaveBeenCalledWith("rt-1");
     expect(result.accessToken).toBe("ACCESS");
@@ -201,59 +235,67 @@ describe("TokenService.refreshToken", () => {
 
   it("từ chối khi token không có trong DB", async () => {
     const repo = createRepo();
+
     await expect(
-      new TokenService(repo).refreshToken("khong-co"),
+      new TokenService(repo, createTokenStore()).refreshToken("khong-co"),
     ).rejects.toThrow(UnauthorizedError);
   });
 
   it("phát hiện reuse: token đã revoke thì huỷ cả family", async () => {
     const repo = createRepo({
-      findRefreshTokenWithUser: vi
-        .fn()
-        .mockResolvedValue(tokenRecord({ revokedAt: new Date() })),
+      findRefreshTokenWithUser: vi.fn().mockResolvedValue(
+        tokenRecord({
+          revokedAt: new Date(),
+        }),
+      ),
     });
 
     await expect(
-      new TokenService(repo).refreshToken("refresh-token"),
+      new TokenService(repo, createTokenStore()).refreshToken("refresh-token"),
     ).rejects.toThrow(/theft/i);
+
     expect(repo.revokeAllTokensInFamily).toHaveBeenCalledWith("fam-1");
   });
 
   it("từ chối token đã hết hạn", async () => {
     const repo = createRepo({
-      findRefreshTokenWithUser: vi
-        .fn()
-        .mockResolvedValue(
-          tokenRecord({ expiresAt: new Date(Date.now() - 1_000) }),
-        ),
+      findRefreshTokenWithUser: vi.fn().mockResolvedValue(
+        tokenRecord({
+          expiresAt: new Date(Date.now() - 1_000),
+        }),
+      ),
     });
 
     await expect(
-      new TokenService(repo).refreshToken("refresh-token"),
+      new TokenService(repo, createTokenStore()).refreshToken("refresh-token"),
     ).rejects.toThrow(/expired/i);
   });
 
   it("từ chối khi familyId trong JWT lệch với DB", async () => {
     const repo = createRepo({
-      findRefreshTokenWithUser: vi
-        .fn()
-        .mockResolvedValue(tokenRecord({ familyId: "fam-khac" })),
+      findRefreshTokenWithUser: vi.fn().mockResolvedValue(
+        tokenRecord({
+          familyId: "fam-khac",
+        }),
+      ),
     });
 
     await expect(
-      new TokenService(repo).refreshToken("refresh-token"),
+      new TokenService(repo, createTokenStore()).refreshToken("refresh-token"),
     ).rejects.toThrow(/Family ID mismatch/);
   });
 
   it("từ chối khi userId trong JWT lệch với DB", async () => {
     const repo = createRepo({
-      findRefreshTokenWithUser: vi
-        .fn()
-        .mockResolvedValue(tokenRecord({ userId: "user-khac" })),
+      findRefreshTokenWithUser: vi.fn().mockResolvedValue(
+        tokenRecord({
+          userId: "user-khac",
+        }),
+      ),
     });
 
     await expect(
-      new TokenService(repo).refreshToken("refresh-token"),
+      new TokenService(repo, createTokenStore()).refreshToken("refresh-token"),
     ).rejects.toThrow(/User ID mismatch/);
   });
 
@@ -267,8 +309,9 @@ describe("TokenService.refreshToken", () => {
     });
 
     await expect(
-      new TokenService(repo).refreshToken("refresh-token"),
+      new TokenService(repo, createTokenStore()).refreshToken("refresh-token"),
     ).resolves.toBeDefined();
+
     expect(repo.revokeAllTokensInFamily).not.toHaveBeenCalled();
   });
 
@@ -282,8 +325,9 @@ describe("TokenService.refreshToken", () => {
     });
 
     await expect(
-      new TokenService(repo).refreshToken("refresh-token"),
+      new TokenService(repo, createTokenStore()).refreshToken("refresh-token"),
     ).rejects.toThrow(/superseded/i);
+
     expect(repo.revokeAllTokensInFamily).toHaveBeenCalledWith("fam-1");
   });
 
@@ -297,7 +341,7 @@ describe("TokenService.refreshToken", () => {
     });
 
     await expect(
-      new TokenService(repo).refreshToken("refresh-token"),
+      new TokenService(repo, createTokenStore()).refreshToken("refresh-token"),
     ).resolves.toBeDefined();
   });
 
@@ -307,7 +351,7 @@ describe("TokenService.refreshToken", () => {
     });
 
     await expect(
-      new TokenService(createRepo()).refreshToken("rác"),
+      new TokenService(createRepo(), createTokenStore()).refreshToken("rác"),
     ).rejects.toThrow(UnauthorizedError);
   });
 });
@@ -315,25 +359,36 @@ describe("TokenService.refreshToken", () => {
 describe("TokenService.invalidateAllUserTokens", () => {
   it("xoá toàn bộ refresh token của user", async () => {
     const repo = createRepo();
-    await new TokenService(repo).invalidateAllUserTokens("user-1");
+
+    await new TokenService(repo, createTokenStore()).invalidateAllUserTokens(
+      "user-1",
+    );
+
     expect(repo.deleteRefreshTokensByUserId).toHaveBeenCalledWith("user-1");
   });
 });
 
 describe("TokenService.blacklistAccessToken", () => {
-  it("ghi token vào redis với TTL còn lại", async () => {
+  it("ghi token vào token store với TTL còn lại", async () => {
     const exp = Math.floor(Date.now() / 1000) + 300;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(decodeToken).mockReturnValue({ exp } as any);
 
-    await new TokenService(createRepo()).blacklistAccessToken("ACCESS");
+    const tokenStore = createTokenStore();
 
-    expect(redis.setex).toHaveBeenCalledWith(
-      `${SECURITY.BLACKLIST_KEY_PREFIX}ACCESS`,
-      expect.any(Number),
-      "1",
+    await new TokenService(createRepo(), tokenStore).blacklistAccessToken(
+      "ACCESS",
     );
-    const ttl = vi.mocked(redis.setex).mock.calls[0][1] as number;
+
+    expect(tokenStore.set).toHaveBeenCalledWith(
+      `${SECURITY.BLACKLIST_KEY_PREFIX}ACCESS`,
+      "1",
+      expect.any(Number),
+    );
+
+    const ttl = vi.mocked(tokenStore.set).mock.calls[0][2] as number;
+
     expect(ttl).toBeGreaterThan(290);
     expect(ttl).toBeLessThanOrEqual(300);
   });
@@ -344,32 +399,52 @@ describe("TokenService.blacklistAccessToken", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    await new TokenService(createRepo()).blacklistAccessToken("ACCESS");
-    expect(redis.setex).not.toHaveBeenCalled();
+    const tokenStore = createTokenStore();
+
+    await new TokenService(createRepo(), tokenStore).blacklistAccessToken(
+      "ACCESS",
+    );
+
+    expect(tokenStore.set).not.toHaveBeenCalled();
   });
 
   it("bỏ qua token không decode được", async () => {
     vi.mocked(decodeToken).mockReturnValue(null);
-    await new TokenService(createRepo()).blacklistAccessToken("rác");
-    expect(redis.setex).not.toHaveBeenCalled();
+
+    const tokenStore = createTokenStore();
+
+    await new TokenService(createRepo(), tokenStore).blacklistAccessToken(
+      "rác",
+    );
+
+    expect(tokenStore.set).not.toHaveBeenCalled();
   });
 
   it("bỏ qua token không có claim exp", async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(decodeToken).mockReturnValue({} as any);
-    await new TokenService(createRepo()).blacklistAccessToken("ACCESS");
-    expect(redis.setex).not.toHaveBeenCalled();
+
+    const tokenStore = createTokenStore();
+
+    await new TokenService(createRepo(), tokenStore).blacklistAccessToken(
+      "ACCESS",
+    );
+
+    expect(tokenStore.set).not.toHaveBeenCalled();
   });
 
-  it("nuốt lỗi redis thay vì làm hỏng luồng logout", async () => {
+  it("nuốt lỗi token store thay vì làm hỏng luồng logout", async () => {
     vi.mocked(decodeToken).mockReturnValue({
       exp: Math.floor(Date.now() / 1000) + 300,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
-    vi.mocked(redis.setex).mockRejectedValueOnce(new Error("redis down"));
+
+    const tokenStore = createTokenStore();
+
+    tokenStore.set.mockRejectedValueOnce(new Error("token store down"));
 
     await expect(
-      new TokenService(createRepo()).blacklistAccessToken("ACCESS"),
+      new TokenService(createRepo(), tokenStore).blacklistAccessToken("ACCESS"),
     ).resolves.toBeUndefined();
   });
 });

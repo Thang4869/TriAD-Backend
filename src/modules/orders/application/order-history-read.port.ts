@@ -1,4 +1,4 @@
-import { IOrdersRepository } from "../orders.repository";
+import { IOrdersRepository } from "./ports/orders.repository.port";
 
 export type OrderHistoryReadPort = Pick<
   IOrdersRepository,

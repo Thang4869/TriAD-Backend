@@ -25,3 +25,43 @@ groups:
         annotations:
           summary: Stock reservation failures are elevated
           description: Checkout inventory reservations are failing at an elevated rate.
+      - alert: TriadProjectionLagHigh
+        expr: triad_backend_projection_lag_seconds > 120
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Read model projection lag is high
+          description: A projection is processing events more than two minutes late.
+      - alert: TriadCheckoutFailuresHigh
+        expr: increase(triad_backend_checkout_failure_total[10m]) > 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Checkout failure rate is elevated
+          description: More than ten checkout sagas failed during the last ten minutes.
+      - alert: TriadSagaCompensationHigh
+        expr: increase(triad_backend_saga_compensation_total[10m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Saga compensations are elevated
+          description: A downstream dependency may be failing and triggering compensations.
+      - alert: TriadHttpServerErrors
+        expr: sum(rate(triad_backend_http_requests_total{status_code=~"5.."}[5m])) > 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: API server error rate is high
+          description: The API is returning more than one 5xx response per second.
+      - alert: TriadOutboxDeadLetters
+        expr: increase(triad_backend_outbox_events_failed_total[30m]) > 50
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Outbox failures may be dead-lettering events
+          description: Inspect outbox_events for attempts at the configured retry ceiling.

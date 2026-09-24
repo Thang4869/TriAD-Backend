@@ -1,5 +1,9 @@
 import { OrderStatus } from "./order-status";
 import { Money } from "@shared/value-objects/money";
+import { Address } from "@shared/value-objects/address";
+import { Email } from "@shared/value-objects/email";
+import { OrderNumber } from "@shared/value-objects/order-number";
+import { PhoneNumber } from "@shared/value-objects/phone-number";
 import {
   OrderPlacedEvent,
   OrderStatusChangedEvent,
@@ -41,13 +45,13 @@ export class Order extends AggregateRoot {
   private constructor(
     id: string,
     public readonly userId: string,
-    public readonly orderNumber: string,
+    private readonly _orderNumber: OrderNumber,
     status: OrderStatus,
     public readonly createdAt: Date,
     public readonly customerName: string,
-    public readonly customerEmail: string,
-    public readonly customerPhone: string,
-    public readonly customerAddress: string,
+    private readonly _customerEmail: Email,
+    private readonly _customerPhone: PhoneNumber,
+    private readonly _customerAddress: Address,
     public readonly paymentMethod: string,
     public readonly paymentStatus: string,
     discountAmount: Money,
@@ -64,6 +68,19 @@ export class Order extends AggregateRoot {
     this._discountCode = discountCode;
   }
 
+  get orderNumber(): string {
+    return this._orderNumber.getValue();
+  }
+  get customerEmail(): string {
+    return this._customerEmail.getValue();
+  }
+  get customerPhone(): string {
+    return this._customerPhone.getValue();
+  }
+  get customerAddress(): string {
+    return this._customerAddress.getValue();
+  }
+
   static create(props: {
     id: string;
     userId: string;
@@ -78,13 +95,13 @@ export class Order extends AggregateRoot {
     return new Order(
       props.id,
       props.userId,
-      props.orderNumber,
+      new OrderNumber(props.orderNumber),
       OrderStatus.PENDING,
       new Date(),
       props.customerName,
-      props.customerEmail,
-      props.customerPhone,
-      props.customerAddress,
+      new Email(props.customerEmail),
+      new PhoneNumber(props.customerPhone),
+      new Address(props.customerAddress),
       props.paymentMethod,
       "PENDING",
       new Money(0),
@@ -293,13 +310,13 @@ export class Order extends AggregateRoot {
     const order = new Order(
       data.id,
       data.userId,
-      data.orderNumber,
+      new OrderNumber(data.orderNumber),
       data.status,
       data.createdAt,
       data.customerName,
-      data.customerEmail,
-      data.customerPhone,
-      data.customerAddress,
+      new Email(data.customerEmail),
+      new PhoneNumber(data.customerPhone),
+      new Address(data.customerAddress),
       data.paymentMethod,
       data.paymentStatus,
       new Money(data.discountAmount),

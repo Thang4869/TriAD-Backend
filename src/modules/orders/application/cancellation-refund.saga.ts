@@ -4,6 +4,7 @@ import {
   SagaStateStore,
 } from "@shared/application/saga/saga-state";
 import { withSpan } from "@core/tracing/span";
+import { sagaCompensations } from "@core/metrics/metrics.registry";
 
 export type CancellationRefundStep =
   "STARTED" | "ORDER_CANCELLED" | "STOCK_RELEASED" | "REFUNDED" | "COMPLETED";
@@ -50,6 +51,10 @@ export class CancellationRefundSaga {
     const deadlineAt = state.deadlineAt ?? Date.now() + SAGA_TIMEOUT_MS;
     state = { ...state, deadlineAt };
     if (state.step === "STARTED") {
+      sagaCompensations.inc({
+        saga: "cancellation-refund",
+        step: "cancel-order",
+      });
       await executeSagaStep(
         "cancellation.cancel-order",
         () =>
@@ -63,6 +68,10 @@ export class CancellationRefundSaga {
       await this.stateStore.save(input.sagaId, state);
     }
     if (state.step === "ORDER_CANCELLED") {
+      sagaCompensations.inc({
+        saga: "cancellation-refund",
+        step: "release-stock",
+      });
       await executeSagaStep(
         "cancellation.release-stock",
         () =>
@@ -76,6 +85,7 @@ export class CancellationRefundSaga {
       await this.stateStore.save(input.sagaId, state);
     }
     if (state.step === "STOCK_RELEASED" && state.paymentId) {
+      sagaCompensations.inc({ saga: "cancellation-refund", step: "refund" });
       await executeSagaStep(
         "cancellation.refund",
         () =>

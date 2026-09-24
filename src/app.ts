@@ -35,8 +35,16 @@ import { dashboardRoutes } from "@modules/admin/dashboard/dashboard.routes";
 import { healthRoutes } from "@core/health/health.routes";
 import { metricsMiddleware } from "@core/metrics/metrics.middleware";
 import { metricsRoutes } from "@core/metrics/metrics.routes";
+import { csrfProtection } from "@shared/middlewares/csrf.middleware";
+import { ForbiddenError } from "@shared/utils/errors";
 
 const app: Application = express();
+const trustProxy = /^\d+$/.test(config.TRUST_PROXY)
+  ? Number(config.TRUST_PROXY)
+  : config.TRUST_PROXY.split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+app.set("trust proxy", trustProxy);
 
 app.use(
   helmet({
@@ -79,11 +87,7 @@ app.use(
         return callback(null, true);
       }
 
-      if (origin.match(/^https?:\/\/localhost:\d+$/)) {
-        return callback(null, true);
-      }
-
-      callback(new Error("Not allowed by CORS"), false);
+      callback(new ForbiddenError("Origin not allowed"), false);
     },
     credentials: true,
   }),
@@ -92,6 +96,7 @@ app.use(
 app.use(compression());
 app.use(requestLogger);
 app.use(cookieParser());
+app.use(csrfProtection);
 app.use(metricsMiddleware);
 
 app.use(json({ limit: "10mb" }));

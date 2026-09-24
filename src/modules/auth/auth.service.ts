@@ -16,11 +16,6 @@ import {
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import config from "@config";
 import { User as UserEntity } from "../users/domain/user.entity";
-import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
-import {
-  FeatureFlagPort,
-  FeatureFlag,
-} from "@shared/application/feature-flags/feature-flag.port";
 
 export interface AuthTokens {
   accessToken: string;
@@ -30,7 +25,7 @@ export interface AuthTokens {
 
 export interface TwoFactorRequired {
   requires2FA: true;
-  userId: string;
+  preAuthToken: string;
   message: string;
 }
 
@@ -40,7 +35,6 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly tokenService: TokenService,
     private readonly twoFactorService: TwoFactorService,
-    private readonly featureFlags: FeatureFlagPort = new EnvironmentFeatureFlags(),
   ) {}
 
   async generateTokens(user: PrismaUser) {
@@ -114,13 +108,14 @@ export class AuthService {
     if (!user.isVerified)
       throw new UnauthorizedError("Please verify your email");
 
-    if (
-      user.is2FAEnabled ||
-      this.featureFlags.isEnabled(FeatureFlag.RequireTwoFactor, {
-        userId: user.id,
-      })
-    ) {
-      return { requires2FA: true, userId: user.id, message: "2FA required" };
+    if (user.is2FAEnabled) {
+      return {
+        requires2FA: true,
+        preAuthToken: await this.tokenService.issueTwoFactorPreAuthToken(
+          user.id,
+        ),
+        message: "2FA required",
+      };
     }
 
     return this.tokenService.generateTokens(user);
@@ -143,8 +138,8 @@ export class AuthService {
     return this.twoFactorService.verify2FA(userId, token);
   }
 
-  async verifyTOTP(userId: string, token: string) {
-    return this.twoFactorService.verifyTOTP(userId, token);
+  async verifyTOTP(preAuthToken: string, token: string) {
+    return this.twoFactorService.verifyTOTP(preAuthToken, token);
   }
 
   async refreshToken(refreshToken: string) {

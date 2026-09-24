@@ -8,6 +8,7 @@ import { Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import redis from "@core/redis/client";
+import config from "@config";
 
 vi.mock("express-rate-limit", () => ({
   default: vi.fn().mockImplementation((_options) => {
@@ -60,10 +61,9 @@ describe("rate-limit middleware", () => {
   });
 
   it("should fall back to RATE_LIMIT_WINDOW_MS/RATE_LIMIT_MAX env vars when no options given", () => {
-    const originalWindow = process.env.RATE_LIMIT_WINDOW_MS;
-    const originalMax = process.env.RATE_LIMIT_MAX;
-    process.env.RATE_LIMIT_WINDOW_MS = "12345";
-    process.env.RATE_LIMIT_MAX = "77";
+    const originalWindow = config.RATE_LIMIT_WINDOW_MS;
+    const originalMax = config.RATE_LIMIT_MAX;
+    Object.assign(config, { RATE_LIMIT_WINDOW_MS: 12345, RATE_LIMIT_MAX: 77 });
     try {
       rateLimiter();
       expect(rateLimit).toHaveBeenCalledWith(
@@ -73,16 +73,16 @@ describe("rate-limit middleware", () => {
         }),
       );
     } finally {
-      process.env.RATE_LIMIT_WINDOW_MS = originalWindow;
-      process.env.RATE_LIMIT_MAX = originalMax;
+      Object.assign(config, {
+        RATE_LIMIT_WINDOW_MS: originalWindow,
+        RATE_LIMIT_MAX: originalMax,
+      });
     }
   });
 
   it("should use built-in defaults when rate limit env vars are absent", () => {
-    const originalWindow = process.env.RATE_LIMIT_WINDOW_MS;
-    const originalMax = process.env.RATE_LIMIT_MAX;
-    delete process.env.RATE_LIMIT_WINDOW_MS;
-    delete process.env.RATE_LIMIT_MAX;
+    const originalWindow = config.RATE_LIMIT_WINDOW_MS;
+    const originalMax = config.RATE_LIMIT_MAX;
     try {
       rateLimiter();
       expect(rateLimit).toHaveBeenCalledWith(
@@ -92,12 +92,14 @@ describe("rate-limit middleware", () => {
         }),
       );
     } finally {
-      process.env.RATE_LIMIT_WINDOW_MS = originalWindow;
-      process.env.RATE_LIMIT_MAX = originalMax;
+      Object.assign(config, {
+        RATE_LIMIT_WINDOW_MS: originalWindow,
+        RATE_LIMIT_MAX: originalMax,
+      });
     }
   });
 
-  it("should skip health and admin users", () => {
+  it("should skip health only; admin requests remain rate limited", () => {
     rateLimiter();
     const options = vi.mocked(rateLimit).mock.calls[0]?.[0];
     expect(options).toBeDefined();
@@ -119,7 +121,7 @@ describe("rate-limit middleware", () => {
     } as unknown as Request;
 
     expect(skipFn?.(healthReq, mockRes)).toBe(true);
-    expect(skipFn?.(adminReq, mockRes)).toBe(true);
+    expect(skipFn?.(adminReq, mockRes)).toBe(false);
     expect(skipFn?.(normalReq, mockRes)).toBe(false);
   });
 
@@ -172,7 +174,7 @@ describe("rate-limit middleware", () => {
       expect(keyGenFn(req)).toBe("10.0.0.1");
     });
 
-    it("falls back to x-forwarded-for string header when req.ip is missing", () => {
+    it("does not trust x-forwarded-for when req.ip is missing", () => {
       rateLimiter();
       const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
       const keyGenFn = options?.keyGenerator as (req: Request) => string;
@@ -181,10 +183,10 @@ describe("rate-limit middleware", () => {
         ip: undefined,
         headers: { "x-forwarded-for": "203.0.113.5" },
       } as unknown as Request;
-      expect(keyGenFn(req)).toBe("203.0.113.5");
+      expect(keyGenFn(req)).toBe("unknown");
     });
 
-    it("uses the first entry when x-forwarded-for is an array", () => {
+    it("does not trust x-forwarded-for arrays", () => {
       rateLimiter();
       const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
       const keyGenFn = options?.keyGenerator as (req: Request) => string;
@@ -193,7 +195,7 @@ describe("rate-limit middleware", () => {
         ip: undefined,
         headers: { "x-forwarded-for": ["203.0.113.5", "203.0.113.6"] },
       } as unknown as Request;
-      expect(keyGenFn(req)).toBe("203.0.113.5");
+      expect(keyGenFn(req)).toBe("unknown");
     });
 
     it("returns 'unknown' when x-forwarded-for array is empty", () => {
@@ -218,10 +220,12 @@ describe("rate-limit middleware", () => {
     });
 
     it("should use RATE_LIMIT_WINDOW_MS and RATE_LIMIT_MAX from environment when set", () => {
-      const originalWindow = process.env.RATE_LIMIT_WINDOW_MS;
-      const originalMax = process.env.RATE_LIMIT_MAX;
-      process.env.RATE_LIMIT_WINDOW_MS = "120000";
-      process.env.RATE_LIMIT_MAX = "200";
+      const originalWindow = config.RATE_LIMIT_WINDOW_MS;
+      const originalMax = config.RATE_LIMIT_MAX;
+      Object.assign(config, {
+        RATE_LIMIT_WINDOW_MS: 120000,
+        RATE_LIMIT_MAX: 200,
+      });
 
       rateLimiter();
 
@@ -232,8 +236,10 @@ describe("rate-limit middleware", () => {
         }),
       );
 
-      process.env.RATE_LIMIT_WINDOW_MS = originalWindow;
-      process.env.RATE_LIMIT_MAX = originalMax;
+      Object.assign(config, {
+        RATE_LIMIT_WINDOW_MS: originalWindow,
+        RATE_LIMIT_MAX: originalMax,
+      });
     });
   });
 });

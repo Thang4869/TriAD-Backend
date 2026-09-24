@@ -56,7 +56,6 @@ import {
 import { projectionHandler } from "@core/outbox/projection-handler";
 
 import { PricingService } from "@modules/checkout/domain/pricing.service";
-import { IdempotencyService } from "./modules/checkout/services/idempotency.service";
 import { StockReservationService } from "./modules/checkout/services/stock-reservation.service";
 import { ProductImageService } from "./modules/products/services/product-image.service";
 import { TokenService } from "./modules/auth/services/token.service";
@@ -143,10 +142,6 @@ container.register(
   TOKENS.StockReservationService,
   (c) => new StockReservationService(c.resolve(TOKENS.CheckoutRepository)),
 );
-container.register(
-  TOKENS.IdempotencyService,
-  (c) => new IdempotencyService(c.resolve(TOKENS.CheckoutRepository)),
-);
 
 // ---------- Domain services ----------
 container.register(
@@ -170,7 +165,7 @@ container.register(
       c.resolve(TOKENS.CheckoutRepository),
       c.resolve(TOKENS.PricingService),
       c.resolve(TOKENS.StockReservationService),
-      c.resolve(TOKENS.IdempotencyService),
+      undefined,
     ),
 );
 container.register(

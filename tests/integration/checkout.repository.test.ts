@@ -4,19 +4,12 @@ import { PrismaCheckoutRepository } from "@modules/checkout/checkout.repository"
 import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import { Money } from "@shared/value-objects/money";
 
-vi.mock("@core/redis/client", () => ({
-  default: { get: vi.fn(), setex: vi.fn() },
-}));
-import redis from "@core/redis/client";
-import { vi } from "vitest";
-
 describe("PrismaCheckoutRepository (integration)", () => {
   const repository = new PrismaCheckoutRepository();
   let userId: string;
   let productId: string;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
     const user = await prisma.user.create({
       data: {
         email: `checkout-repo-${Date.now()}@test.com`,
@@ -39,26 +32,6 @@ describe("PrismaCheckoutRepository (integration)", () => {
       },
     });
     productId = product.id;
-  });
-
-  it("cacheOrderId/findCachedOrderId round-trip qua Redis mock đúng key prefix", async () => {
-    vi.mocked(redis.get).mockResolvedValueOnce(JSON.stringify("order-123"));
-
-    await repository.cacheOrderId("idem-key-1", "order-123", 86400);
-    const cached = await repository.findCachedOrderId("idem-key-1");
-
-    expect(redis.setex).toHaveBeenCalledWith(
-      "idempotent:idem-key-1",
-      86400,
-      JSON.stringify("order-123"),
-    );
-    expect(cached).toBe("order-123");
-  });
-
-  it("findCachedOrderId trả null khi Redis không có key", async () => {
-    vi.mocked(redis.get).mockResolvedValueOnce(null);
-
-    await expect(repository.findCachedOrderId("no-key")).resolves.toBeNull();
   });
 
   it("lockProductsForUpdate trả đúng version/stock hiện tại trong transaction", async () => {

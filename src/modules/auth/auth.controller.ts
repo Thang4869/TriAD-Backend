@@ -78,7 +78,7 @@ export class AuthController {
     if (is2FAResult(result)) {
       sendSuccess(res, {
         requires2FA: true,
-        userId: result.userId,
+        preAuthToken: result.preAuthToken,
         message: result.message,
       });
       return;
@@ -100,7 +100,9 @@ export class AuthController {
 
   logout = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;
-    const accessToken = req.headers.authorization?.split(" ")[1];
+    const accessToken = req.headers.authorization?.startsWith("Bearer ")
+      ? req.headers.authorization.substring(7)
+      : req.cookies?.accessToken;
     const refreshToken = req.cookies?.refreshToken;
     await this.service.logout(userId, accessToken, refreshToken);
 
@@ -125,10 +127,10 @@ export class AuthController {
   });
 
   verifyTOTP = asyncHandler(async (req: Request, res: Response) => {
-    const { userId, token } = req.body;
-    if (!userId || !token)
-      throw new BadRequestError("userId and token are required");
-    const result = await this.service.verifyTOTP(userId, token);
+    const { preAuthToken, token } = req.body;
+    if (!preAuthToken || !token)
+      throw new BadRequestError("preAuthToken and token are required");
+    const result = await this.service.verifyTOTP(preAuthToken, token);
     if (!isAuthTokens(result))
       throw new BadRequestError("Unexpected result from TOTP verification");
     this.setAuthCookies(res, result.accessToken, result.refreshToken);

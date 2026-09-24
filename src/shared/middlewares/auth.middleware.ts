@@ -3,6 +3,8 @@ import jwt from "jsonwebtoken";
 import prisma from "@core/database/prisma";
 import redis from "@core/redis/client";
 import { UnauthorizedError } from "@shared/utils/errors";
+import config from "@config";
+import { verifyToken } from "@shared/utils/jwt";
 
 const BLACKLIST_PREFIX = "jwt:blacklist:";
 
@@ -29,11 +31,11 @@ export const authMiddleware = async (
       throw new UnauthorizedError("Token revoked");
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as {
+    const decoded = verifyToken<{
       sub: string;
       email: string;
       role: string;
-    };
+    }>(token, config.JWT_ACCESS_SECRET);
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.sub },
@@ -73,11 +75,11 @@ export const optionalAuthMiddleware = async (
 
       const isBlacklisted = await redis.exists(`${BLACKLIST_PREFIX}${token}`);
       if (!isBlacklisted) {
-        const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as {
+        const decoded = verifyToken<{
           sub: string;
           email: string;
           role: string;
-        };
+        }>(token, config.JWT_ACCESS_SECRET);
         const user = await prisma.user.findUnique({
           where: { id: decoded.sub },
           select: { id: true, email: true, role: true },

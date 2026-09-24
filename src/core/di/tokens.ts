@@ -38,7 +38,6 @@ import type { OrderStatusChangedHandler } from "@modules/orders/event-handlers/o
 import type { PricingService } from "@/modules/checkout/domain/pricing.service";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
-import { IdempotencyService } from "@/modules/checkout/services/idempotency.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
 import { AdminProductService } from "@/modules/products/services/admin-product.service";
 import { CatalogService } from "@/modules/products/services/catalog.service";
@@ -111,5 +110,4 @@ export const TOKENS = {
   StockReservationService: createToken<StockReservationService>(
     "StockReservationService",
   ),
-  IdempotencyService: createToken<IdempotencyService>("IdempotencyService"),
 } as const;

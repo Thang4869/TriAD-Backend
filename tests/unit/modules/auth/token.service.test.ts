@@ -8,6 +8,7 @@ import { UnauthorizedError } from "@shared/utils/errors";
 import { signToken, verifyToken, decodeToken } from "@shared/utils/jwt";
 import redis from "@core/redis/client";
 import { SECURITY } from "@shared/constants/security.constant";
+import config from "@config";
 
 vi.mock("@shared/utils/jwt", () => ({
   signToken: vi.fn(),
@@ -71,16 +72,21 @@ const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  process.env.JWT_ACCESS_SECRET = "access-secret";
-  process.env.JWT_REFRESH_SECRET = "refresh-secret";
-  delete process.env.JWT_ACCESS_EXPIRY;
-  delete process.env.JWT_REFRESH_EXPIRY;
+  Object.assign(config, {
+    JWT_ACCESS_SECRET: "access-secret",
+    JWT_REFRESH_SECRET: "refresh-secret",
+    JWT_ACCESS_EXPIRY: "15m",
+    JWT_REFRESH_EXPIRY: "7d",
+  });
 
   vi.mocked(signToken).mockImplementation((_p, secret) =>
     secret === "access-secret" ? "ACCESS" : "REFRESH",
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  vi.mocked(verifyToken).mockReturnValue({ familyId: "fam-1" } as any);
+  vi.mocked(verifyToken).mockReturnValue({
+    familyId: "fam-1",
+    sub: "user-1",
+  } as any);
 });
 
 afterEach(() => {
@@ -107,7 +113,7 @@ describe("TokenService.generateTokens", () => {
     expect(repo.createRefreshToken).toHaveBeenCalledWith(
       "REFRESH",
       "user-1",
-      "fam-1",
+      expect.stringMatching(/^[0-9a-f-]{36}$/),
       expect.any(Date),
     );
   });
@@ -130,8 +136,10 @@ describe("TokenService.generateTokens", () => {
   });
 
   it("tôn trọng JWT_ACCESS_EXPIRY / JWT_REFRESH_EXPIRY từ env", async () => {
-    process.env.JWT_ACCESS_EXPIRY = "5m";
-    process.env.JWT_REFRESH_EXPIRY = "2d";
+    Object.assign(config, {
+      JWT_ACCESS_EXPIRY: "5m",
+      JWT_REFRESH_EXPIRY: "2d",
+    });
 
     await new TokenService(createRepo()).generateTokens(user);
 
@@ -176,31 +184,9 @@ describe("TokenService.generateTokens", () => {
     });
     expect(result.user.is2FAEnabled).toBe(false);
   });
-
-  it("ném lỗi khi thiếu JWT_ACCESS_SECRET", async () => {
-    delete process.env.JWT_ACCESS_SECRET;
-    await expect(
-      new TokenService(createRepo()).generateTokens(user),
-    ).rejects.toThrow("JWT_ACCESS_SECRET is not defined");
-  });
-
-  it("ném lỗi khi thiếu JWT_REFRESH_SECRET", async () => {
-    delete process.env.JWT_REFRESH_SECRET;
-    await expect(
-      new TokenService(createRepo()).generateTokens(user),
-    ).rejects.toThrow("JWT_REFRESH_SECRET is not defined");
-  });
 });
 
 describe("TokenService.refreshToken", () => {
-  beforeEach(() => {
-    vi.mocked(verifyToken).mockReturnValue({
-      sub: "user-1",
-      familyId: "fam-1",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
-  });
-
   it("xoay token thành công: revoke token cũ và cấp cặp token mới", async () => {
     const repo = createRepo({
       findRefreshTokenWithUser: vi.fn().mockResolvedValue(tokenRecord()),

@@ -26,10 +26,19 @@ export const csrfProtection = (
   _res: Response,
   next: NextFunction,
 ) => {
-  const usesBearerAuth = Boolean(req.headers.authorization);
-  const relyingOnCookie = Boolean(req.cookies?.refreshToken);
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
 
-  if (usesBearerAuth || !relyingOnCookie) {
+  const usesBearerAuth =
+    req.headers.authorization?.startsWith("Bearer ") === true;
+  const publicWriteRoute =
+    req.path === "/api/auth/login" ||
+    req.path === "/api/auth/register" ||
+    req.path === "/api/auth/resend-verification";
+  const relyingOnCookie = Boolean(
+    req.cookies?.accessToken || req.cookies?.refreshToken,
+  );
+
+  if (usesBearerAuth || !relyingOnCookie || publicWriteRoute) {
     return next();
   }
 

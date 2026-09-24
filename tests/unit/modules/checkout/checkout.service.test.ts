@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CheckoutService } from "@modules/checkout/checkout.service";
 import { ICheckoutRepository } from "@modules/checkout/checkout.repository";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
-import { IdempotencyService } from "@/modules/checkout/services/idempotency.service";
 import {
   BadRequestError,
   ConflictError,
@@ -85,8 +84,6 @@ function createFakeRepository(
     },
   ];
   return {
-    findCachedOrderId: vi.fn().mockResolvedValue(null),
-    cacheOrderId: vi.fn().mockResolvedValue(undefined),
     findOrderWithItems: vi.fn().mockResolvedValue(null),
     findUserCartForCheckout: vi.fn().mockResolvedValue(null),
     runInTransaction: vi.fn().mockImplementation(async (fn) => fn({} as any)),
@@ -110,23 +107,17 @@ describe("CheckoutService", () => {
   let pricingService: PricingService;
   let service: CheckoutService;
   let mockStockService: StockReservationService;
-  let mockIdempotencyService: IdempotencyService;
 
   beforeEach(() => {
     mockStockService = {
       reserveStock: vi.fn().mockResolvedValue(undefined),
     } as unknown as StockReservationService;
 
-    mockIdempotencyService = {
-      tryReturnIdempotentOrder: vi.fn().mockResolvedValue(null),
-      cacheOrderId: vi.fn().mockResolvedValue(undefined),
-    } as unknown as IdempotencyService;
-
     service = new CheckoutService(
       repository,
       pricingService,
       mockStockService,
-      mockIdempotencyService,
+      undefined,
     );
 
     vi.clearAllMocks();
@@ -136,7 +127,7 @@ describe("CheckoutService", () => {
       repository,
       pricingService,
       mockStockService,
-      mockIdempotencyService,
+      undefined,
     );
   });
 
@@ -149,21 +140,6 @@ describe("CheckoutService", () => {
     mockFindOrderSuccess();
     const inputWithoutIdempotency = { ...baseInput, idempotencyKey: "" };
     await service.checkout("user-1", inputWithoutIdempotency);
-    expect(repository.cacheOrderId).not.toHaveBeenCalled();
-  });
-
-  it("should return idempotent response when cached order exists and order found", async () => {
-    // Mock idempotencyService để trả về order
-    mockIdempotencyService.tryReturnIdempotentOrder = vi
-      .fn()
-      .mockResolvedValue({
-        order: mockOrder,
-        idempotent: true,
-      });
-    const result = await service.checkout("user-1", baseInput);
-    expect(result.idempotent).toBe(true);
-    expect(result.order).toEqual(mockOrder);
-    expect(repository.findUserCartForCheckout).not.toHaveBeenCalled();
   });
 
   it("should apply percentage discount correctly", async () => {
@@ -224,18 +200,6 @@ describe("CheckoutService", () => {
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
         "Failed to retrieve created order",
       );
-    });
-
-    it("returns idempotent result if cached", async () => {
-      mockIdempotencyService.tryReturnIdempotentOrder = vi
-        .fn()
-        .mockResolvedValue({
-          order: mockOrder,
-          idempotent: true,
-        });
-      const result = await service.checkout("user-1", baseInput);
-      expect(result).toHaveProperty("idempotent", true);
-      expect(repository.findUserCartForCheckout).not.toHaveBeenCalled();
     });
 
     it("applies free shipping if subtotal > threshold", async () => {
@@ -372,20 +336,6 @@ describe("CheckoutService", () => {
       expect(result.order.id).toBeDefined();
       expect(callCount).toBe(2);
     });
-
-    it("caches order id after success", async () => {
-      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-      mockFindOrderSuccess();
-      mockIdempotencyService.cacheOrderId = vi
-        .fn()
-        .mockResolvedValue(undefined);
-      await service.checkout("user-1", baseInput);
-      // Chỉ kỳ vọng 2 tham số: idempotencyKey và orderId
-      expect(mockIdempotencyService.cacheOrderId).toHaveBeenCalledWith(
-        baseInput.idempotencyKey,
-        expect.any(String),
-      );
-    });
   });
 
   describe("getOrder", () => {
@@ -470,21 +420,6 @@ describe("CheckoutService", () => {
       expect.objectContaining({ notes: "Please deliver after 5pm" }),
       expect.any(String),
     );
-  });
-
-  it("continues checkout when cached order id exists but order not found", async () => {
-    // Lần đầu idempotencyService trả null (không tìm thấy order)
-    mockIdempotencyService.tryReturnIdempotentOrder = vi
-      .fn()
-      .mockResolvedValue(null);
-    // Mock findUserCartForCheckout và các thành phần khác để checkout thành công
-    repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-    mockFindOrderSuccess();
-    // Mock cacheOrderId để kiểm tra
-    mockIdempotencyService.cacheOrderId = vi.fn().mockResolvedValue(undefined);
-    const result = await service.checkout("user-1", baseInput);
-    expect(result.idempotent).toBe(false);
-    expect(mockIdempotencyService.cacheOrderId).toHaveBeenCalled();
   });
 
   it("applies discount fixed amount capped at subtotal when rawAmount exceeds subtotal", async () => {

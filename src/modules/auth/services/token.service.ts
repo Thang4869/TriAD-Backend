@@ -6,28 +6,66 @@ import { UnauthorizedError } from "@shared/utils/errors";
 import { IAuthRepository } from "../auth.repository";
 import { User } from "@prisma/client";
 import { AuthUserResponse } from "../auth.mapper";
+import config from "@config";
+
+export interface PreAuthClaims {
+  sub: string;
+  purpose: "2fa";
+  jti: string;
+}
 
 export class TokenService {
   constructor(private readonly authRepository: IAuthRepository) {}
 
+  async issueTwoFactorPreAuthToken(userId: string): Promise<string> {
+    const jti = crypto.randomUUID();
+    const token = signToken(
+      { sub: userId, purpose: "2fa", jti },
+      config.JWT_PREAUTH_SECRET,
+      "5m",
+    );
+    await redis.setex(`auth:2fa:preauth:${jti}`, 300, userId);
+    return token;
+  }
+
+  async consumeTwoFactorPreAuthToken(token: string): Promise<string> {
+    let claims: PreAuthClaims;
+    try {
+      claims = verifyToken<PreAuthClaims>(token, config.JWT_PREAUTH_SECRET);
+    } catch {
+      throw new UnauthorizedError(
+        "Invalid or expired pre-authentication token",
+      );
+    }
+    if (claims.purpose !== "2fa" || !claims.sub || !claims.jti) {
+      throw new UnauthorizedError("Invalid pre-authentication token");
+    }
+    const key = `auth:2fa:preauth:${claims.jti}`;
+    const consumed = await redis.eval(
+      "local value = redis.call('get', KEYS[1]); if value then redis.call('del', KEYS[1]); return value end; return false",
+      1,
+      key,
+    );
+    if (consumed !== claims.sub) {
+      throw new UnauthorizedError("Pre-authentication token already used");
+    }
+    return claims.sub;
+  }
+
   private static get ACCESS_SECRET(): string {
-    const secret = process.env.JWT_ACCESS_SECRET;
-    if (!secret) throw new Error("JWT_ACCESS_SECRET is not defined");
-    return secret;
+    return config.JWT_ACCESS_SECRET;
   }
 
   private static get REFRESH_SECRET(): string {
-    const secret = process.env.JWT_REFRESH_SECRET;
-    if (!secret) throw new Error("JWT_REFRESH_SECRET is not defined");
-    return secret;
+    return config.JWT_REFRESH_SECRET;
   }
 
   private static get ACCESS_EXPIRY(): string {
-    return process.env.JWT_ACCESS_EXPIRY || "15m";
+    return config.JWT_ACCESS_EXPIRY;
   }
 
   private static get REFRESH_EXPIRY(): string {
-    return process.env.JWT_REFRESH_EXPIRY || "7d";
+    return config.JWT_REFRESH_EXPIRY;
   }
 
   async generateTokens(
@@ -51,17 +89,12 @@ export class TokenService {
       TokenService.ACCESS_EXPIRY,
     );
 
+    const finalFamilyId = familyId || crypto.randomUUID();
     const refreshToken = signToken(
-      { sub: user.id, familyId: familyId || crypto.randomUUID() },
+      { sub: user.id, familyId: finalFamilyId },
       TokenService.REFRESH_SECRET,
       TokenService.REFRESH_EXPIRY,
     );
-
-    const decoded = verifyToken<{ familyId: string }>(
-      refreshToken,
-      TokenService.REFRESH_SECRET,
-    );
-    const finalFamilyId = decoded.familyId;
 
     await this.authRepository.createRefreshToken(
       refreshToken,

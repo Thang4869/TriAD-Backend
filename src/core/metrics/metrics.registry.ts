@@ -98,6 +98,12 @@ export const outboxEventsFailed = new client.Counter({
   registers: [metricsRegistry],
 });
 
+export const outboxEventsDeadLettered = new client.Counter({
+  name: "triad_backend_outbox_events_dead_lettered_total",
+  help: "Outbox events moved to the dead-letter state",
+  registers: [metricsRegistry],
+});
+
 export const outboxLagSeconds = new client.Gauge({
   name: "triad_backend_outbox_lag_seconds",
   help: "Age in seconds of the oldest unpublished outbox event",

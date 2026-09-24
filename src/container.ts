@@ -48,6 +48,12 @@ import { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-place
 import { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
 import { OrderPlacedEvent } from "@shared/domain/events/order-events";
 import { OrderStatusChangedEvent } from "@shared/domain/events/order-events";
+import {
+  ProductPriceChangedEvent,
+  ProductRestockedEvent,
+  ProductStockDepletedEvent,
+} from "@shared/domain/events/product-events";
+import { projectionHandler } from "@core/outbox/projection-handler";
 
 import { PricingService } from "@modules/checkout/domain/pricing.service";
 import { IdempotencyService } from "./modules/checkout/services/idempotency.service";
@@ -275,6 +281,27 @@ eventBus.subscribe(
   "OrderStatusChangedHandler",
   orderStatusChangedHandler.handle.bind(orderStatusChangedHandler),
 );
+eventBus.subscribe(
+  OrderPlacedEvent.eventName,
+  "OrderHistoryProjectionHandler",
+  projectionHandler.handleOrderPlaced.bind(projectionHandler),
+);
+eventBus.subscribe(
+  OrderStatusChangedEvent.eventName,
+  "OrderHistoryStatusProjectionHandler",
+  projectionHandler.handleOrderStatusChanged.bind(projectionHandler),
+);
+for (const eventName of [
+  ProductPriceChangedEvent.eventName,
+  ProductRestockedEvent.eventName,
+  ProductStockDepletedEvent.eventName,
+]) {
+  eventBus.subscribe(
+    eventName,
+    `ProductCatalogProjectionHandler:${eventName}`,
+    projectionHandler.handleProductEvent.bind(projectionHandler),
+  );
+}
 
 // ---------- Named exports ----------
 export { eventBus };

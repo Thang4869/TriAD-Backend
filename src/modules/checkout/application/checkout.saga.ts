@@ -3,6 +3,7 @@ import {
   FeatureFlagPort,
 } from "@shared/application/feature-flags/feature-flag.port";
 import {
+  executeSagaStep,
   InMemorySagaStateStore,
   SagaStateStore,
 } from "@shared/application/saga/saga-state";
@@ -22,7 +23,15 @@ export interface CheckoutSagaState {
   step: CheckoutSagaStep;
   reservationId?: string;
   paymentId?: string;
+  deadlineAt?: number;
 }
+
+const SAGA_TIMEOUT_MS = 120_000;
+const STEP_POLICY = {
+  timeoutMs: 15_000,
+  maxAttempts: 3,
+  backoffMs: 100,
+} as const;
 
 export interface CheckoutSagaPorts {
   reserveStock(input: CheckoutInput): Promise<string>;
@@ -55,7 +64,10 @@ export class CheckoutSaga {
     )) ?? {
       sagaId: input.sagaId,
       step: "STARTED",
+      deadlineAt: Date.now() + SAGA_TIMEOUT_MS,
     };
+    const deadlineAt = state.deadlineAt ?? Date.now() + SAGA_TIMEOUT_MS;
+    state = { ...state, deadlineAt };
     await this.stateStore.save(input.sagaId, state);
 
     try {
@@ -63,7 +75,12 @@ export class CheckoutSaga {
         state = {
           ...state,
           step: "STOCK_RESERVED",
-          reservationId: await this.ports.reserveStock(input),
+          reservationId: await executeSagaStep(
+            "checkout.reserve-stock",
+            () => this.ports.reserveStock(input),
+            STEP_POLICY,
+            deadlineAt,
+          ),
         };
         await this.stateStore.save(input.sagaId, state);
       }
@@ -71,7 +88,12 @@ export class CheckoutSaga {
         state = {
           ...state,
           step: "ORDER_PLACED",
-          orderId: await this.ports.placeOrder(input),
+          orderId: await executeSagaStep(
+            "checkout.place-order",
+            () => this.ports.placeOrder(input),
+            STEP_POLICY,
+            deadlineAt,
+          ),
         };
         await this.stateStore.save(input.sagaId, state);
       }
@@ -79,7 +101,12 @@ export class CheckoutSaga {
         state = {
           ...state,
           step: "PAYMENT_AUTHORIZED",
-          paymentId: await this.ports.authorizePayment(input, state.orderId!),
+          paymentId: await executeSagaStep(
+            "checkout.authorize-payment",
+            () => this.ports.authorizePayment(input, state.orderId!),
+            STEP_POLICY,
+            deadlineAt,
+          ),
         };
         await this.stateStore.save(input.sagaId, state);
       }
@@ -88,8 +115,14 @@ export class CheckoutSaga {
           userId: input.userId,
         }) !== false
       ) {
-        await withSpan("saga.checkout.confirm", () =>
-          this.ports.confirmOrder(state.orderId!),
+        await executeSagaStep(
+          "checkout.confirm-order",
+          () =>
+            withSpan("saga.checkout.confirm", () =>
+              this.ports.confirmOrder(state.orderId!),
+            ),
+          STEP_POLICY,
+          deadlineAt,
         );
       }
       state = { ...state, step: "COMPLETED" };
@@ -102,9 +135,30 @@ export class CheckoutSaga {
   }
 
   private async compensate(state: CheckoutSagaState): Promise<void> {
-    if (state.paymentId) await this.ports.refundPayment(state.paymentId);
-    if (state.orderId) await this.ports.cancelOrder(state.orderId);
-    if (state.reservationId) await this.ports.releaseStock(state.reservationId);
+    if (state.paymentId) {
+      await executeSagaStep(
+        "checkout.refund-payment",
+        () => this.ports.refundPayment(state.paymentId!),
+        STEP_POLICY,
+        state.deadlineAt ?? Date.now() + SAGA_TIMEOUT_MS,
+      );
+    }
+    if (state.orderId) {
+      await executeSagaStep(
+        "checkout.cancel-order",
+        () => this.ports.cancelOrder(state.orderId!),
+        STEP_POLICY,
+        state.deadlineAt ?? Date.now() + SAGA_TIMEOUT_MS,
+      );
+    }
+    if (state.reservationId) {
+      await executeSagaStep(
+        "checkout.release-stock",
+        () => this.ports.releaseStock(state.reservationId!),
+        STEP_POLICY,
+        state.deadlineAt ?? Date.now() + SAGA_TIMEOUT_MS,
+      );
+    }
     await this.stateStore.save(state.sagaId, { ...state, step: "COMPENSATED" });
   }
 }

@@ -248,6 +248,59 @@ model SagaState {
   @@map("saga_states")
 }
 
+model ProductCatalogProjection {
+  productId    String   @id
+  name         String
+  description  String?
+  price        Float
+  stock        Int
+  category     String
+  images       String[]
+  slug         String   @unique
+  isActive     Boolean
+  avgRating    Float    @default(0)
+  reviewCount  Int      @default(0)
+  searchText   String
+  sourceVersion Int     @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive, category, price])
+  @@index([updatedAt])
+  @@map("product_catalog_projection")
+}
+
+model OrderHistoryProjection {
+  orderId      String   @id
+  userId       String
+  orderNumber  String
+  status       OrderStatus
+  paymentStatus PaymentStatus
+  subtotal     Float
+  tax          Float
+  shippingFee  Float
+  total        Float
+  items        Json
+  placedAt     DateTime
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, placedAt])
+  @@index([userId, status, placedAt])
+  @@map("order_history_projection")
+}
+
+model AdminDashboardProjection {
+  id              String   @id
+  totalRevenue    Float    @default(0)
+  totalOrders     Int      @default(0)
+  pendingOrders   Int      @default(0)
+  completedOrders Int      @default(0)
+  totalUsers      Int      @default(0)
+  totalProducts   Int      @default(0)
+  updatedAt       DateTime @updatedAt
+
+  @@map("admin_dashboard_projection")
+}
+
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------

@@ -52,6 +52,7 @@ function createTokenStore() {
     set: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
     getAndDelete: vi.fn().mockResolvedValue(null),
+    setIfAbsent: vi.fn().mockResolvedValue(true),
   };
 }
 

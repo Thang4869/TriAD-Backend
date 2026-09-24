@@ -1,5 +1,7 @@
 import { BaseDomainEvent } from "./domain-event";
-import { OrderStatus } from "@prisma/client";
+
+export type OrderStatus =
+  "PENDING" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED" | "REFUNDED";
 
 export interface OrderPlacedItemSnapshot {
   productId: string;

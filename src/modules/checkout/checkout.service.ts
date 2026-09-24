@@ -10,7 +10,6 @@ import { PricingService } from "./domain/pricing.service";
 import { StockReservationService } from "./services/stock-reservation.service";
 import { Order } from "@modules/orders/domain/order.entity";
 import { withSpan } from "@core/tracing/span";
-import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
 import {
   FeatureFlag,
   FeatureFlagPort,
@@ -34,8 +33,7 @@ export class CheckoutService {
     private readonly repository: ICheckoutRepository,
     private readonly pricingService: PricingService,
     private readonly stockService: StockReservationService,
-    _legacyIdempotencyService: unknown,
-    private readonly featureFlags: FeatureFlagPort = new EnvironmentFeatureFlags(),
+    private readonly featureFlags: FeatureFlagPort,
   ) {}
 
   async checkout(userId: string, input: CheckoutInput) {

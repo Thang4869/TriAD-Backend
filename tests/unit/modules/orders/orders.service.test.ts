@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { OrdersService } from "@modules/orders/orders.service";
-import { IOrdersRepository } from "@modules/orders/orders.repository";
+import { IOrdersRepository } from "@modules/orders/application/ports/orders.repository.port";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 import { OrderStatus } from "@prisma/client";

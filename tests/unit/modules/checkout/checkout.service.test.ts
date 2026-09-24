@@ -117,7 +117,7 @@ describe("CheckoutService", () => {
       repository,
       pricingService,
       mockStockService,
-      undefined,
+      { isEnabled: () => false },
     );
 
     vi.clearAllMocks();
@@ -127,7 +127,9 @@ describe("CheckoutService", () => {
       repository,
       pricingService,
       mockStockService,
-      undefined,
+      {
+        isEnabled: () => false,
+      },
     );
   });
 

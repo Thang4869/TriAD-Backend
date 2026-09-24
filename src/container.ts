@@ -16,7 +16,7 @@ import { PrismaCheckoutRepository } from "@modules/checkout/checkout.repository"
 import { CheckoutService } from "@modules/checkout/checkout.service";
 import { CheckoutController } from "@modules/checkout/checkout.controller";
 
-import { PrismaOrdersRepository } from "@modules/orders/orders.repository";
+import { PrismaOrdersRepository } from "@modules/orders/infrastructure/repositories/prisma-orders.repository";
 import { OrdersService } from "@modules/orders/orders.service";
 import { OrdersController } from "@modules/orders/orders.controller";
 
@@ -62,7 +62,7 @@ import { TokenService } from "./modules/auth/services/token.service";
 import { TwoFactorService } from "./modules/auth/services/two-factor.service";
 import { AdminProductService } from "./modules/products/services/admin-product.service";
 import { CatalogService } from "./modules/products/services/catalog.service";
-
+import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -165,7 +165,7 @@ container.register(
       c.resolve(TOKENS.CheckoutRepository),
       c.resolve(TOKENS.PricingService),
       c.resolve(TOKENS.StockReservationService),
-      undefined,
+      new EnvironmentFeatureFlags(),
     ),
 );
 container.register(

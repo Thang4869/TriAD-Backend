@@ -99,6 +99,16 @@ describe("csrfProtection", () => {
     expect(next).toHaveBeenCalledWith();
   });
 
+  it("chặn POST dùng accessToken cookie khi thiếu CSRF token", () => {
+    const next = run({
+      method: "POST",
+      cookies: { accessToken: "access" },
+      headers: {},
+    });
+
+    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(ForbiddenError);
+  });
+
   it("cho qua khi cookie token và header token trùng khớp", () => {
     const next = run({
       cookies: { refreshToken: "r", [CSRF_COOKIE_NAME]: VALID_TOKEN },

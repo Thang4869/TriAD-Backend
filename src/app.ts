@@ -35,6 +35,7 @@ import { dashboardRoutes } from "@modules/admin/dashboard/dashboard.routes";
 import { healthRoutes } from "@core/health/health.routes";
 import { metricsMiddleware } from "@core/metrics/metrics.middleware";
 import { metricsRoutes } from "@core/metrics/metrics.routes";
+import { csrfProtection } from "@shared/middlewares/csrf.middleware";
 
 const app: Application = express();
 
@@ -92,6 +93,7 @@ app.use(
 app.use(compression());
 app.use(requestLogger);
 app.use(cookieParser());
+app.use(csrfProtection);
 app.use(metricsMiddleware);
 
 app.use(json({ limit: "10mb" }));

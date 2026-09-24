@@ -3,7 +3,7 @@ import type { IProductsRepository } from "@modules/products/products.repository"
 import type { IAuthRepository } from "@modules/auth/auth.repository";
 import type { ICartRepository } from "@modules/cart/cart.repository";
 import type { ICheckoutRepository } from "@modules/checkout/checkout.repository";
-import type { IOrdersRepository } from "@modules/orders/orders.repository";
+import type { IOrdersRepository } from "@modules/orders/application/ports/orders.repository.port";
 import type { IReviewsRepository } from "@modules/reviews/reviews.repository";
 import type { IUsersRepository } from "@modules/users/users.repository";
 import type { IWishlistRepository } from "@modules/wishlist/wishlist.repository";

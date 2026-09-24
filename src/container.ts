@@ -16,7 +16,7 @@ import { PrismaCheckoutRepository } from "@modules/checkout/checkout.repository"
 import { CheckoutService } from "@modules/checkout/checkout.service";
 import { CheckoutController } from "@modules/checkout/checkout.controller";
 
-import { PrismaOrdersRepository } from "@modules/orders/orders.repository";
+import { PrismaOrdersRepository } from "@modules/orders/infrastructure/repositories/prisma-orders.repository";
 import { OrdersService } from "@modules/orders/orders.service";
 import { OrdersController } from "@modules/orders/orders.controller";
 
@@ -165,7 +165,6 @@ container.register(
       c.resolve(TOKENS.CheckoutRepository),
       c.resolve(TOKENS.PricingService),
       c.resolve(TOKENS.StockReservationService),
-      undefined,
     ),
 );
 container.register(

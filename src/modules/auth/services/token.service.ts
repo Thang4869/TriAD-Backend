@@ -53,23 +53,19 @@ export class TokenService {
   }
 
   private static get ACCESS_SECRET(): string {
-    const secret = process.env.JWT_ACCESS_SECRET;
-    if (!secret) throw new Error("JWT_ACCESS_SECRET is not defined");
-    return secret;
+    return config.JWT_ACCESS_SECRET;
   }
 
   private static get REFRESH_SECRET(): string {
-    const secret = process.env.JWT_REFRESH_SECRET;
-    if (!secret) throw new Error("JWT_REFRESH_SECRET is not defined");
-    return secret;
+    return config.JWT_REFRESH_SECRET;
   }
 
   private static get ACCESS_EXPIRY(): string {
-    return process.env.JWT_ACCESS_EXPIRY || "15m";
+    return config.JWT_ACCESS_EXPIRY;
   }
 
   private static get REFRESH_EXPIRY(): string {
-    return process.env.JWT_REFRESH_EXPIRY || "7d";
+    return config.JWT_REFRESH_EXPIRY;
   }
 
   async generateTokens(
@@ -93,17 +89,12 @@ export class TokenService {
       TokenService.ACCESS_EXPIRY,
     );
 
+    const finalFamilyId = familyId || crypto.randomUUID();
     const refreshToken = signToken(
-      { sub: user.id, familyId: familyId || crypto.randomUUID() },
+      { sub: user.id, familyId: finalFamilyId },
       TokenService.REFRESH_SECRET,
       TokenService.REFRESH_EXPIRY,
     );
-
-    const decoded = verifyToken<{ familyId: string }>(
-      refreshToken,
-      TokenService.REFRESH_SECRET,
-    );
-    const finalFamilyId = decoded.familyId;
 
     await this.authRepository.createRefreshToken(
       refreshToken,

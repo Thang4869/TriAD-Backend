@@ -100,7 +100,9 @@ export class AuthController {
 
   logout = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;
-    const accessToken = req.headers.authorization?.split(" ")[1];
+    const accessToken = req.headers.authorization?.startsWith("Bearer ")
+      ? req.headers.authorization.substring(7)
+      : req.cookies?.accessToken;
     const refreshToken = req.cookies?.refreshToken;
     await this.service.logout(userId, accessToken, refreshToken);
 

@@ -118,6 +118,8 @@ describe("Config validation", () => {
     process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/db";
     process.env.REDIS_URL = "redis://localhost:6379";
     process.env.JWT_PREAUTH_SECRET = "test-preauth-secret-32charslongenough";
+    process.env.TOTP_ENCRYPTION_KEY =
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     process.env.CLOUDINARY_CLOUD_NAME = "test-cloud";
     process.env.CLOUDINARY_API_KEY = "test-key";
     process.env.CLOUDINARY_API_SECRET = "test-secret";
@@ -135,6 +137,8 @@ describe("Config validation", () => {
     process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/db";
     process.env.REDIS_URL = "redis://localhost:6379";
     process.env.JWT_PREAUTH_SECRET = "test-preauth-secret-32charslongenough";
+    process.env.TOTP_ENCRYPTION_KEY =
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     delete process.env.SMTP_HOST;
     delete process.env.SMTP_USER;
     delete process.env.SMTP_PASS;

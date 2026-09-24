@@ -61,7 +61,11 @@ describe("authMiddleware", () => {
 
     await authMiddleware(req, {} as Response, next);
 
-    expect(jwtVerifySpy).toHaveBeenCalledWith("valid.token", "test-secret");
+    expect(jwtVerifySpy).toHaveBeenCalledWith(
+      "valid.token",
+      expect.any(Buffer),
+      { algorithms: ["HS256"] },
+    );
     expect(req.user).toEqual({
       id: "user-1",
       email: "a@b.com",
@@ -76,7 +80,11 @@ describe("authMiddleware", () => {
 
     await authMiddleware(req, {} as Response, next);
 
-    expect(jwtVerifySpy).toHaveBeenCalledWith("cookie.token", "test-secret");
+    expect(jwtVerifySpy).toHaveBeenCalledWith(
+      "cookie.token",
+      expect.any(Buffer),
+      { algorithms: ["HS256"] },
+    );
     expect(next).toHaveBeenCalledWith();
   });
 
@@ -88,7 +96,11 @@ describe("authMiddleware", () => {
 
     await authMiddleware(req, {} as Response, vi.fn());
 
-    expect(jwtVerifySpy).toHaveBeenCalledWith("cookie.token", "test-secret");
+    expect(jwtVerifySpy).toHaveBeenCalledWith(
+      "cookie.token",
+      expect.any(Buffer),
+      { algorithms: ["HS256"] },
+    );
   });
 
   it("không có token nào → UnauthorizedError 'No token provided'", async () => {

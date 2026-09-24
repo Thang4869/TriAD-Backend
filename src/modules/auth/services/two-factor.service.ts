@@ -6,6 +6,7 @@ import { IAuthRepository } from "../auth.repository";
 import { TokenService } from "./token.service";
 import { AuthUserResponse } from "../auth.mapper";
 import config from "@config";
+import { decryptTotpSecret, encryptTotpSecret } from "./totp-secret.crypto";
 
 export class TwoFactorService {
   constructor(
@@ -28,7 +29,7 @@ export class TwoFactorService {
     });
 
     await this.authRepository.updateUser(userId, {
-      totpSecret: secret.base32,
+      totpSecret: encryptTotpSecret(secret.base32, config.TOTP_ENCRYPTION_KEY),
       is2FAEnabled: false,
     });
 
@@ -47,7 +48,11 @@ export class TwoFactorService {
       throw new BadRequestError("2FA not set up");
     }
 
-    if (!this.verifyTotpToken(user.totpSecret, token)) {
+    const totpSecret = decryptTotpSecret(
+      user.totpSecret,
+      config.TOTP_ENCRYPTION_KEY,
+    );
+    if (!this.verifyTotpToken(totpSecret, token)) {
       throw new BadRequestError("Invalid TOTP token");
     }
 
@@ -70,7 +75,11 @@ export class TwoFactorService {
       throw new UnauthorizedError("2FA is not enabled");
     }
 
-    if (!this.verifyTotpToken(user.totpSecret, token)) {
+    const totpSecret = decryptTotpSecret(
+      user.totpSecret,
+      config.TOTP_ENCRYPTION_KEY,
+    );
+    if (!this.verifyTotpToken(totpSecret, token)) {
       throw new UnauthorizedError("Invalid TOTP token");
     }
 

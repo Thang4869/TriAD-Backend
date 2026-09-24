@@ -11,6 +11,7 @@ import { EmailService } from "@/shared/services/email.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { logger } from "@core/logger/winston";
+import config from "@config";
 
 // ---------- Mocks ----------
 const mockEmailService = {
@@ -618,7 +619,7 @@ describe("AuthService", () => {
       const familyId = "test-family-id";
       const validRefreshToken = signToken(
         { sub: baseUser.id, familyId },
-        process.env.JWT_REFRESH_SECRET as string,
+        config.JWT_REFRESH_SECRET,
         "7d",
       );
       const record = {
@@ -750,38 +751,6 @@ describe("AuthService", () => {
         role: baseUser.role,
         is2FAEnabled: baseUser.is2FAEnabled,
       });
-    });
-
-    it("throws if JWT_ACCESS_SECRET is not configured", async () => {
-      const previous = process.env.JWT_ACCESS_SECRET;
-      delete process.env.JWT_ACCESS_SECRET;
-      const realTokenService = new TokenService(repository);
-      const serviceWithRealToken = new AuthService(
-        repository,
-        mockEmailService,
-        realTokenService,
-        mockTwoFactorService,
-      );
-      await expect(
-        serviceWithRealToken.generateTokens(baseUser),
-      ).rejects.toThrow("JWT_ACCESS_SECRET is not defined");
-      process.env.JWT_ACCESS_SECRET = previous;
-    });
-
-    it("throws if JWT_REFRESH_SECRET is not configured", async () => {
-      const previous = process.env.JWT_REFRESH_SECRET;
-      delete process.env.JWT_REFRESH_SECRET;
-      const realTokenService = new TokenService(repository);
-      const serviceWithRealToken = new AuthService(
-        repository,
-        mockEmailService,
-        realTokenService,
-        mockTwoFactorService,
-      );
-      await expect(
-        serviceWithRealToken.generateTokens(baseUser),
-      ).rejects.toThrow("JWT_REFRESH_SECRET is not defined");
-      process.env.JWT_REFRESH_SECRET = previous;
     });
   });
 

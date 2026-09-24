@@ -3,6 +3,8 @@ import speakeasy from "speakeasy";
 import { TwoFactorService } from "@modules/auth/services/two-factor.service";
 import { TokenService } from "@modules/auth/services/token.service";
 import type { IAuthRepository } from "@modules/auth/auth.repository";
+import config from "@config";
+import { encryptTotpSecret } from "@modules/auth/services/totp-secret.crypto";
 
 const { redisMock } = vi.hoisted(() => ({
   redisMock: { set: vi.fn() },
@@ -10,6 +12,7 @@ const { redisMock } = vi.hoisted(() => ({
 
 vi.mock("@core/redis/client", () => ({ default: redisMock }));
 
+const rawTotpSecret = "JBSWY3DPEHPK3PXP";
 const user = {
   id: "user-1",
   email: "user@example.com",
@@ -17,7 +20,7 @@ const user = {
   lastName: "User",
   role: "USER",
   is2FAEnabled: true,
-  totpSecret: "JBSWY3DPEHPK3PXP",
+  totpSecret: encryptTotpSecret(rawTotpSecret, config.TOTP_ENCRYPTION_KEY),
 };
 
 describe("TOTP pre-authentication", () => {
@@ -38,8 +41,9 @@ describe("TOTP pre-authentication", () => {
     const service = new TwoFactorService(repository, tokenService);
 
     const validTotp = speakeasy.totp({
-      secret: user.totpSecret,
+      secret: rawTotpSecret,
       encoding: "base32",
+      time: Math.floor(Date.now() / 1000),
     });
     await expect(service.verifyTOTP("user-1", validTotp)).rejects.toThrow(
       "Pre-authentication token required",
@@ -59,8 +63,9 @@ describe("TOTP pre-authentication", () => {
     redisMock.set.mockResolvedValueOnce("OK").mockResolvedValueOnce(null);
     const service = new TwoFactorService(repository, tokenService);
     const validTotp = speakeasy.totp({
-      secret: user.totpSecret,
+      secret: rawTotpSecret,
       encoding: "base32",
+      time: Math.floor(Date.now() / 1000),
     });
 
     await expect(

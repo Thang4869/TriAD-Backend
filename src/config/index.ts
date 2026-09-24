@@ -11,6 +11,9 @@ if (process.env.NODE_ENV === "test") {
     process.env.JWT_REFRESH_SECRET || "test-refresh-secret-32charslongenough";
   process.env.JWT_PREAUTH_SECRET =
     process.env.JWT_PREAUTH_SECRET || "test-preauth-secret-32charslongenough";
+  process.env.TOTP_ENCRYPTION_KEY =
+    process.env.TOTP_ENCRYPTION_KEY ||
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   process.env.DATABASE_URL =
     process.env.DATABASE_URL ||
     "postgresql://postgres:postgres@localhost:5432/triad_test?schema=public";
@@ -58,6 +61,14 @@ const configSchema = z
     RATE_LIMIT_MAX: z.string().default("100").transform(Number),
 
     TOTP_ISSUER: z.string().default("TriAD"),
+    TOTP_ENCRYPTION_KEY: z
+      .string()
+      .refine(
+        (value) =>
+          Buffer.from(value, "base64").length === 32 ||
+          /^[0-9a-fA-F]{64}$/.test(value),
+        "TOTP_ENCRYPTION_KEY must encode exactly 32 bytes",
+      ),
 
     IDEMPOTENCY_TTL: z.string().default("86400").transform(Number),
 

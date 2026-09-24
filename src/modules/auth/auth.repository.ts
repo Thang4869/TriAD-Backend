@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import prisma from "@core/database/prisma";
 import { User, RefreshToken } from "@prisma/client";
 
@@ -10,6 +11,10 @@ export interface CreateUserData {
 }
 
 export type RefreshTokenWithUser = RefreshToken & { user: User };
+
+export function hashRefreshToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 
 // ---------- Repository contract ----------
 
@@ -72,7 +77,7 @@ export class PrismaAuthRepository implements IAuthRepository {
     token: string,
   ): Promise<RefreshTokenWithUser | null> {
     return prisma.refreshToken.findUnique({
-      where: { token },
+      where: { token: hashRefreshToken(token) },
       include: { user: true },
     });
   }
@@ -82,7 +87,9 @@ export class PrismaAuthRepository implements IAuthRepository {
   }
 
   async deleteRefreshTokenByToken(token: string): Promise<void> {
-    await prisma.refreshToken.deleteMany({ where: { token } });
+    await prisma.refreshToken.deleteMany({
+      where: { token: hashRefreshToken(token) },
+    });
   }
 
   async deleteRefreshTokensByUserId(userId: string): Promise<void> {
@@ -106,12 +113,14 @@ export class PrismaAuthRepository implements IAuthRepository {
     expiresAt: Date,
   ): Promise<RefreshToken> {
     return prisma.refreshToken.create({
-      data: { token, userId, familyId, expiresAt },
+      data: { token: hashRefreshToken(token), userId, familyId, expiresAt },
     });
   }
 
   async findRefreshTokenByToken(token: string): Promise<RefreshToken | null> {
-    return prisma.refreshToken.findUnique({ where: { token } });
+    return prisma.refreshToken.findUnique({
+      where: { token: hashRefreshToken(token) },
+    });
   }
 
   async findRefreshTokenByFamilyAndToken(
@@ -119,7 +128,7 @@ export class PrismaAuthRepository implements IAuthRepository {
     token: string,
   ): Promise<RefreshToken | null> {
     return prisma.refreshToken.findUnique({
-      where: { familyId_token: { familyId, token } },
+      where: { familyId_token: { familyId, token: hashRefreshToken(token) } },
     });
   }
 

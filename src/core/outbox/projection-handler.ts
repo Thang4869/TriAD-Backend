@@ -10,12 +10,21 @@ import {
   ProductStockDepletedEvent,
 } from "@shared/domain/events/product-events";
 import { DomainEvent } from "@shared/domain/events/domain-event";
+import { withSpan } from "@core/tracing/span";
+import { projectionLagSeconds } from "@core/metrics/metrics.registry";
 
 type ProductProjectionEvent =
   ProductPriceChangedEvent | ProductRestockedEvent | ProductStockDepletedEvent;
 
 export class ProjectionHandler {
   async handleOrderPlaced(event: OrderPlacedEvent): Promise<void> {
+    await withSpan("projection.order_history.order_placed", () =>
+      this.upsertOrderPlaced(event),
+    );
+    this.recordLag("order_history", event);
+  }
+
+  private async upsertOrderPlaced(event: OrderPlacedEvent): Promise<void> {
     await prisma.orderHistoryProjection.upsert({
       where: { orderId: event.orderId },
       create: {
@@ -44,45 +53,58 @@ export class ProjectionHandler {
   async handleOrderStatusChanged(
     event: OrderStatusChangedEvent,
   ): Promise<void> {
-    await prisma.orderHistoryProjection.updateMany({
-      where: { orderId: event.orderId },
-      data: { status: event.newStatus },
+    await withSpan("projection.order_history.status_changed", async () => {
+      await prisma.orderHistoryProjection.updateMany({
+        where: { orderId: event.orderId },
+        data: { status: event.newStatus },
+      });
+      await this.refreshDashboard();
     });
-    await this.refreshDashboard();
+    this.recordLag("order_history", event);
   }
 
   async handleProductEvent(event: ProductProjectionEvent): Promise<void> {
-    const product = await prisma.product.findUnique({
-      where: { id: event.productId },
+    await withSpan("projection.product_catalog.update", async () => {
+      const product = await prisma.product.findUnique({
+        where: { id: event.productId },
+      });
+      if (!product) return;
+      await prisma.productCatalogProjection.upsert({
+        where: { productId: product.id },
+        create: {
+          productId: product.id,
+          name: product.name,
+          description: product.description,
+          price: product.price,
+          stock: product.stock,
+          category: product.category,
+          images: product.images,
+          slug: product.slug,
+          isActive: product.isActive,
+          searchText: `${product.name} ${product.description ?? ""} ${product.category}`,
+          sourceVersion: product.version,
+        },
+        update: {
+          name: product.name,
+          description: product.description,
+          price: product.price,
+          stock: product.stock,
+          category: product.category,
+          images: product.images,
+          slug: product.slug,
+          isActive: product.isActive,
+          sourceVersion: product.version,
+        },
+      });
     });
-    if (!product) return;
-    await prisma.productCatalogProjection.upsert({
-      where: { productId: product.id },
-      create: {
-        productId: product.id,
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        stock: product.stock,
-        category: product.category,
-        images: product.images,
-        slug: product.slug,
-        isActive: product.isActive,
-        searchText: `${product.name} ${product.description ?? ""} ${product.category}`,
-        sourceVersion: product.version,
-      },
-      update: {
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        stock: product.stock,
-        category: product.category,
-        images: product.images,
-        slug: product.slug,
-        isActive: product.isActive,
-        sourceVersion: product.version,
-      },
-    });
+    this.recordLag("product_catalog", event);
+  }
+
+  private recordLag(projection: string, event: DomainEvent): void {
+    projectionLagSeconds.set(
+      { projection },
+      Math.max(0, (Date.now() - event.occurredAt.getTime()) / 1000),
+    );
   }
 
   private async refreshDashboard(): Promise<void> {

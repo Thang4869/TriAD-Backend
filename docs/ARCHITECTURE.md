@@ -74,6 +74,51 @@ Domain code depends only on domain types and application ports. Prisma, Redis, q
 - Outbox and Saga reliability require operational monitoring for lag, dead letters and stuck state.
 - A modular monolith gives simpler transactions but does not provide independent scaling per bounded context.
 
+## Checkout sequence
+
+```mermaid
+sequenceDiagram
+  participant API as Checkout API
+  participant Saga as CheckoutSaga
+  participant Stock as Stock port
+  participant Order as Order port
+  participant Pay as Payment port
+  participant Outbox as Transactional outbox
+  API->>Saga: execute(idempotency key)
+  Saga->>Stock: reserve with timeout/retry
+  Saga->>Order: place and persist event
+  Saga->>Pay: authorize with timeout/retry
+  Pay-->>Saga: payment id
+  Saga->>Order: confirm
+  Saga-->>API: completed state
+  Note over Saga,Outbox: Failure triggers refund, cancel and release compensation
+```
+
+## Projection update sequence
+
+```mermaid
+sequenceDiagram
+  participant Aggregate as Aggregate
+  participant DB as PostgreSQL
+  participant Relay as OutboxRelay
+  participant Handler as ProjectionHandler
+  participant Read as Read model
+  Aggregate->>DB: commit state and outbox event
+  Relay->>DB: claim event with lease
+  Relay->>Handler: publish event
+  Handler->>Read: idempotent upsert
+  Handler-->>Relay: handler log success
+  Read-->>API: eventually consistent query
+```
+
+### ADR-006: Metrics are domain signals
+
+Checkout, reservation, compensation and projection lag are emitted at the application boundary rather than inferred from logs. This makes SLOs queryable and keeps alert rules independent of log formatting.
+
+### ADR-007: Compatibility-first value objects
+
+Value objects enforce normalization and invariants inside aggregates while exposing primitive getters at the existing mapper boundary. This hardens the domain without changing frontend DTOs.
+
 ## Operations
 
 ```bash

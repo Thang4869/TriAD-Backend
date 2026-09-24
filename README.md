@@ -244,7 +244,7 @@ Checkout và Cancellation/Refund lưu state bằng Prisma, retry từng step v�
 
 ## 10. Principal Architecture
 
-Mermaid C4 context/container/component diagrams, decision records, trade-offs, production commands, chaos testing và operational guidance nằm tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Mermaid C4 context/container/component diagrams, sequence flows, decision records, trade-offs và production commands nằm tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Runbook xử lý Outbox, Saga và Projection nằm tại [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ### ADR-003: Saga cho workflow phân tán
 

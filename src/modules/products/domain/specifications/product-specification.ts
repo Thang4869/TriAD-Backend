@@ -1,12 +1,21 @@
-import { Prisma } from "@prisma/client";
+export interface ProductFilter {
+  AND?: ProductFilter[];
+  OR?: Array<{
+    name?: { contains: string; mode: "insensitive" };
+    description?: { contains: string; mode: "insensitive" };
+  }>;
+  isActive?: boolean;
+  category?: string;
+  price?: { gte?: number; lte?: number };
+}
 
 export interface ProductSpecification {
-  toPrismaWhere(): Prisma.ProductWhereInput;
+  toPrismaWhere(): ProductFilter;
   and(other: ProductSpecification): ProductSpecification;
 }
 
 abstract class BaseSpecification implements ProductSpecification {
-  abstract toPrismaWhere(): Prisma.ProductWhereInput;
+  abstract toPrismaWhere(): ProductFilter;
 
   and(other: ProductSpecification): ProductSpecification {
     return new AndSpecification(this, other);
@@ -21,7 +30,7 @@ class AndSpecification extends BaseSpecification {
     super();
   }
 
-  toPrismaWhere(): Prisma.ProductWhereInput {
+  toPrismaWhere(): ProductFilter {
     return {
       AND: [this.left.toPrismaWhere(), this.right.toPrismaWhere()],
     };
@@ -29,7 +38,7 @@ class AndSpecification extends BaseSpecification {
 }
 
 export class NoopSpecification extends BaseSpecification {
-  toPrismaWhere(): Prisma.ProductWhereInput {
+  toPrismaWhere(): ProductFilter {
     return {};
   }
 }
@@ -39,7 +48,7 @@ export class ActiveProductSpecification extends BaseSpecification {
     super();
   }
 
-  toPrismaWhere(): Prisma.ProductWhereInput {
+  toPrismaWhere(): ProductFilter {
     return { isActive: this.isActive };
   }
 }
@@ -49,7 +58,7 @@ export class CategorySpecification extends BaseSpecification {
     super();
   }
 
-  toPrismaWhere(): Prisma.ProductWhereInput {
+  toPrismaWhere(): ProductFilter {
     return { category: this.category };
   }
 }
@@ -62,9 +71,9 @@ export class PriceRangeSpecification extends BaseSpecification {
     super();
   }
 
-  toPrismaWhere(): Prisma.ProductWhereInput {
+  toPrismaWhere(): ProductFilter {
     if (this.minPrice === undefined && this.maxPrice === undefined) return {};
-    const price: Prisma.ProductWhereInput["price"] = {};
+    const price: ProductFilter["price"] = {};
     if (this.minPrice !== undefined) price.gte = this.minPrice;
     if (this.maxPrice !== undefined) price.lte = this.maxPrice;
     return { price };
@@ -76,7 +85,7 @@ export class KeywordSpecification extends BaseSpecification {
     super();
   }
 
-  toPrismaWhere(): Prisma.ProductWhereInput {
+  toPrismaWhere(): ProductFilter {
     return {
       OR: [
         { name: { contains: this.keyword, mode: "insensitive" } },

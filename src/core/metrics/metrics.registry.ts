@@ -48,6 +48,38 @@ export const stockReservationFailed = new client.Counter({
   registers: [metricsRegistry],
 });
 
+export const stockReservationSucceeded = new client.Counter({
+  name: "triad_backend_stock_reservation_success_total",
+  help: "Successful stock reservations",
+  registers: [metricsRegistry],
+});
+
+export const checkoutSucceeded = new client.Counter({
+  name: "triad_backend_checkout_success_total",
+  help: "Successful checkout sagas",
+  registers: [metricsRegistry],
+});
+
+export const checkoutFailed = new client.Counter({
+  name: "triad_backend_checkout_failure_total",
+  help: "Failed checkout sagas",
+  registers: [metricsRegistry],
+});
+
+export const sagaCompensations = new client.Counter({
+  name: "triad_backend_saga_compensation_total",
+  help: "Saga compensations executed",
+  labelNames: ["saga", "step"],
+  registers: [metricsRegistry],
+});
+
+export const projectionLagSeconds = new client.Gauge({
+  name: "triad_backend_projection_lag_seconds",
+  help: "Age of the event when a projection handler processed it",
+  labelNames: ["projection"],
+  registers: [metricsRegistry],
+});
+
 export const outboxEventsClaimed = new client.Counter({
   name: "triad_backend_outbox_events_claimed_total",
   help: "Outbox events claimed for delivery",

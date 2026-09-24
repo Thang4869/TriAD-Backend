@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { validate } from "@shared/middlewares/validation.middleware";
 import { authMiddleware } from "@shared/middlewares/auth.middleware";
-import { authRateLimiter } from "@shared/middlewares/rate-limit.middleware";
+import {
+  authRateLimiter,
+  totpRateLimiter,
+} from "@shared/middlewares/rate-limit.middleware";
 import { csrfProtection } from "@shared/middlewares/csrf.middleware";
 import { authController } from "@/container";
 import passport from "./strategies/oauth2.strategy";
@@ -51,6 +54,7 @@ router.post("/2fa/enable", authMiddleware, authController.enable2FA);
 router.post("/2fa/verify", authMiddleware, authController.verify2FA);
 router.post(
   "/verify-totp",
+  totpRateLimiter,
   validate(verify2FASchema),
   authController.verifyTOTP,
 );

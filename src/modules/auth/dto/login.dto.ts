@@ -25,7 +25,7 @@ export const refreshSchema = z.object({
 
 export const verify2FASchema = z.object({
   body: z.object({
-    userId: z.string().uuid("Invalid userId"),
+    preAuthToken: z.string().min(1, "Pre-authentication token is required"),
     token: z.string().length(6, "Token must be 6 digits"),
   }),
 });

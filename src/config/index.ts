@@ -9,6 +9,8 @@ if (process.env.NODE_ENV === "test") {
     process.env.JWT_ACCESS_SECRET || "test-access-secret-32charslongenough";
   process.env.JWT_REFRESH_SECRET =
     process.env.JWT_REFRESH_SECRET || "test-refresh-secret-32charslongenough";
+  process.env.JWT_PREAUTH_SECRET =
+    process.env.JWT_PREAUTH_SECRET || "test-preauth-secret-32charslongenough";
   process.env.DATABASE_URL =
     process.env.DATABASE_URL ||
     "postgresql://postgres:postgres@localhost:5432/triad_test?schema=public";
@@ -32,6 +34,9 @@ const configSchema = z
     JWT_REFRESH_SECRET: z
       .string()
       .min(32, "JWT_REFRESH_SECRET must be at least 32 chars"),
+    JWT_PREAUTH_SECRET: z
+      .string()
+      .min(32, "JWT_PREAUTH_SECRET must be at least 32 chars"),
     JWT_ACCESS_EXPIRY: z.string().default("15m"),
     JWT_REFRESH_EXPIRY: z.string().default("7d"),
 

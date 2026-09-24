@@ -56,3 +56,10 @@ export const authRateLimiter = rateLimiter({
   windowMs: 60 * 60 * 1000,
   max: 10,
 });
+
+export const totpRateLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) =>
+    `${req.ip || "unknown"}:${String(req.body?.preAuthToken || "missing")}`,
+});

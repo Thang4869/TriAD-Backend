@@ -6,9 +6,51 @@ import { UnauthorizedError } from "@shared/utils/errors";
 import { IAuthRepository } from "../auth.repository";
 import { User } from "@prisma/client";
 import { AuthUserResponse } from "../auth.mapper";
+import config from "@config";
+
+export interface PreAuthClaims {
+  sub: string;
+  purpose: "2fa";
+  jti: string;
+}
 
 export class TokenService {
   constructor(private readonly authRepository: IAuthRepository) {}
+
+  async issueTwoFactorPreAuthToken(userId: string): Promise<string> {
+    const jti = crypto.randomUUID();
+    const token = signToken(
+      { sub: userId, purpose: "2fa", jti },
+      config.JWT_PREAUTH_SECRET,
+      "5m",
+    );
+    await redis.setex(`auth:2fa:preauth:${jti}`, 300, userId);
+    return token;
+  }
+
+  async consumeTwoFactorPreAuthToken(token: string): Promise<string> {
+    let claims: PreAuthClaims;
+    try {
+      claims = verifyToken<PreAuthClaims>(token, config.JWT_PREAUTH_SECRET);
+    } catch {
+      throw new UnauthorizedError(
+        "Invalid or expired pre-authentication token",
+      );
+    }
+    if (claims.purpose !== "2fa" || !claims.sub || !claims.jti) {
+      throw new UnauthorizedError("Invalid pre-authentication token");
+    }
+    const key = `auth:2fa:preauth:${claims.jti}`;
+    const consumed = await redis.eval(
+      "local value = redis.call('get', KEYS[1]); if value then redis.call('del', KEYS[1]); return value end; return false",
+      1,
+      key,
+    );
+    if (consumed !== claims.sub) {
+      throw new UnauthorizedError("Pre-authentication token already used");
+    }
+    return claims.sub;
+  }
 
   private static get ACCESS_SECRET(): string {
     const secret = process.env.JWT_ACCESS_SECRET;

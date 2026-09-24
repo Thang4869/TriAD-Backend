@@ -1,8 +1,11 @@
 import speakeasy from "speakeasy";
 import { BadRequestError } from "@shared/utils/errors";
+import { UnauthorizedError } from "@shared/utils/errors";
+import redis from "@core/redis/client";
 import { IAuthRepository } from "../auth.repository";
 import { TokenService } from "./token.service";
 import { AuthUserResponse } from "../auth.mapper";
+import config from "@config";
 
 export class TwoFactorService {
   constructor(
@@ -18,7 +21,7 @@ export class TwoFactorService {
       throw new BadRequestError("User not found");
     }
 
-    const issuer = process.env.TOTP_ISSUER || "TriAD";
+    const issuer = config.TOTP_ISSUER;
     const secret = speakeasy.generateSecret({
       name: `${issuer}:${user.email}`,
       issuer,
@@ -53,20 +56,29 @@ export class TwoFactorService {
   }
 
   async verifyTOTP(
-    userId: string,
+    preAuthToken: string,
     token: string,
   ): Promise<{
     accessToken: string;
     refreshToken: string;
     user: AuthUserResponse;
   }> {
+    const userId =
+      await this.tokenService.consumeTwoFactorPreAuthToken(preAuthToken);
     const user = await this.authRepository.findUserById(userId);
     if (!user || !user.totpSecret || !user.is2FAEnabled) {
-      throw new BadRequestError("2FA not enabled");
+      throw new UnauthorizedError("2FA is not enabled");
     }
 
     if (!this.verifyTotpToken(user.totpSecret, token)) {
-      throw new BadRequestError("Invalid TOTP token");
+      throw new UnauthorizedError("Invalid TOTP token");
+    }
+
+    const timestep = Math.floor(Date.now() / 30_000);
+    const replayKey = `auth:2fa:totp:${userId}:${timestep}`;
+    const accepted = await redis.set(replayKey, "1", "EX", 90, "NX");
+    if (accepted !== "OK") {
+      throw new UnauthorizedError("TOTP token already used");
     }
 
     return this.tokenService.generateTokens(user);

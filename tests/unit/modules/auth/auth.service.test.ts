@@ -179,6 +179,7 @@ describe("AuthService", () => {
           },
         };
       }),
+      issueTwoFactorPreAuthToken: vi.fn().mockResolvedValue("pre-auth-token"),
       blacklistAccessToken: vi
         .fn()
         .mockImplementation(async (token: string) => {
@@ -328,7 +329,7 @@ describe("AuthService", () => {
       const result = await service.login("test@test.com", "pass");
       expect(result).toEqual({
         requires2FA: true,
-        userId: baseUser.id,
+        preAuthToken: "pre-auth-token",
         message: "2FA required",
       });
     });

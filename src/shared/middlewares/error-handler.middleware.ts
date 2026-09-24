@@ -35,9 +35,9 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction,
 ) => {
-  const correlationId =
-    req.headers["x-correlation-id"] ||
-    `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const correlationHeader =
+    req.headers["x-request-id"] || req.headers["x-correlation-id"];
+  const correlationId = sanitizeCorrelationId(correlationHeader);
 
   let statusCode = 500;
   let message = "Internal server error";
@@ -61,6 +61,11 @@ export const errorHandler = (
       case "P2025":
         statusCode = 404;
         message = "Record not found";
+        break;
+      case "P2034":
+        statusCode = 409;
+        code = "RETRYABLE_CONFLICT";
+        message = "Transaction conflict, please retry";
         break;
       default:
         statusCode = 400;
@@ -88,7 +93,7 @@ export const errorHandler = (
     statusCode = 401;
     message = "Invalid or expired token";
   } else if (err instanceof Error) {
-    message = err.message;
+    message = "Internal server error";
   }
 
   const logPayload = {
@@ -126,6 +131,12 @@ export const errorHandler = (
 
   res.status(statusCode).json(responsePayload);
 };
+
+function sanitizeCorrelationId(value: string | string[] | undefined): string {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (candidate && /^[A-Za-z0-9._:-]{1,128}$/.test(candidate)) return candidate;
+  return `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+}
 
 export const notFoundHandler = (
   req: Request,

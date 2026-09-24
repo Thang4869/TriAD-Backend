@@ -38,6 +38,22 @@ function createMockRequest(overrides: Partial<Request> = {}): Request {
 describe("errorHandler", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("does not expose unexpected internal error messages", () => {
+    const res = createMockResponse();
+
+    errorHandler(
+      new Error("database password leaked"),
+      createMockRequest(),
+      res,
+      vi.fn(),
+    );
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: "Internal server error" }),
+    );
+  });
+
   it("trả status theo DOMAIN_ERROR_STATUS_MAP và kèm code, details cho DomainError", () => {
     const err = new EmptyOrderError();
     const res = createMockResponse();

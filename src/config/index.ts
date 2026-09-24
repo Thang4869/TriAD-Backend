@@ -55,7 +55,15 @@ const configSchema = z
     CORS_ORIGIN: z
       .string()
       .optional()
-      .transform((v) => v?.split(",") || []),
+      .transform(
+        (v) =>
+          v
+            ?.split(",")
+            .map((origin) => origin.trim())
+            .filter(Boolean) || [],
+      ),
+
+    TRUST_PROXY: z.string().default("0"),
 
     RATE_LIMIT_WINDOW_MS: z.string().default("60000").transform(Number),
     RATE_LIMIT_MAX: z.string().default("100").transform(Number),

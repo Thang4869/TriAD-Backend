@@ -70,6 +70,7 @@ import {
 } from "@shared/middlewares/auth.middleware";
 import { PrismaErrorClassifier } from "@core/database/prisma-error-classifier";
 import { createErrorHandler } from "@shared/middlewares/error-handler.middleware";
+import { processImage } from "@/jobs/image-process.job";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -346,3 +347,9 @@ export const optionalAuthMiddleware = createOptionalAuthMiddleware(
 export const errorHandler = createErrorHandler(
   container.resolve(TOKENS.PersistenceErrorClassifier),
 );
+export const imageJobProcessor = (job: Parameters<typeof processImage>[0]) =>
+  processImage(
+    job,
+    container.resolve(TOKENS.ProductsRepository),
+    container.resolve(TOKENS.ImageStorage),
+  );

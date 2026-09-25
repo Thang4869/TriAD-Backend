@@ -6,6 +6,8 @@ import redis from "@core/redis/client";
 import { config } from "./config";
 import { logger } from "@core/logger/winston";
 import { outboxRelay } from "@core/outbox/outbox-relay";
+import { Worker } from "bullmq";
+import { imageJobProcessor } from "@/container";
 
 const PORT = config.PORT;
 
@@ -22,6 +24,10 @@ const startServer = async () => {
 
     await redis.ping();
     logger.info("Redis connected successfully");
+    const imageWorker = new Worker("image", imageJobProcessor, {
+      connection: redis,
+      concurrency: 2,
+    });
 
     const server = app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
@@ -35,6 +41,18 @@ const startServer = async () => {
       logger.info(`Received ${signal}, shutting down gracefully...`);
       outboxRelay.stop();
       server.close(async () => {
+        outboxRelay.stop();
+
+        server.close(async () => {
+          logger.info("HTTP server closed");
+
+          await imageWorker.close();
+          await prisma.$disconnect();
+          await redis.quit();
+
+          logger.info("Connections closed, exiting...");
+          process.exit(0);
+        });
         logger.info("HTTP server closed");
         await prisma.$disconnect();
         await redis.quit();

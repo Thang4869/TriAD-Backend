@@ -1,7 +1,7 @@
 import sharp from "sharp";
-import prisma from "@core/database/prisma";
+import type { IProductsRepository } from "@modules/products/products.repository";
 import { logger } from "@core/logger/winston";
-import { CloudinaryImageStorage } from "@core/storage/cloudinary";
+import type { IImageStorage } from "@core/storage/cloudinary";
 
 export interface ImageProcessJobData {
   productId: string;
@@ -11,7 +11,11 @@ export interface ImageProcessJobData {
 const RESIZE_MAX_DIMENSION = 800;
 const JPEG_QUALITY = 80;
 
-export const processImage = async (job: { data: ImageProcessJobData }) => {
+export const processImage = async (
+  job: { data: ImageProcessJobData },
+  productsRepository: IProductsRepository,
+  storage: IImageStorage,
+) => {
   const { productId, imageBuffer } = job.data;
   logger.info(`Processing image for product ${productId}`);
 
@@ -29,25 +33,19 @@ export const processImage = async (job: { data: ImageProcessJobData }) => {
     .jpeg({ quality: JPEG_QUALITY })
     .toBuffer();
 
-  const storage = new CloudinaryImageStorage();
   const { url } = await storage.upload(
     processedBuffer,
     `products/${productId}`,
   );
 
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    select: { images: true },
-  });
+  const product = await productsRepository.findById(productId);
   if (!product) {
     throw new Error(`Product ${productId} not found`);
   }
 
-  await prisma.product.update({
-    where: { id: productId },
-    data: { images: [...product.images, url] },
+  await productsRepository.update(productId, {
+    images: [...product.images, url],
   });
-
   logger.info(`Image processed and linked to product ${productId}: ${url}`);
   return { processed: true, url };
 };

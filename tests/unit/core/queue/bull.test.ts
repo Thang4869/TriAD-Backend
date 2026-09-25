@@ -86,13 +86,11 @@ describe("Bull queue setup", () => {
     expect(queues).toEqual({ email: emailQueue, image: imageQueue });
   });
 
-  it("creates email and image workers with correct concurrency", async () => {
-    const { emailWorker, imageWorker } = await import("@core/queue/bull");
+  it("creates email worker with correct concurrency", async () => {
+    const { emailWorker } = await import("@core/queue/bull");
 
     expect((emailWorker as any).name).toBe("email");
     expect((emailWorker as any).options.concurrency).toBe(5);
-    expect((imageWorker as any).name).toBe("image");
-    expect((imageWorker as any).options.concurrency).toBe(2);
   });
 
   it("email worker processor logs when sending an email", async () => {
@@ -106,20 +104,6 @@ describe("Bull queue setup", () => {
     expect(logger.info).toHaveBeenCalledWith("Sending email", {
       to: "user@test.com",
       subject: "Hi",
-    });
-  });
-
-  it("image worker processor logs when processing an image", async () => {
-    const { logger } = await import("@core/logger/winston");
-    const { imageWorker } = await import("@core/queue/bull");
-
-    await (imageWorker as any).processor({
-      data: { productId: "p1", imageUrl: "https://cdn/img.jpg" },
-    });
-
-    expect(logger.info).toHaveBeenCalledWith("Processing image", {
-      productId: "p1",
-      imageUrl: "https://cdn/img.jpg",
     });
   });
 

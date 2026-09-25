@@ -1,45 +1,27 @@
 import prisma from "@core/database/prisma";
-import { Prisma, Cart, CartItem } from "@prisma/client";
+import { Cart as PrismaCart, CartItem as PrismaCartItem } from "@prisma/client";
 
-export type CartWithItems = Prisma.CartGetPayload<{
-  include: {
-    items: {
-      include: {
-        product: {
-          select: {
-            id: true;
-            name: true;
-            price: true;
-            images: true;
-            stock: true;
-            slug: true;
-          };
-        };
-      };
-    };
-  };
-}>;
-
-export type CartItemWithProduct = Prisma.CartItemGetPayload<{
-  include: { product: true };
-}>;
-
-export interface ProductStockInfo {
-  id: string;
-  stock: number;
-  name: string;
-}
+import {
+  CartRecord,
+  CartWithItems,
+  CartItemRecord,
+  CartItemWithProduct,
+  ProductStockInfo,
+} from "./application/ports/cart-models";
 
 // ---------- Repository contract ----------
 
 export interface ICartRepository {
   findCartWithItems(userId: string): Promise<CartWithItems | null>;
   createCartWithItems(userId: string): Promise<CartWithItems>;
-  findCartByUserId(userId: string): Promise<Cart | null>;
-  createCart(userId: string): Promise<Cart>;
+  findCartByUserId(userId: string): Promise<CartRecord | null>;
+  createCart(userId: string): Promise<CartRecord>;
   findProductStockInfo(productId: string): Promise<ProductStockInfo | null>;
 
-  findCartItem(cartId: string, productId: string): Promise<CartItem | null>;
+  findCartItem(
+    cartId: string,
+    productId: string,
+  ): Promise<CartItemRecord | null>;
   createCartItem(
     cartId: string,
     productId: string,
@@ -92,11 +74,11 @@ export class PrismaCartRepository implements ICartRepository {
     });
   }
 
-  async findCartByUserId(userId: string): Promise<Cart | null> {
+  async findCartByUserId(userId: string): Promise<PrismaCart | null> {
     return prisma.cart.findUnique({ where: { userId } });
   }
 
-  async createCart(userId: string): Promise<Cart> {
+  async createCart(userId: string): Promise<PrismaCart> {
     return prisma.cart.create({ data: { userId } });
   }
 
@@ -112,7 +94,7 @@ export class PrismaCartRepository implements ICartRepository {
   async findCartItem(
     cartId: string,
     productId: string,
-  ): Promise<CartItem | null> {
+  ): Promise<PrismaCartItem | null> {
     return prisma.cartItem.findUnique({
       where: { cartId_productId: { cartId, productId } },
     });

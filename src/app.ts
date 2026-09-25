@@ -18,7 +18,7 @@ import {
   errorHandler,
   notFoundHandler,
 } from "@shared/middlewares/error-handler.middleware";
-import { authMiddleware } from "@shared/middlewares/auth.middleware";
+import { authMiddleware } from "@/container";
 import { requestLogger } from "@shared/middlewares/logger.middleware";
 
 import { authRoutes } from "@modules/auth/auth.routes";

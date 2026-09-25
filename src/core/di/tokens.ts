@@ -36,6 +36,8 @@ import type { NotificationsController } from "@modules/notifications/notificatio
 import type { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-placed.handler";
 import type { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
 import type { PricingService } from "@/modules/checkout/domain/pricing.service";
+import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
+import type { TokenStorePort } from "@modules/auth/application/ports/token-store.port";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
@@ -98,6 +100,8 @@ export const TOKENS = {
   ),
 
   // Auth
+  AuthSessionUser: createToken<AuthSessionUserPort>("AuthSessionUser"),
+  TokenStore: createToken<TokenStorePort>("TokenStore"),
   TokenService: createToken<TokenService>("TokenService"),
   TwoFactorService: createToken<TwoFactorService>("TwoFactorService"),
 

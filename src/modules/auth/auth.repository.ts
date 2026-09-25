@@ -10,6 +10,10 @@ import {
   AuthRefreshToken,
   AuthRefreshTokenWithUser,
 } from "./application/ports/auth-refresh-token";
+import {
+  AuthSessionUser,
+  AuthSessionUserPort,
+} from "./application/ports/auth-session-user.port";
 
 export interface CreateUserData {
   email: string;
@@ -72,13 +76,27 @@ export interface IAuthRepository {
 
 // ---------- Prisma implementation ----------
 
-export class PrismaAuthRepository implements IAuthRepository {
+export class PrismaAuthRepository
+  implements IAuthRepository, AuthSessionUserPort
+{
   async findUserByEmail(email: string): Promise<PrismaUser | null> {
     return prisma.user.findUnique({ where: { email } });
   }
 
-  async findUserById(id: string): Promise<PrismaUser | null> {
+  async findUserById(id: string): Promise<AuthUser | null> {
     return prisma.user.findUnique({ where: { id } });
+  }
+
+  async findById(id: string): Promise<AuthSessionUser | null> {
+    return prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isVerified: true,
+      },
+    });
   }
 
   async createUser(data: CreateUserData): Promise<PrismaUser> {

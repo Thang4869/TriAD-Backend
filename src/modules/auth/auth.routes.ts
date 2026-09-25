@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { validate } from "@shared/middlewares/validation.middleware";
-import { authMiddleware } from "@shared/middlewares/auth.middleware";
+import { authMiddleware } from "@/container";
 import {
   authRateLimiter,
   totpRateLimiter,

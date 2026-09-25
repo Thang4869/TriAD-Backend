@@ -64,6 +64,10 @@ import { AdminProductService } from "./modules/products/services/admin-product.s
 import { CatalogService } from "./modules/products/services/catalog.service";
 import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
 import { RedisTokenStore } from "@modules/auth/infrastructure/token-store/redis-token-store";
+import {
+  createAuthMiddleware,
+  createOptionalAuthMiddleware,
+} from "@shared/middlewares/auth.middleware";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -77,6 +81,9 @@ container.register(
   () => new PrismaProductsRepository(),
 );
 container.register(TOKENS.AuthRepository, () => new PrismaAuthRepository());
+container.register(TOKENS.AuthSessionUser, () => new PrismaAuthRepository());
+
+container.register(TOKENS.TokenStore, () => new RedisTokenStore());
 container.register(TOKENS.CartRepository, () => new PrismaCartRepository());
 container.register(
   TOKENS.CheckoutRepository,
@@ -110,7 +117,10 @@ container.register(
 container.register(
   TOKENS.TokenService,
   (c) =>
-    new TokenService(c.resolve(TOKENS.AuthRepository), new RedisTokenStore()),
+    new TokenService(
+      c.resolve(TOKENS.AuthRepository),
+      c.resolve(TOKENS.TokenStore),
+    ),
 );
 container.register(
   TOKENS.TwoFactorService,
@@ -118,7 +128,7 @@ container.register(
     new TwoFactorService(
       c.resolve(TOKENS.AuthRepository),
       c.resolve(TOKENS.TokenService),
-      new RedisTokenStore(),
+      c.resolve(TOKENS.TokenStore),
     ),
 );
 
@@ -155,7 +165,7 @@ container.register(
       c.resolve(TOKENS.EmailService),
       c.resolve(TOKENS.TokenService),
       c.resolve(TOKENS.TwoFactorService),
-      new RedisTokenStore(),
+      c.resolve(TOKENS.TokenStore),
     ),
 );
 container.register(
@@ -317,4 +327,12 @@ export const dashboardController = container.resolve(
 );
 export const notificationsController = container.resolve(
   TOKENS.NotificationsController,
+);
+export const authMiddleware = createAuthMiddleware(
+  container.resolve(TOKENS.AuthSessionUser),
+  container.resolve(TOKENS.TokenStore),
+);
+export const optionalAuthMiddleware = createOptionalAuthMiddleware(
+  container.resolve(TOKENS.AuthSessionUser),
+  container.resolve(TOKENS.TokenStore),
 );

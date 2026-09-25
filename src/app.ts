@@ -14,11 +14,8 @@ import config from "@config";
 import { rateLimiter } from "@shared/middlewares/rate-limit.middleware";
 import { requestScope } from "@shared/middlewares/request.scope.middleware";
 import { container as rootContainer } from "./container";
-import {
-  errorHandler,
-  notFoundHandler,
-} from "@shared/middlewares/error-handler.middleware";
-import { authMiddleware } from "@/container";
+import { notFoundHandler } from "@shared/middlewares/error-handler.middleware";
+import { authMiddleware, errorHandler } from "@/container";
 import { requestLogger } from "@shared/middlewares/logger.middleware";
 
 import { authRoutes } from "@modules/auth/auth.routes";

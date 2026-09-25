@@ -68,6 +68,8 @@ import {
   createAuthMiddleware,
   createOptionalAuthMiddleware,
 } from "@shared/middlewares/auth.middleware";
+import { PrismaErrorClassifier } from "@core/database/prisma-error-classifier";
+import { createErrorHandler } from "@shared/middlewares/error-handler.middleware";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -111,6 +113,11 @@ container.register(
 container.register(
   TOKENS.PricingService,
   (c) => new PricingService(c.resolve(TOKENS.CheckoutRepository)),
+);
+
+container.register(
+  TOKENS.PersistenceErrorClassifier,
+  () => new PrismaErrorClassifier(),
 );
 
 // ---------- Auth sub-services ----------
@@ -335,4 +342,7 @@ export const authMiddleware = createAuthMiddleware(
 export const optionalAuthMiddleware = createOptionalAuthMiddleware(
   container.resolve(TOKENS.AuthSessionUser),
   container.resolve(TOKENS.TokenStore),
+);
+export const errorHandler = createErrorHandler(
+  container.resolve(TOKENS.PersistenceErrorClassifier),
 );

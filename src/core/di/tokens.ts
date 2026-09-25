@@ -38,6 +38,7 @@ import type { OrderStatusChangedHandler } from "@modules/orders/event-handlers/o
 import type { PricingService } from "@/modules/checkout/domain/pricing.service";
 import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
 import type { TokenStorePort } from "@modules/auth/application/ports/token-store.port";
+import type { PersistenceErrorClassifier } from "@shared/errors/persistence-error";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
@@ -113,5 +114,9 @@ export const TOKENS = {
   // Checkout
   StockReservationService: createToken<StockReservationService>(
     "StockReservationService",
+  ),
+
+  PersistenceErrorClassifier: createToken<PersistenceErrorClassifier>(
+    "PersistenceErrorClassifier",
   ),
 } as const;

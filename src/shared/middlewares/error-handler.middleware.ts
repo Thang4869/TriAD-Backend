@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { logger } from "@core/logger/winston";
-import { Prisma } from "@prisma/client";
+import type { PersistenceErrorClassifier } from "@shared/errors/persistence-error";
 import { ZodError } from "zod";
 import { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
 import {
@@ -29,108 +29,116 @@ export class AppError extends Error {
   }
 }
 
-export const errorHandler = (
-  err: unknown,
-  req: Request,
-  res: Response,
-  _next: NextFunction,
-) => {
-  const correlationHeader =
-    req.headers["x-request-id"] || req.headers["x-correlation-id"];
-  const correlationId = sanitizeCorrelationId(correlationHeader);
+export function createErrorHandler(
+  persistenceErrors: PersistenceErrorClassifier,
+) {
+  return (err: unknown, req: Request, res: Response, _next: NextFunction) => {
+    const correlationHeader =
+      req.headers["x-request-id"] || req.headers["x-correlation-id"];
+    const correlationId = sanitizeCorrelationId(correlationHeader);
 
-  let statusCode = 500;
-  let message = "Internal server error";
-  let details: unknown = undefined;
-  let code: string | undefined;
+    let statusCode = 500;
+    let message = "Internal server error";
+    let details: unknown = undefined;
+    let code: string | undefined;
 
-  if (err instanceof DomainError) {
-    statusCode = DOMAIN_ERROR_STATUS_MAP[err.code] ?? 400;
-    message = err.message;
-    code = err.code;
-    details = err.context;
-  } else if (err instanceof AppError) {
-    statusCode = err.statusCode;
-    message = err.isOperational ? err.message : "Internal server error";
-  } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    switch (err.code) {
-      case "P2002":
-        statusCode = 409;
-        message = "Duplicate entry";
-        break;
-      case "P2025":
-        statusCode = 404;
-        message = "Record not found";
-        break;
-      case "P2034":
-        statusCode = 409;
-        code = "RETRYABLE_CONFLICT";
-        message = "Transaction conflict, please retry";
-        break;
-      default:
-        statusCode = 400;
-        message = "Database error";
-        break;
+    if (err instanceof DomainError) {
+      statusCode = DOMAIN_ERROR_STATUS_MAP[err.code] ?? 400;
+      message = err.message;
+      code = err.code;
+      details = err.context;
+    } else if (err instanceof AppError) {
+      statusCode = err.statusCode;
+      message = err.isOperational ? err.message : "Internal server error";
+    } else if (err instanceof ZodError) {
+      statusCode = 400;
+      message = "Validation failed";
+      details = err.errors.map((e) => ({
+        field: e.path.join("."),
+        message: e.message,
+      }));
+    } else if (
+      err instanceof JsonWebTokenError ||
+      err instanceof TokenExpiredError ||
+      (err &&
+        typeof err === "object" &&
+        "name" in err &&
+        (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError"))
+    ) {
+      statusCode = 401;
+      message = "Invalid or expired token";
+    } else {
+      const persistenceError = persistenceErrors.classify(err);
+
+      if (persistenceError) {
+        switch (persistenceError.kind) {
+          case "UNIQUE_CONSTRAINT":
+            statusCode = 409;
+            message = "Duplicate entry";
+            break;
+
+          case "NOT_FOUND":
+            statusCode = 404;
+            message = "Record not found";
+            break;
+
+          case "TRANSACTION_CONFLICT":
+            statusCode = 409;
+            code = "RETRYABLE_CONFLICT";
+            message = "Transaction conflict, please retry";
+            break;
+
+          case "VALIDATION":
+            statusCode = 400;
+            message = "Invalid data provided";
+            break;
+
+          case "DATABASE":
+            statusCode = 400;
+            message = "Database error";
+            break;
+        }
+      } else if (err instanceof Error) {
+        message = "Internal server error";
+      }
     }
-  } else if (err instanceof Prisma.PrismaClientValidationError) {
-    statusCode = 400;
-    message = "Invalid data provided";
-  } else if (err instanceof ZodError) {
-    statusCode = 400;
-    message = "Validation failed";
-    details = err.errors.map((e) => ({
-      field: e.path.join("."),
-      message: e.message,
-    }));
-  } else if (
-    err instanceof JsonWebTokenError ||
-    err instanceof TokenExpiredError ||
-    (err &&
-      typeof err === "object" &&
-      "name" in err &&
-      (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError"))
-  ) {
-    statusCode = 401;
-    message = "Invalid or expired token";
-  } else if (err instanceof Error) {
-    message = "Internal server error";
-  }
 
-  const logPayload = {
-    message: err instanceof Error ? err.message : String(err),
-    stack: err instanceof Error ? err.stack : undefined,
-    statusCode,
-    code,
-    path: req.path,
-    method: req.method,
-    ip: req.ip,
-    userId: (req.user as { id: string })?.id,
-    correlationId,
+    const logPayload = {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      statusCode,
+      code,
+      path: req.path,
+      method: req.method,
+      ip: req.ip,
+      userId: (req.user as { id: string })?.id,
+      correlationId,
+    };
+    if (statusCode >= 500) {
+      logger.error("Error:", logPayload);
+    } else {
+      logger.warn("Error:", logPayload);
+    }
+
+    // response
+    const responsePayload: ErrorResponsePayload = {
+      success: false,
+      error: message,
+      correlationId,
+    };
+    if (code) {
+      responsePayload.code = code;
+    }
+    if (details) {
+      responsePayload.details = details;
+    }
+    if (process.env.NODE_ENV === "development" && err instanceof Error) {
+      responsePayload.stack = err.stack;
+    }
+
+    res.status(statusCode).json(responsePayload);
   };
-  if (statusCode >= 500) {
-    logger.error("Error:", logPayload);
-  } else {
-    logger.warn("Error:", logPayload);
-  }
-
-  // response
-  const responsePayload: ErrorResponsePayload = {
-    success: false,
-    error: message,
-    correlationId,
-  };
-  if (code) {
-    responsePayload.code = code;
-  }
-  if (details) {
-    responsePayload.details = details;
-  }
-  if (process.env.NODE_ENV === "development" && err instanceof Error) {
-    responsePayload.stack = err.stack;
-  }
-
-  res.status(statusCode).json(responsePayload);
-};
+}
 
 function sanitizeCorrelationId(value: string | string[] | undefined): string {
   const candidate = Array.isArray(value) ? value[0] : value;

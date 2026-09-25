@@ -1,14 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PricingService } from "@modules/checkout/domain/pricing.service";
-import {
-  ICheckoutRepository,
-  TxClient,
-} from "@modules/checkout/checkout.repository";
+import { ICheckoutRepository } from "@modules/checkout/checkout.repository";
 import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
 import { BadRequestError, ConflictError } from "@shared/utils/errors";
+import { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
 
-const tx = {} as TxClient;
+const tx = {} as CheckoutTransaction;
 
 function createRepository(
   overrides: Partial<ICheckoutRepository> = {},

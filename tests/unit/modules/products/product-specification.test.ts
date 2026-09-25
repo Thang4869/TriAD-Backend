@@ -10,29 +10,29 @@ import {
 
 describe("Specification đơn lẻ", () => {
   it("NoopSpecification không thêm điều kiện nào", () => {
-    expect(new NoopSpecification().toPrismaWhere()).toEqual({});
+    expect(new NoopSpecification().toFilter()).toEqual({});
   });
 
   it("ActiveProductSpecification mặc định lọc isActive = true", () => {
-    expect(new ActiveProductSpecification().toPrismaWhere()).toEqual({
+    expect(new ActiveProductSpecification().toFilter()).toEqual({
       isActive: true,
     });
   });
 
   it("ActiveProductSpecification(false) lọc sản phẩm đã ẩn", () => {
-    expect(new ActiveProductSpecification(false).toPrismaWhere()).toEqual({
+    expect(new ActiveProductSpecification(false).toFilter()).toEqual({
       isActive: false,
     });
   });
 
   it("CategorySpecification lọc theo đúng category", () => {
-    expect(new CategorySpecification("ao").toPrismaWhere()).toEqual({
+    expect(new CategorySpecification("ao").toFilter()).toEqual({
       category: "ao",
     });
   });
 
   it("KeywordSpecification tìm trong cả name và description, không phân biệt hoa thường", () => {
-    expect(new KeywordSpecification("áo").toPrismaWhere()).toEqual({
+    expect(new KeywordSpecification("áo").toFilter()).toEqual({
       OR: [
         { name: { contains: "áo", mode: "insensitive" } },
         { description: { contains: "áo", mode: "insensitive" } },
@@ -43,29 +43,29 @@ describe("Specification đơn lẻ", () => {
 
 describe("PriceRangeSpecification", () => {
   it("cả min và max cho ra khoảng gte/lte", () => {
-    expect(new PriceRangeSpecification(10, 100).toPrismaWhere()).toEqual({
+    expect(new PriceRangeSpecification(10, 100).toFilter()).toEqual({
       price: { gte: 10, lte: 100 },
     });
   });
 
   it("chỉ có min thì chỉ sinh gte", () => {
-    expect(new PriceRangeSpecification(10).toPrismaWhere()).toEqual({
+    expect(new PriceRangeSpecification(10).toFilter()).toEqual({
       price: { gte: 10 },
     });
   });
 
   it("chỉ có max thì chỉ sinh lte", () => {
-    expect(new PriceRangeSpecification(undefined, 100).toPrismaWhere()).toEqual(
-      { price: { lte: 100 } },
-    );
+    expect(new PriceRangeSpecification(undefined, 100).toFilter()).toEqual({
+      price: { lte: 100 },
+    });
   });
 
   it("không có min lẫn max thì không thêm điều kiện", () => {
-    expect(new PriceRangeSpecification().toPrismaWhere()).toEqual({});
+    expect(new PriceRangeSpecification().toFilter()).toEqual({});
   });
 
   it("min = 0 vẫn được giữ (không bị coi là falsy)", () => {
-    expect(new PriceRangeSpecification(0).toPrismaWhere()).toEqual({
+    expect(new PriceRangeSpecification(0).toFilter()).toEqual({
       price: { gte: 0 },
     });
   });
@@ -77,7 +77,7 @@ describe("Kết hợp bằng and()", () => {
       new CategorySpecification("ao"),
     );
 
-    expect(spec.toPrismaWhere()).toEqual({
+    expect(spec.toFilter()).toEqual({
       AND: [{ isActive: true }, { category: "ao" }],
     });
   });
@@ -87,7 +87,7 @@ describe("Kết hợp bằng and()", () => {
       .and(new CategorySpecification("ao"))
       .and(new PriceRangeSpecification(10));
 
-    expect(spec.toPrismaWhere()).toEqual({
+    expect(spec.toFilter()).toEqual({
       AND: [
         { AND: [{ isActive: true }, { category: "ao" }] },
         { price: { gte: 10 } },
@@ -98,14 +98,12 @@ describe("Kết hợp bằng and()", () => {
 
 describe("ProductSpecificationBuilder", () => {
   it("builder rỗng trả về where không điều kiện", () => {
-    expect(new ProductSpecificationBuilder().build().toPrismaWhere()).toEqual(
-      {},
-    );
+    expect(new ProductSpecificationBuilder().build().toFilter()).toEqual({});
   });
 
   it("activeOnly() luôn thêm điều kiện isActive", () => {
     expect(
-      new ProductSpecificationBuilder().activeOnly().build().toPrismaWhere(),
+      new ProductSpecificationBuilder().activeOnly().build().toFilter(),
     ).toEqual({ AND: [{}, { isActive: true }] });
   });
 
@@ -114,16 +112,13 @@ describe("ProductSpecificationBuilder", () => {
       new ProductSpecificationBuilder()
         .withIsActive(undefined)
         .build()
-        .toPrismaWhere(),
+        .toFilter(),
     ).toEqual({});
   });
 
   it("withIsActive(false) vẫn thêm điều kiện dù là giá trị falsy", () => {
     expect(
-      new ProductSpecificationBuilder()
-        .withIsActive(false)
-        .build()
-        .toPrismaWhere(),
+      new ProductSpecificationBuilder().withIsActive(false).build().toFilter(),
     ).toEqual({ AND: [{}, { isActive: false }] });
   });
 
@@ -149,7 +144,7 @@ describe("ProductSpecificationBuilder", () => {
   ])("%s không thêm điều kiện thừa", (_name, apply) => {
     const builder = apply(new ProductSpecificationBuilder());
 
-    expect(builder.build().toPrismaWhere()).toEqual({});
+    expect(builder.build().toFilter()).toEqual({});
   });
 
   it("mọi filter được áp dụng cùng lúc", () => {
@@ -159,7 +154,7 @@ describe("ProductSpecificationBuilder", () => {
       .withPriceRange(10, 100)
       .withKeyword("thun")
       .build()
-      .toPrismaWhere();
+      .toFilter();
 
     const serialized = JSON.stringify(where);
     expect(serialized).toContain('"isActive":true');

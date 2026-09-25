@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authMiddleware } from "@shared/middlewares/auth.middleware";
+import { authMiddleware } from "@/container";
 import { validate } from "@shared/middlewares/validation.middleware";
 import { usersController } from "@/container";
 import { updateProfileSchema, changePasswordSchema } from "./dto/users.dto";

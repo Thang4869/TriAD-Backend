@@ -41,15 +41,6 @@ export const emailWorker = new Worker(
   { connection: redis, concurrency: 5 },
 );
 
-export const imageWorker = new Worker(
-  "image",
-  async (job) => {
-    const { productId, imageUrl } = job.data;
-    logger.info("Processing image", { productId, imageUrl });
-  },
-  { connection: redis, concurrency: 2 },
-);
-
 export const queues = { email: emailQueue, image: imageQueue };
 
 const QUEUE_METRICS_POLL_INTERVAL_MS = 15_000;

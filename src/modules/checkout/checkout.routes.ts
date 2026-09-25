@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authMiddleware } from "@shared/middlewares/auth.middleware";
+import { authMiddleware } from "@/container";
 import { idempotencyMiddleware } from "@shared/middlewares/idempotency.middleware";
 import { validate } from "@shared/middlewares/validation.middleware";
 import { checkoutController } from "@/container";

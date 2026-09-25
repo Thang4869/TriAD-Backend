@@ -2,29 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import {
-  authMiddleware,
-  optionalAuthMiddleware,
+  createAuthMiddleware,
+  createOptionalAuthMiddleware,
 } from "@shared/middlewares/auth.middleware";
-import prisma from "@core/database/prisma";
-import redis from "@core/redis/client";
+import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
+import type { TokenStorePort } from "@modules/auth/application/ports/token-store.port";
 import { UnauthorizedError } from "@shared/utils/errors";
 
-vi.mock("@core/database/prisma", () => ({
-  default: { user: { findUnique: vi.fn() } },
-}));
-
-vi.mock("@core/redis/client", () => ({
-  default: { exists: vi.fn() },
-}));
-
 const jwtVerifySpy = vi.spyOn(jwt, "verify");
-
-const mockedRedis = vi.mocked(redis);
-const mockedPrisma = prisma as unknown as {
-  user: {
-    findUnique: ReturnType<typeof vi.fn>;
-  };
-};
 
 const VERIFIED_USER = {
   id: "user-1",
@@ -32,6 +17,25 @@ const VERIFIED_USER = {
   role: "USER",
   isVerified: true,
 };
+
+const mockedUsers: AuthSessionUserPort = {
+  findById: vi.fn(),
+};
+
+const mockedTokenStore: TokenStorePort = {
+  get: vi.fn(),
+  set: vi.fn(),
+  delete: vi.fn(),
+  getAndDelete: vi.fn(),
+  setIfAbsent: vi.fn(),
+};
+
+const authMiddleware = createAuthMiddleware(mockedUsers, mockedTokenStore);
+
+const optionalAuthMiddleware = createOptionalAuthMiddleware(
+  mockedUsers,
+  mockedTokenStore,
+);
 
 function createReq(overrides: Partial<Request> = {}): Request {
   return {
@@ -46,13 +50,13 @@ describe("authMiddleware", () => {
     vi.clearAllMocks();
     jwtVerifySpy.mockReset();
     process.env.JWT_ACCESS_SECRET = "test-secret";
-    mockedRedis.exists.mockResolvedValue(0 as never);
+    vi.mocked(mockedTokenStore.get).mockResolvedValue(0 as never);
     jwtVerifySpy.mockReturnValue({
       sub: "user-1",
       email: "a@b.com",
       role: "USER",
     } as never);
-    mockedPrisma.user.findUnique.mockResolvedValue(VERIFIED_USER as never);
+    vi.mocked(mockedUsers.findById).mockResolvedValue(VERIFIED_USER as never);
   });
 
   it("gán req.user và gọi next() khi Bearer token hợp lệ", async () => {
@@ -115,7 +119,7 @@ describe("authMiddleware", () => {
   });
 
   it("token nằm trong blacklist Redis → 'Token revoked', không verify JWT", async () => {
-    mockedRedis.exists.mockResolvedValue(1 as never);
+    vi.mocked(mockedTokenStore.get).mockResolvedValue(1 as never);
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(
@@ -124,7 +128,7 @@ describe("authMiddleware", () => {
       next,
     );
 
-    expect(mockedRedis.exists).toHaveBeenCalledWith(
+    expect(vi.mocked(mockedTokenStore.get)).toHaveBeenCalledWith(
       "jwt:blacklist:revoked.token",
     );
     expect(jwtVerifySpy).not.toHaveBeenCalled();
@@ -152,7 +156,7 @@ describe("authMiddleware", () => {
   });
 
   it("user không tồn tại trong DB → Unauthorized", async () => {
-    mockedPrisma.user.findUnique.mockResolvedValue(null as never);
+    vi.mocked(mockedUsers.findById).mockResolvedValue(null as never);
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(
@@ -167,7 +171,7 @@ describe("authMiddleware", () => {
   });
 
   it("user chưa verify email vẫn bị chặn dù token hợp lệ", async () => {
-    mockedPrisma.user.findUnique.mockResolvedValue({
+    vi.mocked(mockedUsers.findById).mockResolvedValue({
       ...VERIFIED_USER,
       isVerified: false,
     } as never);
@@ -184,7 +188,7 @@ describe("authMiddleware", () => {
 
   it("lỗi hạ tầng (DB sập) được truyền nguyên vẹn cho error handler", async () => {
     const dbError = new Error("connection refused");
-    mockedPrisma.user.findUnique.mockRejectedValue(dbError as never);
+    vi.mocked(mockedUsers.findById).mockRejectedValue(dbError as never);
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(
@@ -202,12 +206,13 @@ describe("optionalAuthMiddleware", () => {
     vi.clearAllMocks();
     jwtVerifySpy.mockReset();
     process.env.JWT_ACCESS_SECRET = "test-secret";
-    mockedRedis.exists.mockResolvedValue(0 as never);
+    vi.mocked(mockedTokenStore.get).mockResolvedValue(0 as never);
     jwtVerifySpy.mockReturnValue({ sub: "user-1" } as never);
-    mockedPrisma.user.findUnique.mockResolvedValue({
+    vi.mocked(mockedUsers.findById).mockResolvedValue({
       id: "user-1",
       email: "a@b.com",
       role: "USER",
+      isVerified: true,
     } as never);
   });
 
@@ -246,7 +251,7 @@ describe("optionalAuthMiddleware", () => {
   });
 
   it("token bị blacklist thì bỏ qua, không gán req.user", async () => {
-    mockedRedis.exists.mockResolvedValue(1 as never);
+    vi.mocked(mockedTokenStore.get).mockResolvedValue(1 as never);
     const req = createReq({
       headers: { authorization: "Bearer revoked.token" },
     });
@@ -258,7 +263,7 @@ describe("optionalAuthMiddleware", () => {
   });
 
   it("user không còn tồn tại thì req.user vẫn undefined", async () => {
-    mockedPrisma.user.findUnique.mockResolvedValue(null as never);
+    vi.mocked(mockedUsers.findById).mockResolvedValue(null as never);
     const req = createReq({ headers: { authorization: "Bearer valid.token" } });
 
     await optionalAuthMiddleware(req, {} as Response, vi.fn());

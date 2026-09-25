@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Request, Response } from "express";
-import { Prisma } from "@prisma/client";
 import { ZodError, z } from "zod";
 import {
   AppError,
-  errorHandler,
+  createErrorHandler,
   notFoundHandler,
 } from "@shared/middlewares/error-handler.middleware";
 import { logger } from "@core/logger/winston";
@@ -13,10 +12,15 @@ import {
   CartItemNotFoundError,
   DomainError,
 } from "@shared/domain/errors/domain-error";
-
+import type { PersistenceErrorClassifier } from "@shared/errors/persistence-error";
 vi.mock("@core/logger/winston", () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
 }));
+const mockedPersistenceErrors: PersistenceErrorClassifier = {
+  classify: vi.fn(),
+};
+
+const errorHandler = createErrorHandler(mockedPersistenceErrors);
 
 function createMockResponse(): Response {
   const res = {} as Response;
@@ -36,7 +40,10 @@ function createMockRequest(overrides: Partial<Request> = {}): Request {
 }
 
 describe("errorHandler", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(mockedPersistenceErrors.classify).mockReturnValue(null);
+  });
 
   it("does not expose unexpected internal error messages", () => {
     const res = createMockResponse();
@@ -100,9 +107,10 @@ describe("errorHandler", () => {
   });
 
   it("trả 409 cho Prisma P2002 (unique constraint violation)", () => {
-    const err = new Prisma.PrismaClientKnownRequestError("Unique constraint", {
-      code: "P2002",
-      clientVersion: "5.0.0",
+    const err = new Error("Unique constraint");
+
+    vi.mocked(mockedPersistenceErrors.classify).mockReturnValue({
+      kind: "UNIQUE_CONSTRAINT",
     });
     const res = createMockResponse();
 
@@ -113,9 +121,10 @@ describe("errorHandler", () => {
   });
 
   it("trả 404 cho Prisma P2025 (record not found)", () => {
-    const err = new Prisma.PrismaClientKnownRequestError("Not found", {
-      code: "P2025",
-      clientVersion: "5.0.0",
+    const err = new Error("Not found");
+
+    vi.mocked(mockedPersistenceErrors.classify).mockReturnValue({
+      kind: "NOT_FOUND",
     });
     const res = createMockResponse();
 
@@ -125,9 +134,10 @@ describe("errorHandler", () => {
   });
 
   it("trả 400 cho các mã lỗi Prisma known khác (fallback chung)", () => {
-    const err = new Prisma.PrismaClientKnownRequestError("Other", {
-      code: "P2003",
-      clientVersion: "5.0.0",
+    const err = new Error("Database error");
+
+    vi.mocked(mockedPersistenceErrors.classify).mockReturnValue({
+      kind: "DATABASE",
     });
     const res = createMockResponse();
 
@@ -140,8 +150,10 @@ describe("errorHandler", () => {
   });
 
   it("trả 400 cho PrismaClientValidationError", () => {
-    const err = new Prisma.PrismaClientValidationError("Invalid", {
-      clientVersion: "5.0.0",
+    const err = new Error("Invalid");
+
+    vi.mocked(mockedPersistenceErrors.classify).mockReturnValue({
+      kind: "VALIDATION",
     });
     const res = createMockResponse();
 

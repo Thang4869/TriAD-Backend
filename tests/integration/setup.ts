@@ -68,10 +68,8 @@ afterAll(async () => {
   if (prisma) await prisma.$disconnect();
   await redis?.quit?.();
   try {
-    const { emailWorker, imageWorker } =
-      await import("../../src/core/queue/bull");
+    const { emailWorker } = await import("../../src/core/queue/bull");
     await emailWorker.close();
-    await imageWorker.close();
   } catch {
     /* ignore */
   }

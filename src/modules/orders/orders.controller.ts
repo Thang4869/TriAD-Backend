@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { IOrdersService } from "./orders.service";
 import { ForbiddenError } from "@shared/utils/errors";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus } from "./domain/order-status";
 import { ROLES, Role } from "@shared/types/roles";
 import { asyncHandler } from "@shared/utils/async-handler";
 import { sendSuccess } from "@shared/utils/api-response";

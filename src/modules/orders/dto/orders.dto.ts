@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus } from "../domain/order-status";
 
 export const updateOrderStatusSchema = z.object({
   body: z.object({

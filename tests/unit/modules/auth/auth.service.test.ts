@@ -102,6 +102,7 @@ describe("AuthService", () => {
   let mockTokenService: TokenService;
   let mockTwoFactorService: TwoFactorService;
   let service: AuthService;
+  let tokenStore: ReturnType<typeof createTokenStore>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -259,12 +260,14 @@ describe("AuthService", () => {
           return mockTokenService.generateTokens(user);
         }),
     } as unknown as TwoFactorService;
+    tokenStore = createTokenStore();
 
     service = new AuthService(
       repository,
       mockEmailService,
       mockTokenService,
       mockTwoFactorService,
+      tokenStore,
     );
   });
 
@@ -652,6 +655,7 @@ describe("AuthService", () => {
         mockEmailService,
         realTokenService,
         mockTwoFactorService,
+        createTokenStore(),
       );
 
       const result = await serviceWithRealToken.refreshToken(validRefreshToken);
@@ -665,56 +669,70 @@ describe("AuthService", () => {
 
   // ---------- verifyEmail ----------
   describe("verifyEmail", () => {
-    it("throws BadRequestError when the token is invalid or expired in Redis", async () => {
-      (redis.get as any).mockResolvedValueOnce(null);
+    it("throws BadRequestError when the token is invalid or expired", async () => {
+      tokenStore.get.mockResolvedValueOnce(null);
+
       await expect(service.verifyEmail("bad-token")).rejects.toBeInstanceOf(
         BadRequestError,
       );
+
       expect(repository.findUserById).not.toHaveBeenCalled();
     });
 
     it("throws BadRequestError when the user no longer exists", async () => {
-      (redis.get as any).mockResolvedValueOnce("user-id");
+      tokenStore.get.mockResolvedValueOnce("user-id");
       repository.findUserById = vi.fn().mockResolvedValue(null);
+
       await expect(service.verifyEmail("token")).rejects.toBeInstanceOf(
         BadRequestError,
       );
     });
 
-    it("deletes the redis token and returns tokens directly if already verified", async () => {
-      (redis.get as any).mockResolvedValueOnce("user-id");
+    it("deletes the token and returns tokens directly if already verified", async () => {
+      tokenStore.get.mockResolvedValueOnce("user-id");
+
       repository.findUserById = vi
         .fn()
         .mockResolvedValue({ ...baseUser, isVerified: true });
+
       const result = await service.verifyEmail("token");
-      expect(redis.del).toHaveBeenCalledWith("email-verify:token");
+
+      expect(tokenStore.delete).toHaveBeenCalledWith("email-verify:token");
       expect(repository.updateUser).not.toHaveBeenCalled();
       expect(result).toHaveProperty("accessToken");
     });
 
     it("marks the user as verified and returns tokens when not yet verified", async () => {
-      (redis.get as any).mockResolvedValueOnce("user-id");
+      tokenStore.get.mockResolvedValueOnce("user-id");
+
       const unverifiedUser = { ...baseUser, isVerified: false };
+
       repository.findUserById = vi.fn().mockResolvedValue(unverifiedUser);
       repository.updateUser = vi
         .fn()
         .mockResolvedValue({ ...unverifiedUser, isVerified: true });
+
       const result = await service.verifyEmail("token");
+
       expect(repository.updateUser).toHaveBeenCalledWith(baseUser.id, {
         isVerified: true,
       });
+
       expect(result).toHaveProperty("accessToken");
     });
 
     it("returns tokens directly if user is already verified (real generateTokens)", async () => {
-      (redis.get as any).mockResolvedValueOnce("user-id");
+      tokenStore.get.mockResolvedValueOnce("user-id");
+
       repository.findUserById = vi
         .fn()
         .mockResolvedValue({ ...baseUser, isVerified: true });
+
       const result = await service.verifyEmail("token");
+
       expect(result.accessToken).toBeDefined();
       expect(repository.updateUser).not.toHaveBeenCalled();
-      expect(redis.del).toHaveBeenCalledWith("email-verify:token");
+      expect(tokenStore.delete).toHaveBeenCalledWith("email-verify:token");
     });
   });
 
@@ -741,6 +759,7 @@ describe("AuthService", () => {
         mockEmailService,
         realTokenService,
         mockTwoFactorService,
+        createTokenStore(),
       );
       const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
@@ -828,6 +847,7 @@ describe("AuthService", () => {
         mockEmailService,
         realTokenService,
         mockTwoFactorService,
+        createTokenStore(),
       );
       const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
@@ -843,6 +863,7 @@ describe("AuthService", () => {
         mockEmailService,
         realTokenService,
         mockTwoFactorService,
+        createTokenStore(),
       );
       const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");

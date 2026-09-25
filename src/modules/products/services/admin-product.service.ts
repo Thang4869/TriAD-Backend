@@ -10,7 +10,7 @@ import { ProductImageService } from "./product-image.service";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { logger } from "@core/logger/winston";
 import { ProductSpecificationBuilder } from "../domain/specifications/product-specification";
-import { Prisma } from "@prisma/client";
+import { ProductCatalogSort } from "../application/product-catalog-read.port";
 
 const DEFAULT_ADMIN_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
@@ -47,9 +47,9 @@ export class AdminProductService {
       .withCategory(category)
       .withKeyword(keyword)
       .build()
-      .toPrismaWhere();
+      .toFilter();
 
-    const orderBy: Prisma.ProductOrderByWithRelationInput = {
+    const orderBy: ProductCatalogSort = {
       [sortBy]: sortOrder,
     };
 

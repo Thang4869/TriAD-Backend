@@ -1,14 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StockReservationService } from "@modules/checkout/services/stock-reservation.service";
-import {
-  ICheckoutRepository,
-  TxClient,
-} from "@modules/checkout/checkout.repository";
+import { ICheckoutRepository } from "@modules/checkout/checkout.repository";
 import {
   NotFoundError,
   BadRequestError,
   ConflictError,
 } from "@shared/utils/errors";
+import { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
 
 // withSpan chỉ là lớp bọc tracing — thay bằng passthrough để test tập trung vào logic.
 vi.mock("@core/tracing/span", () => ({
@@ -18,7 +16,7 @@ vi.mock("@core/tracing/span", () => ({
   ),
 }));
 
-const tx = {} as TxClient;
+const tx = {} as CheckoutTransaction;
 
 function lockedProduct(overrides: Record<string, unknown> = {}) {
   return {

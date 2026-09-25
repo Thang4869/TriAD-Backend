@@ -1,4 +1,5 @@
-import { TxClient, ICheckoutRepository } from "../checkout.repository";
+import { ICheckoutRepository } from "../checkout.repository";
+import { CheckoutTransaction } from "../application/ports/checkout-transaction";
 import {
   NotFoundError,
   BadRequestError,
@@ -15,7 +16,7 @@ export class StockReservationService {
   constructor(private readonly repository: ICheckoutRepository) {}
 
   async reserveStock(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     cartItems: { productId: string; quantity: number }[],
   ): Promise<void> {
     if (cartItems.length === 0) {
@@ -36,7 +37,7 @@ export class StockReservationService {
   }
 
   private async doReserveStock(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     cartItems: { productId: string; quantity: number }[],
     setAttributes: (attrs: Attributes) => void,
   ): Promise<void> {

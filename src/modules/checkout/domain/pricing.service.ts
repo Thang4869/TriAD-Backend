@@ -1,6 +1,7 @@
 import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
-import { ICheckoutRepository, TxClient } from "../checkout.repository";
+import { ICheckoutRepository } from "../checkout.repository";
+import { CheckoutTransaction } from "../application/ports/checkout-transaction";
 import { BadRequestError, ConflictError } from "@shared/utils/errors";
 import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
 import {
@@ -24,7 +25,7 @@ export class PricingService {
   async calculatePricing(
     subtotal: Money,
     discountCode: string | undefined,
-    tx: TxClient,
+    tx: CheckoutTransaction,
   ): Promise<PricingResult> {
     const tax = subtotal.multiply(CHECKOUT_PRICING.TAX_RATE);
 

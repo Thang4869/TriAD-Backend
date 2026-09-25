@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TokenService } from "@modules/auth/services/token.service";
-import type {
-  IAuthRepository,
-  RefreshTokenWithUser,
-} from "@modules/auth/auth.repository";
+import type { IAuthRepository } from "@modules/auth/auth.repository";
+import { AuthRefreshTokenWithUser } from "@modules/auth/application/ports/auth-refresh-token";
 import { UnauthorizedError } from "@shared/utils/errors";
 import { signToken, verifyToken, decodeToken } from "@shared/utils/jwt";
 import { SECURITY } from "@shared/constants/security.constant";
@@ -57,8 +55,8 @@ function createTokenStore() {
 }
 
 function tokenRecord(
-  overrides: Partial<RefreshTokenWithUser> = {},
-): RefreshTokenWithUser {
+  overrides: Partial<AuthRefreshTokenWithUser> = {},
+): AuthRefreshTokenWithUser {
   return {
     id: "rt-1",
     token: "refresh-token",
@@ -70,7 +68,7 @@ function tokenRecord(
     user,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...(overrides as any),
-  } as RefreshTokenWithUser;
+  } as AuthRefreshTokenWithUser;
 }
 
 const ORIGINAL_ENV = { ...process.env };

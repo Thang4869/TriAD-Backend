@@ -1,5 +1,9 @@
 import prisma from "@core/database/prisma";
-import { User } from "@prisma/client";
+import {
+  UpdateProfileData,
+  UserPasswordRecord,
+  UserProfile,
+} from "./application/ports/user-models";
 
 const PROFILE_SELECT = {
   id: true,
@@ -14,19 +18,11 @@ const PROFILE_SELECT = {
   updatedAt: true,
 } as const;
 
-export type UserProfile = Pick<User, keyof typeof PROFILE_SELECT>;
-
-export interface UpdateProfileData {
-  firstName?: string;
-  lastName?: string;
-  phone?: string;
-}
-
 // ---------- Repository contract ----------
 
 export interface IUsersRepository {
   findProfileById(userId: string): Promise<UserProfile | null>;
-  findById(userId: string): Promise<User | null>;
+  findById(userId: string): Promise<UserPasswordRecord | null>;
   updateProfile(userId: string, data: UpdateProfileData): Promise<UserProfile>;
   updatePassword(userId: string, hashedPassword: string): Promise<void>;
 }
@@ -41,8 +37,14 @@ export class PrismaUsersRepository implements IUsersRepository {
     });
   }
 
-  async findById(userId: string): Promise<User | null> {
-    return prisma.user.findUnique({ where: { id: userId } });
+  async findById(userId: string): Promise<UserPasswordRecord | null> {
+    return prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        password: true,
+      },
+    });
   }
 
   async updateProfile(

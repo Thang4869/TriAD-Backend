@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { User } from "@prisma/client";
+import { UserPasswordRecord } from "@modules/users/application/ports/user-models";
 import { UsersService } from "@modules/users/users.service";
 import { IUsersRepository } from "@modules/users/users.repository";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
@@ -21,20 +21,10 @@ function createFakeRepository(
   };
 }
 
-const baseUser: User = {
+const baseUser: UserPasswordRecord = {
   id: "user-1",
-  email: "user1@test.com",
   password: "old-hashed-password",
-  firstName: "John",
-  lastName: "Doe",
-  phone: null,
-  role: "USER",
-  isVerified: true,
-  is2FAEnabled: false,
-  totpSecret: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-} as User;
+};
 
 describe("UsersService", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -145,7 +135,10 @@ describe("UsersService", () => {
 
     it("dùng chuỗi rỗng làm mật khẩu hash khi user.password là null (OAuth user chưa set password)", async () => {
       (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValueOnce(false);
-      const oauthUser = { ...baseUser, password: null } as User;
+      const oauthUser: UserPasswordRecord = {
+        ...baseUser,
+        password: null,
+      };
       const repository = createFakeRepository({
         findById: vi.fn().mockResolvedValue(oauthUser),
       });

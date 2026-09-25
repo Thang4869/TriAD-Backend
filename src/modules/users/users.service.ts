@@ -1,9 +1,9 @@
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import { IUsersRepository } from "@modules/users/users.repository";
 import {
-  IUsersRepository,
   UpdateProfileData,
   UserProfile,
-} from "@modules/users/users.repository";
+} from "@modules/users/application/ports/user-models";
 import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
 
 export interface IUsersService {

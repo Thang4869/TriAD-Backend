@@ -1,7 +1,9 @@
-import { Prisma } from "@prisma/client";
 import { NotFoundError } from "@shared/utils/errors";
 import { Rating } from "@shared/value-objects/rating";
-import { ProductCatalogReadPort } from "../application/product-catalog-read.port";
+import {
+  ProductCatalogReadPort,
+  ProductCatalogSort,
+} from "../application/product-catalog-read.port";
 import { ProductSpecificationBuilder } from "../domain/specifications/product-specification";
 import {
   toProductListResponse,
@@ -44,9 +46,9 @@ export class CatalogService {
       .withPriceRange(minPrice, maxPrice)
       .withKeyword(keyword)
       .build()
-      .toPrismaWhere();
+      .toFilter();
 
-    const orderBy: Prisma.ProductOrderByWithRelationInput = {
+    const orderBy: ProductCatalogSort = {
       [sortBy]: sortOrder,
     };
 

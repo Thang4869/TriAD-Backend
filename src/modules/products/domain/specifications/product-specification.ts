@@ -10,12 +10,12 @@ export interface ProductFilter {
 }
 
 export interface ProductSpecification {
-  toPrismaWhere(): ProductFilter;
+  toFilter(): ProductFilter;
   and(other: ProductSpecification): ProductSpecification;
 }
 
 abstract class BaseSpecification implements ProductSpecification {
-  abstract toPrismaWhere(): ProductFilter;
+  abstract toFilter(): ProductFilter;
 
   and(other: ProductSpecification): ProductSpecification {
     return new AndSpecification(this, other);
@@ -30,15 +30,15 @@ class AndSpecification extends BaseSpecification {
     super();
   }
 
-  toPrismaWhere(): ProductFilter {
+  toFilter(): ProductFilter {
     return {
-      AND: [this.left.toPrismaWhere(), this.right.toPrismaWhere()],
+      AND: [this.left.toFilter(), this.right.toFilter()],
     };
   }
 }
 
 export class NoopSpecification extends BaseSpecification {
-  toPrismaWhere(): ProductFilter {
+  toFilter(): ProductFilter {
     return {};
   }
 }
@@ -48,7 +48,7 @@ export class ActiveProductSpecification extends BaseSpecification {
     super();
   }
 
-  toPrismaWhere(): ProductFilter {
+  toFilter(): ProductFilter {
     return { isActive: this.isActive };
   }
 }
@@ -58,7 +58,7 @@ export class CategorySpecification extends BaseSpecification {
     super();
   }
 
-  toPrismaWhere(): ProductFilter {
+  toFilter(): ProductFilter {
     return { category: this.category };
   }
 }
@@ -71,7 +71,7 @@ export class PriceRangeSpecification extends BaseSpecification {
     super();
   }
 
-  toPrismaWhere(): ProductFilter {
+  toFilter(): ProductFilter {
     if (this.minPrice === undefined && this.maxPrice === undefined) return {};
     const price: ProductFilter["price"] = {};
     if (this.minPrice !== undefined) price.gte = this.minPrice;
@@ -85,7 +85,7 @@ export class KeywordSpecification extends BaseSpecification {
     super();
   }
 
-  toPrismaWhere(): ProductFilter {
+  toFilter(): ProductFilter {
     return {
       OR: [
         { name: { contains: this.keyword, mode: "insensitive" } },

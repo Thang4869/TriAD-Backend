@@ -1,12 +1,8 @@
 import prisma from "@core/database/prisma";
-import { Notification } from "@prisma/client";
-
-export interface CreateNotificationData {
-  userId: string;
-  title: string;
-  message: string;
-  type: string;
-}
+import {
+  CreateNotificationData,
+  NotificationRecord,
+} from "./application/ports/notification-models";
 
 // ---------- Repository contract ----------
 
@@ -15,12 +11,15 @@ export interface INotificationsRepository {
     userId: string,
     skip: number,
     take: number,
-  ): Promise<Notification[]>;
+  ): Promise<NotificationRecord[]>;
   countByUser(userId: string): Promise<number>;
-  findByIdAndUser(id: string, userId: string): Promise<Notification | null>;
-  markAsRead(id: string): Promise<Notification>;
+  findByIdAndUser(
+    id: string,
+    userId: string,
+  ): Promise<NotificationRecord | null>;
+  markAsRead(id: string): Promise<NotificationRecord>;
   markAllAsReadForUser(userId: string): Promise<number>;
-  create(data: CreateNotificationData): Promise<Notification>;
+  create(data: CreateNotificationData): Promise<NotificationRecord>;
 }
 
 // ---------- Prisma implementation ----------
@@ -30,7 +29,7 @@ export class PrismaNotificationsRepository implements INotificationsRepository {
     userId: string,
     skip: number,
     take: number,
-  ): Promise<Notification[]> {
+  ): Promise<NotificationRecord[]> {
     return prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -46,11 +45,11 @@ export class PrismaNotificationsRepository implements INotificationsRepository {
   async findByIdAndUser(
     id: string,
     userId: string,
-  ): Promise<Notification | null> {
+  ): Promise<NotificationRecord | null> {
     return prisma.notification.findFirst({ where: { id, userId } });
   }
 
-  async markAsRead(id: string): Promise<Notification> {
+  async markAsRead(id: string): Promise<NotificationRecord> {
     return prisma.notification.update({
       where: { id },
       data: { read: true },
@@ -65,7 +64,7 @@ export class PrismaNotificationsRepository implements INotificationsRepository {
     return result.count;
   }
 
-  async create(data: CreateNotificationData): Promise<Notification> {
+  async create(data: CreateNotificationData): Promise<NotificationRecord> {
     return prisma.notification.create({
       data: { ...data, read: false },
     });

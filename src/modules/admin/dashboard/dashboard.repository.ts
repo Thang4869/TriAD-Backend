@@ -1,5 +1,5 @@
 import prisma from "@core/database/prisma";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus } from "@modules/orders/domain/order-status";
 
 export interface RevenueByDay {
   date: string;

@@ -1,9 +1,9 @@
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import { ICartRepository } from "./cart.repository";
 import {
-  ICartRepository,
   CartWithItems,
   CartItemWithProduct,
-} from "./cart.repository";
+} from "./application/ports/cart-models";
 
 export interface ICartService {
   getCart(userId: string): Promise<CartWithItems>;

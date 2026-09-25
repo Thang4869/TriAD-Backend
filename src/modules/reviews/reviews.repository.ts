@@ -1,5 +1,10 @@
 import prisma from "@core/database/prisma";
-import { Prisma, Review } from "@prisma/client";
+import {
+  CreateReviewData,
+  ReviewRecord,
+  ReviewWithUser,
+  ReviewWithUserAndProduct,
+} from "./application/ports/review-models";
 
 const REVIEWER_SELECT = {
   id: true,
@@ -7,24 +12,6 @@ const REVIEWER_SELECT = {
   lastName: true,
   email: true,
 } as const;
-
-export type ReviewWithUser = Prisma.ReviewGetPayload<{
-  include: { user: { select: typeof REVIEWER_SELECT } };
-}>;
-
-export type ReviewWithUserAndProduct = Prisma.ReviewGetPayload<{
-  include: {
-    user: { select: typeof REVIEWER_SELECT };
-    product: { select: { id: true; name: true; images: true } };
-  };
-}>;
-
-export interface CreateReviewData {
-  userId: string;
-  productId: string;
-  rating: number;
-  comment: string;
-}
 
 // ---------- Repository contract ----------
 
@@ -40,10 +27,10 @@ export interface IReviewsRepository {
   findByUserAndProduct(
     userId: string,
     productId: string,
-  ): Promise<Review | null>;
+  ): Promise<ReviewRecord | null>;
   create(data: CreateReviewData): Promise<ReviewWithUser>;
 
-  findById(reviewId: string): Promise<Review | null>;
+  findById(reviewId: string): Promise<ReviewRecord | null>;
   delete(reviewId: string): Promise<void>;
 
   findAllAdmin(skip: number, take: number): Promise<ReviewWithUserAndProduct[]>;
@@ -82,8 +69,14 @@ export class PrismaReviewsRepository implements IReviewsRepository {
   async findByUserAndProduct(
     userId: string,
     productId: string,
-  ): Promise<Review | null> {
-    return prisma.review.findFirst({ where: { userId, productId } });
+  ): Promise<ReviewRecord | null> {
+    return prisma.review.findFirst({
+      where: { userId, productId },
+      select: {
+        id: true,
+        userId: true,
+      },
+    });
   }
 
   async create(data: CreateReviewData): Promise<ReviewWithUser> {
@@ -93,8 +86,14 @@ export class PrismaReviewsRepository implements IReviewsRepository {
     });
   }
 
-  async findById(reviewId: string): Promise<Review | null> {
-    return prisma.review.findUnique({ where: { id: reviewId } });
+  async findById(reviewId: string): Promise<ReviewRecord | null> {
+    return prisma.review.findUnique({
+      where: { id: reviewId },
+      select: {
+        id: true,
+        userId: true,
+      },
+    });
   }
 
   async delete(reviewId: string): Promise<void> {

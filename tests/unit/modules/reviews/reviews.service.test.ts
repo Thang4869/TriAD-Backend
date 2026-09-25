@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Review } from "@prisma/client";
+import { ReviewRecord } from "@modules/reviews/application/ports/review-models";
 import { ReviewsService } from "@modules/reviews/reviews.service";
 import { IReviewsRepository } from "@modules/reviews/reviews.repository";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
@@ -21,13 +21,10 @@ function createFakeRepository(
   };
 }
 
-const baseReview = {
+const baseReview: ReviewRecord = {
   id: "review-1",
   userId: "user-1",
-  productId: "product-1",
-  rating: 5,
-  comment: "Great product",
-} as Review;
+};
 
 describe("ReviewsService", () => {
   beforeEach(() => vi.clearAllMocks());

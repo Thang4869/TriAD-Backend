@@ -1,5 +1,5 @@
 import prisma from "@core/database/prisma";
-import { Prisma } from "@prisma/client";
+import { WishlistItemWithProduct } from "./application/ports/wishlist-models";
 
 const PRODUCT_SUMMARY_SELECT = {
   id: true,
@@ -10,10 +10,6 @@ const PRODUCT_SUMMARY_SELECT = {
   slug: true,
   isActive: true,
 } as const;
-
-export type WishlistItemWithProduct = Prisma.WishlistItemGetPayload<{
-  include: { product: { select: typeof PRODUCT_SUMMARY_SELECT } };
-}>;
 
 // ---------- Repository contract ----------
 

@@ -155,6 +155,7 @@ container.register(
       c.resolve(TOKENS.EmailService),
       c.resolve(TOKENS.TokenService),
       c.resolve(TOKENS.TwoFactorService),
+      new RedisTokenStore(),
     ),
 );
 container.register(

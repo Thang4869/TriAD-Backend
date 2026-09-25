@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import redis from "@core/redis/client";
+import { TokenStorePort } from "./application/ports/token-store.port";
 import { logger } from "@core/logger/winston";
 import { User as PrismaUser } from "@prisma/client";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
@@ -35,6 +35,7 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly tokenService: TokenService,
     private readonly twoFactorService: TwoFactorService,
+    private readonly tokenStore: TokenStorePort,
   ) {}
 
   async generateTokens(user: PrismaUser) {
@@ -64,14 +65,14 @@ export class AuthService {
   }
 
   async verifyEmail(token: string) {
-    const userId = await redis.get(`email-verify:${token}`);
+    const userId = await this.tokenStore.get(`email-verify:${token}`);
     if (!userId)
       throw new BadRequestError("Verification link is invalid or has expired");
 
     const foundUser = await this.repository.findUserById(userId);
     if (!foundUser) throw new BadRequestError("User not found");
 
-    await redis.del(`email-verify:${token}`);
+    await this.tokenStore.delete(`email-verify:${token}`);
 
     if (foundUser.isVerified) {
       return this.tokenService.generateTokens(foundUser);
@@ -148,7 +149,11 @@ export class AuthService {
 
   private async sendVerificationEmail(user: PrismaUser) {
     const verificationToken = crypto.randomBytes(32).toString("hex");
-    await redis.setex(`email-verify:${verificationToken}`, 15 * 60, user.id);
+    await this.tokenStore.set(
+      `email-verify:${verificationToken}`,
+      user.id,
+      15 * 60,
+    );
     const verifyUrl = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
     await this.emailService.sendVerificationEmail(
       { email: user.email, firstName: user.firstName },

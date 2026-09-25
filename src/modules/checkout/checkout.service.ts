@@ -5,7 +5,8 @@ import {
   ConflictError,
   NotFoundError,
 } from "@shared/utils/errors";
-import { ICheckoutRepository, TxClient } from "./checkout.repository";
+import { ICheckoutRepository } from "./checkout.repository";
+import { CheckoutTransaction } from "./application/ports/checkout-transaction";
 import { PricingService } from "./domain/pricing.service";
 import { StockReservationService } from "./services/stock-reservation.service";
 import { Order } from "@modules/orders/domain/order.entity";
@@ -136,7 +137,7 @@ export class CheckoutService {
   }
 
   private async executeWithRetry<T>(
-    operation: (tx: TxClient) => Promise<T>,
+    operation: (tx: CheckoutTransaction) => Promise<T>,
     retryCount = 0,
   ): Promise<T> {
     try {

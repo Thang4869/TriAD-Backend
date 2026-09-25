@@ -3,30 +3,17 @@ import { Prisma, Order } from "@prisma/client";
 import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import { persistDomainEvents } from "@core/unit-of-work/unit-of-work";
 import { PaymentMethod, PaymentStatus } from "@prisma/client";
-
-export type TxClient = Prisma.TransactionClient;
+import { CheckoutTransaction } from "./application/ports/checkout-transaction";
+import {
+  OrderWithItems,
+  UserCartForCheckout,
+} from "./application/ports/checkout-models";
 
 const TRANSACTION_TIMEOUT_MS = 10_000;
 
-export type UserCartForCheckout = Prisma.UserGetPayload<{
-  include: {
-    cart: {
-      include: { items: { include: { product: true } } };
-    };
-  };
-}>;
-
-export type OrderWithItems = Prisma.OrderGetPayload<{
-  include: {
-    items: {
-      include: {
-        product: {
-          select: { id: true; name: true; images: true; slug: true };
-        };
-      };
-    };
-  };
-}>;
+function toPrismaTx(tx: CheckoutTransaction): Prisma.TransactionClient {
+  return tx as unknown as Prisma.TransactionClient;
+}
 
 export interface LockedProductRow {
   id: string;
@@ -82,33 +69,33 @@ export interface ICheckoutRepository {
   findOrderWithItems(orderId: string): Promise<OrderWithItems | null>;
   findUserCartForCheckout(userId: string): Promise<UserCartForCheckout | null>;
 
-  runInTransaction<T>(fn: (tx: TxClient) => Promise<T>): Promise<T>;
+  runInTransaction<T>(fn: (tx: CheckoutTransaction) => Promise<T>): Promise<T>;
 
   lockProductsForUpdate(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     productIds: string[],
   ): Promise<LockedProductRow[]>;
   decrementProductStock(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     productId: string,
     expectedVersion: number,
     quantity: number,
   ): Promise<boolean>;
 
   findDiscountByCode(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     code: string,
   ): Promise<DiscountRecord | null>;
   incrementDiscountUsage(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     discountId: string,
     maxUses: number | null,
   ): Promise<boolean>;
 
-  clearCartItems(tx: TxClient, cartId: string): Promise<void>;
+  clearCartItems(tx: CheckoutTransaction, cartId: string): Promise<void>;
 
   saveNewOrder(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     order: OrderAggregate,
     idempotencyKey?: string,
   ): Promise<Order>;
@@ -148,18 +135,24 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     });
   }
 
-  async runInTransaction<T>(fn: (tx: TxClient) => Promise<T>): Promise<T> {
-    return prisma.$transaction(fn, {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      timeout: TRANSACTION_TIMEOUT_MS,
-    });
+  async runInTransaction<T>(
+    fn: (tx: CheckoutTransaction) => Promise<T>,
+  ): Promise<T> {
+    return prisma.$transaction(
+      (tx) => fn(tx as unknown as CheckoutTransaction),
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        timeout: TRANSACTION_TIMEOUT_MS,
+      },
+    );
   }
 
   async lockProductsForUpdate(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     productIds: string[],
   ): Promise<LockedProductRow[]> {
-    return tx.$queryRaw<LockedProductRow[]>`
+    const prismaTx = toPrismaTx(tx);
+    return prismaTx.$queryRaw<LockedProductRow[]>`
       SELECT id, stock, version, name, price
       FROM products
       WHERE id = ANY(${productIds})
@@ -168,12 +161,13 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
   }
 
   async decrementProductStock(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     productId: string,
     expectedVersion: number,
     quantity: number,
   ): Promise<boolean> {
-    const result = await tx.product.updateMany({
+    const prismaTx = toPrismaTx(tx);
+    const result = await prismaTx.product.updateMany({
       where: { id: productId, version: expectedVersion },
       data: {
         stock: { decrement: quantity },
@@ -184,18 +178,20 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
   }
 
   async findDiscountByCode(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     code: string,
   ): Promise<DiscountRecord | null> {
-    return tx.discount.findUnique({ where: { code } });
+    const prismaTx = toPrismaTx(tx);
+    return prismaTx.discount.findUnique({ where: { code } });
   }
 
   async incrementDiscountUsage(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     discountId: string,
     maxUses: number | null,
   ): Promise<boolean> {
-    const result = await tx.discount.updateMany({
+    const prismaTx = toPrismaTx(tx);
+    const result = await prismaTx.discount.updateMany({
       where: {
         id: discountId,
         ...(maxUses != null ? { usedCount: { lt: maxUses } } : {}),
@@ -205,16 +201,21 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     return result.count > 0;
   }
 
-  async createOrder(tx: TxClient, data: CreateOrderData): Promise<Order> {
-    return tx.order.create({ data });
+  async createOrder(
+    tx: CheckoutTransaction,
+    data: CreateOrderData,
+  ): Promise<Order> {
+    const prismaTx = toPrismaTx(tx);
+    return prismaTx.order.create({ data });
   }
 
   async saveNewOrder(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     order: OrderAggregate,
     idempotencyKey?: string,
   ): Promise<Order> {
-    const created = await tx.order.create({
+    const prismaTx = toPrismaTx(tx);
+    const created = await prismaTx.order.create({
       data: {
         id: order.id,
         orderNumber: order.orderNumber,
@@ -237,7 +238,7 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
       },
     });
 
-    await tx.orderItem.createMany({
+    await prismaTx.orderItem.createMany({
       data: order.items.map((item) => ({
         orderId: created.id,
         productId: item.productId,
@@ -247,20 +248,22 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
       })),
     });
 
-    await persistDomainEvents(tx, [order]);
+    await persistDomainEvents(toPrismaTx(tx), [order]);
 
     return created;
   }
 
   async createOrderItems(
-    tx: TxClient,
+    tx: CheckoutTransaction,
     items: CreateOrderItemData[],
   ): Promise<void> {
-    await tx.orderItem.createMany({ data: items });
+    const prismaTx = toPrismaTx(tx);
+    await prismaTx.orderItem.createMany({ data: items });
   }
 
-  async clearCartItems(tx: TxClient, cartId: string): Promise<void> {
-    await tx.cartItem.deleteMany({ where: { cartId } });
+  async clearCartItems(tx: CheckoutTransaction, cartId: string): Promise<void> {
+    const prismaTx = toPrismaTx(tx);
+    await prismaTx.cartItem.deleteMany({ where: { cartId } });
   }
 
   async findOrdersByUser(

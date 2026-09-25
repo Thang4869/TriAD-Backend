@@ -1,6 +1,15 @@
 import crypto from "crypto";
 import prisma from "@core/database/prisma";
-import { User, RefreshToken } from "@prisma/client";
+import {
+  User as PrismaUser,
+  RefreshToken as PrismaRefreshToken,
+} from "@prisma/client";
+
+import { AuthUser } from "./application/ports/auth-user";
+import {
+  AuthRefreshToken,
+  AuthRefreshTokenWithUser,
+} from "./application/ports/auth-refresh-token";
 
 export interface CreateUserData {
   email: string;
@@ -10,7 +19,11 @@ export interface CreateUserData {
   phone?: string;
 }
 
-export type RefreshTokenWithUser = RefreshToken & { user: User };
+export interface CreateOAuthUserData {
+  email: string;
+  firstName: string;
+  lastName: string;
+}
 
 export function hashRefreshToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -19,49 +32,70 @@ export function hashRefreshToken(token: string): string {
 // ---------- Repository contract ----------
 
 export interface IAuthRepository {
-  findUserByEmail(email: string): Promise<User | null>;
-  findUserById(id: string): Promise<User | null>;
-  createUser(data: CreateUserData): Promise<User>;
+  findUserByEmail(email: string): Promise<AuthUser | null>;
+  findUserById(id: string): Promise<AuthUser | null>;
+  createUser(data: CreateUserData): Promise<AuthUser>;
+  createOAuthUser(data: CreateOAuthUserData): Promise<AuthUser>;
   createCartForUser(userId: string): Promise<void>;
-  updateUser(id: string, data: Partial<User>): Promise<User>;
+  updateUser(id: string, data: Partial<AuthUser>): Promise<AuthUser>;
 
   createRefreshToken(
     token: string,
     userId: string,
     familyId: string,
     expiresAt: Date,
-  ): Promise<RefreshToken>;
-  findRefreshTokenByToken(token: string): Promise<RefreshToken | null>;
+  ): Promise<AuthRefreshToken>;
+
+  findRefreshTokenByToken(token: string): Promise<AuthRefreshToken | null>;
+
   revokeRefreshToken(id: string): Promise<void>;
-  findRefreshTokenWithUser(token: string): Promise<RefreshTokenWithUser | null>;
+
+  findRefreshTokenWithUser(
+    token: string,
+  ): Promise<AuthRefreshTokenWithUser | null>;
+
   deleteRefreshTokenById(id: string): Promise<void>;
   deleteRefreshTokenByToken(token: string): Promise<void>;
   deleteRefreshTokensByUserId(userId: string): Promise<void>;
+
   findRefreshTokenByFamilyAndToken(
     familyId: string,
     token: string,
-  ): Promise<RefreshToken | null>;
+  ): Promise<AuthRefreshToken | null>;
+
   findActiveRefreshTokenByFamily(
     familyId: string,
-  ): Promise<RefreshToken | null>;
-  revokeRefreshToken(id: string): Promise<void>;
+  ): Promise<AuthRefreshToken | null>;
+
   revokeAllTokensInFamily(familyId: string): Promise<void>;
 }
 
 // ---------- Prisma implementation ----------
 
 export class PrismaAuthRepository implements IAuthRepository {
-  async findUserByEmail(email: string): Promise<User | null> {
+  async findUserByEmail(email: string): Promise<PrismaUser | null> {
     return prisma.user.findUnique({ where: { email } });
   }
 
-  async findUserById(id: string): Promise<User | null> {
+  async findUserById(id: string): Promise<PrismaUser | null> {
     return prisma.user.findUnique({ where: { id } });
   }
 
-  async createUser(data: CreateUserData): Promise<User> {
+  async createUser(data: CreateUserData): Promise<PrismaUser> {
     return prisma.user.create({
       data: { ...data, isVerified: false },
+    });
+  }
+
+  async createOAuthUser(data: CreateOAuthUserData): Promise<PrismaUser> {
+    return prisma.user.create({
+      data: {
+        ...data,
+        isVerified: true,
+        cart: {
+          create: {},
+        },
+      },
     });
   }
 
@@ -69,13 +103,13 @@ export class PrismaAuthRepository implements IAuthRepository {
     await prisma.cart.create({ data: { userId } });
   }
 
-  async updateUser(id: string, data: Partial<User>): Promise<User> {
+  async updateUser(id: string, data: Partial<PrismaUser>): Promise<PrismaUser> {
     return prisma.user.update({ where: { id }, data });
   }
 
   async findRefreshTokenWithUser(
     token: string,
-  ): Promise<RefreshTokenWithUser | null> {
+  ): Promise<(PrismaRefreshToken & { user: PrismaUser }) | null> {
     return prisma.refreshToken.findUnique({
       where: { token: hashRefreshToken(token) },
       include: { user: true },
@@ -99,7 +133,7 @@ export class PrismaAuthRepository implements IAuthRepository {
   async findRefreshTokenByFamily(
     familyId: string,
     userId: string,
-  ): Promise<RefreshToken | null> {
+  ): Promise<PrismaRefreshToken | null> {
     return prisma.refreshToken.findFirst({
       where: { familyId, userId },
       orderBy: { createdAt: "desc" },
@@ -111,13 +145,15 @@ export class PrismaAuthRepository implements IAuthRepository {
     userId: string,
     familyId: string,
     expiresAt: Date,
-  ): Promise<RefreshToken> {
+  ): Promise<PrismaRefreshToken> {
     return prisma.refreshToken.create({
       data: { token: hashRefreshToken(token), userId, familyId, expiresAt },
     });
   }
 
-  async findRefreshTokenByToken(token: string): Promise<RefreshToken | null> {
+  async findRefreshTokenByToken(
+    token: string,
+  ): Promise<PrismaRefreshToken | null> {
     return prisma.refreshToken.findUnique({
       where: { token: hashRefreshToken(token) },
     });
@@ -126,7 +162,7 @@ export class PrismaAuthRepository implements IAuthRepository {
   async findRefreshTokenByFamilyAndToken(
     familyId: string,
     token: string,
-  ): Promise<RefreshToken | null> {
+  ): Promise<PrismaRefreshToken | null> {
     return prisma.refreshToken.findUnique({
       where: { familyId_token: { familyId, token: hashRefreshToken(token) } },
     });
@@ -134,7 +170,7 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async findActiveRefreshTokenByFamily(
     familyId: string,
-  ): Promise<RefreshToken | null> {
+  ): Promise<PrismaRefreshToken | null> {
     return prisma.refreshToken.findFirst({
       where: {
         familyId,

@@ -1,10 +1,14 @@
 import crypto from "crypto";
 import { TokenStorePort } from "./application/ports/token-store.port";
 import { logger } from "@core/logger/winston";
-import { User as PrismaUser } from "@prisma/client";
+import { AuthUser } from "./application/ports/auth-user";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
 import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
-import { IAuthRepository, CreateUserData } from "./auth.repository";
+import {
+  IAuthRepository,
+  CreateUserData,
+  CreateOAuthUserData,
+} from "./auth.repository";
 import { EmailService } from "@shared/services/email.service";
 import { TokenService } from "./services/token.service";
 import { TwoFactorService } from "./services/two-factor.service";
@@ -38,7 +42,7 @@ export class AuthService {
     private readonly tokenStore: TokenStorePort,
   ) {}
 
-  async generateTokens(user: PrismaUser) {
+  async generateTokens(user: AuthUser) {
     return this.tokenService.generateTokens(user);
   }
 
@@ -147,7 +151,17 @@ export class AuthService {
     return this.tokenService.refreshToken(refreshToken);
   }
 
-  private async sendVerificationEmail(user: PrismaUser) {
+  async findOrCreateOAuthUser(data: CreateOAuthUserData): Promise<AuthUser> {
+    const existingUser = await this.repository.findUserByEmail(data.email);
+
+    if (existingUser) {
+      return existingUser;
+    }
+
+    return this.repository.createOAuthUser(data);
+  }
+
+  private async sendVerificationEmail(user: AuthUser) {
     const verificationToken = crypto.randomBytes(32).toString("hex");
     await this.tokenStore.set(
       `email-verify:${verificationToken}`,

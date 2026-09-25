@@ -1,4 +1,4 @@
-import { User } from "@prisma/client";
+import { AuthUser } from "./application/ports/auth-user";
 import { User as UserEntity } from "@modules/users/domain/user.entity";
 import { Role } from "@shared/types/roles";
 
@@ -11,7 +11,7 @@ export interface AuthUserResponse {
   is2FAEnabled: boolean;
 }
 
-export function toAuthUserResponse(user: User): AuthUserResponse {
+export function toAuthUserResponse(user: AuthUser): AuthUserResponse {
   return {
     id: user.id,
     email: user.email,
@@ -23,7 +23,7 @@ export function toAuthUserResponse(user: User): AuthUserResponse {
 }
 
 export function toEntityData(
-  user: User,
+  user: AuthUser,
 ): Parameters<typeof UserEntity.hydrate>[0] {
   return {
     id: user.id,

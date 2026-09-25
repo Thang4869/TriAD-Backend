@@ -56,6 +56,7 @@ function createFakeRepository(overrides = {}): IAuthRepository {
     findUserByEmail: vi.fn(),
     findUserById: vi.fn(),
     createUser: vi.fn(),
+    createOAuthUser: vi.fn(),
     createCartForUser: vi.fn(),
     updateUser: vi.fn(),
     createRefreshToken: vi.fn(),

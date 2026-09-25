@@ -1,7 +1,6 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as FacebookStrategy } from "passport-facebook";
-import prisma from "@core/database/prisma";
 import { AuthService } from "../auth.service";
 
 export function registerOAuthStrategies(authService: AuthService): void {
@@ -21,19 +20,11 @@ export function registerOAuthStrategies(authService: AuthService): void {
             return done(new Error("No email provided by Google"), undefined);
           }
 
-          let user = await prisma.user.findUnique({ where: { email } });
-
-          if (!user) {
-            user = await prisma.user.create({
-              data: {
-                email,
-                firstName: profile.name?.givenName || "Google",
-                lastName: profile.name?.familyName || "User",
-                isVerified: true,
-                cart: { create: {} },
-              },
-            });
-          }
+          const user = await authService.findOrCreateOAuthUser({
+            email,
+            firstName: profile.name?.givenName || "Google",
+            lastName: profile.name?.familyName || "User",
+          });
 
           const tokens = await authService.generateTokens(user);
           return done(null, { user, tokens });
@@ -60,19 +51,11 @@ export function registerOAuthStrategies(authService: AuthService): void {
             return done(new Error("No email provided by Facebook"), undefined);
           }
 
-          let user = await prisma.user.findUnique({ where: { email } });
-
-          if (!user) {
-            user = await prisma.user.create({
-              data: {
-                email,
-                firstName: profile.name?.givenName || "Facebook",
-                lastName: profile.name?.familyName || "User",
-                isVerified: true,
-                cart: { create: {} },
-              },
-            });
-          }
+          const user = await authService.findOrCreateOAuthUser({
+            email,
+            firstName: profile.name?.givenName || "Facebook",
+            lastName: profile.name?.familyName || "User",
+          });
 
           const tokens = await authService.generateTokens(user);
           return done(null, { user, tokens });

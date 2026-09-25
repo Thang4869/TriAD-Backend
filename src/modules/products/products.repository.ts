@@ -1,42 +1,23 @@
 import prisma from "@core/database/prisma";
-import { Prisma, Product } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { ProductCatalogSort } from "./application/product-catalog-read.port";
+import { ProductFilter } from "./domain/specifications/product-specification";
+import {
+  ProductIdRecord,
+  ProductRecord,
+  ProductWithFullReviews,
+  ProductWithRatingReviews,
+  ProductWithShortReviews,
+} from "./application/product-models";
 
 // ---------- Shared query/result types ----------
 
 export interface ProductListQuery {
-  where: Prisma.ProductWhereInput;
-  orderBy: Prisma.ProductOrderByWithRelationInput;
+  where: ProductFilter;
+  orderBy: ProductCatalogSort;
   skip: number;
   take: number;
 }
-
-export type ProductWithRatingReviews = Prisma.ProductGetPayload<{
-  include: { reviews: { select: { rating: true } } };
-}>;
-
-export type ProductWithFullReviews = Prisma.ProductGetPayload<{
-  include: {
-    reviews: {
-      include: {
-        user: {
-          select: { id: true; firstName: true; lastName: true; email: true };
-        };
-      };
-      orderBy: { createdAt: "desc" };
-    };
-  };
-}>;
-
-export type ProductWithShortReviews = Prisma.ProductGetPayload<{
-  include: {
-    reviews: {
-      include: {
-        user: { select: { id: true; firstName: true; lastName: true } };
-      };
-      orderBy: { createdAt: "desc" };
-    };
-  };
-}>;
 
 export interface CategoryCount {
   category: string;
@@ -75,19 +56,19 @@ export interface IProductsRepository {
   findManyWithRatings(
     query: ProductListQuery,
   ): Promise<ProductWithRatingReviews[]>;
-  count(where: Prisma.ProductWhereInput): Promise<number>;
+  count(where: ProductFilter): Promise<number>;
   findByIdWithReviews(id: string): Promise<ProductWithFullReviews | null>;
   findBySlugWithReviews(slug: string): Promise<ProductWithShortReviews | null>;
-  findBySlugId(slug: string): Promise<Pick<Product, "id"> | null>;
+  findBySlugId(slug: string): Promise<ProductIdRecord | null>;
 
   groupByCategory(): Promise<CategoryCount[]>;
 
-  findManyAdmin(query: ProductListQuery): Promise<Product[]>;
-  findById(id: string): Promise<Product | null>;
-  create(data: CreateProductData): Promise<Product>;
+  findManyAdmin(query: ProductListQuery): Promise<ProductRecord[]>;
+  findById(id: string): Promise<ProductRecord | null>;
+  create(data: CreateProductData): Promise<ProductRecord>;
 
-  update(id: string, data: UpdateProductData): Promise<Product>;
-  setActive(id: string, isActive: boolean): Promise<Product>;
+  update(id: string, data: UpdateProductData): Promise<ProductRecord>;
+  setActive(id: string, isActive: boolean): Promise<ProductRecord>;
   existsAndActive(id: string): Promise<boolean>;
   searchFullText(
     query: string,
@@ -116,8 +97,10 @@ export class PrismaProductsRepository implements IProductsRepository {
     });
   }
 
-  async count(where: Prisma.ProductWhereInput): Promise<number> {
-    return prisma.product.count({ where });
+  async count(where: ProductFilter): Promise<number> {
+    return prisma.product.count({
+      where: where as Prisma.ProductWhereInput,
+    });
   }
 
   async findByIdWithReviews(
@@ -161,7 +144,7 @@ export class PrismaProductsRepository implements IProductsRepository {
     });
   }
 
-  async findBySlugId(slug: string): Promise<Pick<Product, "id"> | null> {
+  async findBySlugId(slug: string): Promise<ProductIdRecord | null> {
     return prisma.product.findUnique({
       where: { slug },
       select: { id: true },
@@ -181,7 +164,7 @@ export class PrismaProductsRepository implements IProductsRepository {
     }));
   }
 
-  async findManyAdmin(query: ProductListQuery): Promise<Product[]> {
+  async findManyAdmin(query: ProductListQuery): Promise<ProductRecord[]> {
     return prisma.product.findMany({
       where: query.where,
       orderBy: query.orderBy,
@@ -190,21 +173,21 @@ export class PrismaProductsRepository implements IProductsRepository {
     });
   }
 
-  async findById(id: string): Promise<Product | null> {
+  async findById(id: string): Promise<ProductRecord | null> {
     return prisma.product.findUnique({ where: { id } });
   }
 
-  async create(data: CreateProductData): Promise<Product> {
+  async create(data: CreateProductData): Promise<ProductRecord> {
     return prisma.product.create({
       data: { ...data, isActive: true },
     });
   }
 
-  async update(id: string, data: UpdateProductData): Promise<Product> {
+  async update(id: string, data: UpdateProductData): Promise<ProductRecord> {
     return prisma.product.update({ where: { id }, data });
   }
 
-  async setActive(id: string, isActive: boolean): Promise<Product> {
+  async setActive(id: string, isActive: boolean): Promise<ProductRecord> {
     return prisma.product.update({ where: { id }, data: { isActive } });
   }
 

@@ -4,7 +4,6 @@ import { logger } from "@core/logger/winston";
 import { BadRequestError } from "@shared/utils/errors";
 import config from "@config";
 import { asyncHandler } from "@shared/utils/async-handler";
-import { User } from "@prisma/client";
 import {
   CSRF_COOKIE_NAME,
   csrfCookieOptions,
@@ -17,8 +16,10 @@ import {
 } from "@shared/utils/api-response";
 
 interface OAuthCallbackUser {
-  user: User;
-  tokens: { accessToken: string; refreshToken: string };
+  tokens: {
+    accessToken: string;
+    refreshToken: string;
+  };
 }
 
 const cookieOptions = (maxAge: number) => ({

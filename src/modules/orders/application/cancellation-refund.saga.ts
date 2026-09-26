@@ -1,6 +1,5 @@
 import {
   executeSagaStep,
-  InMemorySagaStateStore,
   SagaStateStore,
 } from "@shared/application/saga/saga-state";
 import { withSpan } from "@core/tracing/span";
@@ -33,7 +32,7 @@ export interface CancellationRefundPorts {
 export class CancellationRefundSaga {
   constructor(
     private readonly ports: CancellationRefundPorts,
-    private readonly stateStore: SagaStateStore<CancellationRefundState> = new InMemorySagaStateStore(),
+    private readonly stateStore: SagaStateStore<CancellationRefundState>,
   ) {}
 
   async execute(input: {

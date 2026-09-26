@@ -29,22 +29,24 @@ function ports(): CheckoutSagaPorts {
 
 describe("CheckoutSaga", () => {
   it("completes all steps and persists state", async () => {
+    const store = new InMemorySagaStateStore<CheckoutSagaState>();
     const actionPorts = ports();
-    const state = await new CheckoutSaga(actionPorts).execute(input);
+    const state = await new CheckoutSaga(actionPorts, store).execute(input);
 
     expect(state.step).toBe("COMPLETED");
     expect(actionPorts.confirmOrder).toHaveBeenCalledWith("order-1");
   });
 
   it("compensates completed forward steps when payment fails", async () => {
+    const store = new InMemorySagaStateStore<CheckoutSagaState>();
     const actionPorts = ports();
     vi.mocked(actionPorts.authorizePayment).mockRejectedValue(
       new Error("payment down"),
     );
 
-    await expect(new CheckoutSaga(actionPorts).execute(input)).rejects.toThrow(
-      "payment down",
-    );
+    await expect(
+      new CheckoutSaga(actionPorts, store).execute(input),
+    ).rejects.toThrow("payment down");
     expect(actionPorts.cancelOrder).toHaveBeenCalledWith("order-1");
     expect(actionPorts.releaseStock).toHaveBeenCalledWith("reservation-1");
   });

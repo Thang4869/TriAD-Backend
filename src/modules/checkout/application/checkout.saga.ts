@@ -4,7 +4,6 @@ import {
 } from "@shared/application/feature-flags/feature-flag.port";
 import {
   executeSagaStep,
-  InMemorySagaStateStore,
   SagaStateStore,
 } from "@shared/application/saga/saga-state";
 import { withSpan } from "@core/tracing/span";
@@ -59,7 +58,7 @@ export interface CheckoutInput {
 export class CheckoutSaga {
   constructor(
     private readonly ports: CheckoutSagaPorts,
-    private readonly stateStore: SagaStateStore<CheckoutSagaState> = new InMemorySagaStateStore(),
+    private readonly stateStore: SagaStateStore<CheckoutSagaState>,
     private readonly featureFlags?: FeatureFlagPort,
   ) {}
 

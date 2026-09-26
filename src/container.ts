@@ -113,7 +113,11 @@ container.register(
 
 container.register(
   TOKENS.PricingService,
-  (c) => new PricingService(c.resolve(TOKENS.CheckoutRepository)),
+  (c) =>
+    new PricingService(
+      c.resolve(TOKENS.CheckoutRepository),
+      c.resolve(TOKENS.FeatureFlags),
+    ),
 );
 
 container.register(
@@ -187,7 +191,7 @@ container.register(
       c.resolve(TOKENS.CheckoutRepository),
       c.resolve(TOKENS.PricingService),
       c.resolve(TOKENS.StockReservationService),
-      new EnvironmentFeatureFlags(),
+      c.resolve(TOKENS.FeatureFlags),
     ),
 );
 container.register(
@@ -281,6 +285,8 @@ container.register(
   (c) => new OrderStatusChangedHandler(c.resolve(TOKENS.NotificationsService)),
 );
 
+container.register(TOKENS.FeatureFlags, () => new EnvironmentFeatureFlags());
+
 // ---------- Wire domain events to their handlers ----------
 const eventBus = container.resolve(TOKENS.EventBus);
 const orderPlacedHandler = container.resolve(TOKENS.OrderPlacedHandler);
@@ -339,11 +345,12 @@ export const notificationsController = container.resolve(
 );
 export const authMiddleware = createAuthMiddleware(
   container.resolve(TOKENS.AuthSessionUser),
-  container.resolve(TOKENS.TokenStore),
+  container.resolve(TOKENS.TokenService),
 );
+
 export const optionalAuthMiddleware = createOptionalAuthMiddleware(
   container.resolve(TOKENS.AuthSessionUser),
-  container.resolve(TOKENS.TokenStore),
+  container.resolve(TOKENS.TokenService),
 );
 export const errorHandler = createErrorHandler(
   container.resolve(TOKENS.PersistenceErrorClassifier),

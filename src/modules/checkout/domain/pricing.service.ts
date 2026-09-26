@@ -3,7 +3,6 @@ import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
 import { ICheckoutRepository } from "../checkout.repository";
 import { CheckoutTransaction } from "../application/ports/checkout-transaction";
 import { BadRequestError, ConflictError } from "@shared/utils/errors";
-import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
 import {
   FeatureFlag,
   FeatureFlagPort,
@@ -19,7 +18,7 @@ export interface PricingResult {
 export class PricingService {
   constructor(
     private readonly repository: ICheckoutRepository,
-    private readonly featureFlags: FeatureFlagPort = new EnvironmentFeatureFlags(),
+    private readonly featureFlags: FeatureFlagPort,
   ) {}
 
   async calculatePricing(

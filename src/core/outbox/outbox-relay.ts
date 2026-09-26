@@ -1,4 +1,8 @@
-import prisma from "@core/database/prisma";
+import {
+  ClaimedOutboxEvent,
+  OutboxRelayStore,
+  OutboxRelayUpdate,
+} from "./outbox-relay-store.port";
 import { logger } from "@core/logger/winston";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { DomainEvent } from "@shared/domain/events/domain-event";
@@ -23,7 +27,10 @@ export class OutboxRelay {
   private running = false;
   private readonly owner = crypto.randomUUID();
 
-  constructor(private readonly eventBus: EventBus = EventBus.getInstance()) {}
+  constructor(
+    private readonly store: OutboxRelayStore,
+    private readonly eventBus: EventBus = EventBus.getInstance(),
+  ) {}
 
   start(): void {
     if (this.timer) return;
@@ -42,32 +49,12 @@ export class OutboxRelay {
     if (this.running) return;
     this.running = true;
     try {
-      const rows = await prisma.$queryRaw<
-        Array<{
-          id: string;
-          eventName: string;
-          aggregateId: string;
-          payload: unknown;
-          attempts: number;
-          occurredAt?: Date;
-        }>
-      >`
-        WITH candidates AS (
-          SELECT id
-          FROM outbox_events
-          WHERE "publishedAt" IS NULL
-            AND attempts < ${MAX_ATTEMPTS}
-            AND ("leaseUntil" IS NULL OR "leaseUntil" < NOW())
-          ORDER BY "occurredAt" ASC
-          LIMIT ${BATCH_SIZE}
-          FOR UPDATE SKIP LOCKED
-        )
-        UPDATE outbox_events AS events
-            SET "lockedAt" = NOW(), "lockOwner" = ${this.owner}, "leaseUntil" = NOW() + (${LOCK_LEASE_SECONDS} || ' seconds')::interval
-        FROM candidates
-        WHERE events.id = candidates.id
-        RETURNING events.id, events."eventName", events."aggregateId", events.payload, events.attempts, events."occurredAt"
-      `;
+      const rows = await this.store.claimBatch(
+        this.owner,
+        BATCH_SIZE,
+        MAX_ATTEMPTS,
+        LOCK_LEASE_SECONDS,
+      );
 
       outboxEventsClaimed.inc(rows.length);
       const occurredAt = rows[0]?.occurredAt;
@@ -87,14 +74,7 @@ export class OutboxRelay {
     }
   }
 
-  private async publishRow(row: {
-    id: string;
-    eventName: string;
-    aggregateId: string;
-    payload: unknown;
-    attempts: number;
-    occurredAt?: Date;
-  }): Promise<void> {
+  private async publishRow(row: ClaimedOutboxEvent): Promise<void> {
     try {
       const result = await withRetry(
         () =>
@@ -144,12 +124,9 @@ export class OutboxRelay {
 
   private async updateClaimedRow(
     id: string,
-    data: Record<string, unknown>,
+    data: OutboxRelayUpdate,
   ): Promise<void> {
-    await prisma.outboxEvent.updateMany({
-      where: { id, lockOwner: this.owner },
-      data,
-    });
+    await this.store.updateClaimed(id, this.owner, data);
   }
 }
 
@@ -163,5 +140,3 @@ function deserializeDomainEvent(payload: unknown): DomainEvent {
     occurredAt: new Date(event.occurredAt),
   };
 }
-
-export const outboxRelay = new OutboxRelay();

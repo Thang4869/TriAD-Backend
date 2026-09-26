@@ -1,9 +1,10 @@
 import { Router, Request, Response } from "express";
 import { HealthService } from "./health.service";
 import { asyncHandler } from "@shared/utils/async-handler";
+import { InfrastructureHealthCheck } from "./infrastructure-health-check";
 
 const router = Router();
-const healthService = new HealthService();
+const healthService = new HealthService(new InfrastructureHealthCheck());
 
 router.get("/live", (_req: Request, res: Response) => {
   res.status(200).json({ status: "up", timestamp: new Date().toISOString() });

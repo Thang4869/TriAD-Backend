@@ -5,12 +5,13 @@ import prisma from "@core/database/prisma";
 import redis from "@core/redis/client";
 import { config } from "./config";
 import { logger } from "@core/logger/winston";
-import { outboxRelay } from "@core/outbox/outbox-relay";
+import { OutboxRelay } from "@core/outbox/outbox-relay";
+import { PrismaOutboxRelayStore } from "@core/outbox/prisma-outbox-relay.store";
 import { Worker } from "bullmq";
 import { imageJobProcessor } from "@/container";
 
 const PORT = config.PORT;
-
+const outboxRelay = new OutboxRelay(new PrismaOutboxRelayStore());
 const startServer = async () => {
   try {
     logger.info("Starting server with config:", {

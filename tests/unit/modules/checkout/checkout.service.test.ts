@@ -9,14 +9,6 @@ import {
 } from "@shared/utils/errors";
 import { PricingService } from "@/modules/checkout/domain/pricing.service";
 
-vi.mock("@core/redis/client", () => ({
-  default: { get: vi.fn(), setex: vi.fn() },
-}));
-
-vi.mock("@core/queue/bull", () => ({
-  emailQueue: { add: vi.fn().mockResolvedValue({}) },
-}));
-
 const discount = {
   id: "d1",
   code: "SAVE10",

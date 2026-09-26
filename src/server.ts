@@ -9,9 +9,13 @@ import { OutboxRelay } from "@core/outbox/outbox-relay";
 import { PrismaOutboxRelayStore } from "@core/outbox/prisma-outbox-relay.store";
 import { Worker } from "bullmq";
 import { imageJobProcessor } from "@/container";
+import { PrismaOutboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
 
 const PORT = config.PORT;
-const outboxRelay = new OutboxRelay(new PrismaOutboxRelayStore());
+const outboxRelay = new OutboxRelay(
+  new PrismaOutboxRelayStore(),
+  new PrismaOutboxHandlerTracker(),
+);
 const startServer = async () => {
   try {
     logger.info("Starting server with config:", {

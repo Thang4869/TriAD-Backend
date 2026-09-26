@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  PrismaOutboxHandlerTracker,
-  outboxHandlerTracker,
-} from "@core/outbox/outbox-handler-tracker";
+import { PrismaOutboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
 import prisma from "@core/database/prisma";
 import { logger } from "@core/logger/winston";
 
@@ -113,11 +110,5 @@ describe("PrismaOutboxHandlerTracker.recordResult", () => {
       "Failed to record outbox handler result",
       expect.objectContaining({ eventId: "evt-1", handlerName: "H" }),
     );
-  });
-});
-
-describe("outboxHandlerTracker (singleton export)", () => {
-  it("là một instance của PrismaOutboxHandlerTracker", () => {
-    expect(outboxHandlerTracker).toBeInstanceOf(PrismaOutboxHandlerTracker);
   });
 });

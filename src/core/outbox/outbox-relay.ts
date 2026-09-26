@@ -4,7 +4,10 @@ import {
   OutboxRelayUpdate,
 } from "./outbox-relay-store.port";
 import { logger } from "@core/logger/winston";
-import { EventBus } from "@shared/domain/event-bus/event-bus";
+import {
+  EventBus,
+  HandlerExecutionTracker,
+} from "@shared/domain/event-bus/event-bus";
 import { DomainEvent } from "@shared/domain/events/domain-event";
 import { withRetry } from "@core/circuit-breaker/circuit-breaker";
 import {
@@ -14,7 +17,6 @@ import {
   outboxEventsDeadLettered,
   outboxLagSeconds,
 } from "@core/metrics/metrics.registry";
-import { outboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
 import crypto from "crypto";
 
 const POLL_INTERVAL_MS = 2_000;
@@ -29,6 +31,7 @@ export class OutboxRelay {
 
   constructor(
     private readonly store: OutboxRelayStore,
+    private readonly handlerTracker: HandlerExecutionTracker,
     private readonly eventBus: EventBus = EventBus.getInstance(),
   ) {}
 
@@ -80,7 +83,7 @@ export class OutboxRelay {
         () =>
           this.eventBus.publish(deserializeDomainEvent(row.payload), {
             eventId: row.id,
-            tracker: outboxHandlerTracker,
+            tracker: this.handlerTracker,
           }),
         {
           retries: 2,

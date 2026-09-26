@@ -5,7 +5,7 @@ import {
   createOptionalAuthMiddleware,
 } from "@shared/middlewares/auth.middleware";
 import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
-import type { TokenService } from "@modules/auth/services/token.service";
+import type { AccessTokenVerifierPort } from "@modules/auth/application/ports/access-token-verifier.port";
 import { UnauthorizedError } from "@shared/utils/errors";
 
 const VERIFIED_USER = {
@@ -19,10 +19,10 @@ const mockedUsers: AuthSessionUserPort = {
   findById: vi.fn(),
 };
 
-const mockedTokenService = {
+const mockedTokenService: AccessTokenVerifierPort = {
   verifyAccessToken: vi.fn(),
   isAccessTokenRevoked: vi.fn(),
-} as unknown as TokenService;
+};
 
 const authMiddleware = createAuthMiddleware(mockedUsers, mockedTokenService);
 

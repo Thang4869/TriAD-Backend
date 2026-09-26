@@ -1,11 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
-import type { TokenService } from "@modules/auth/services/token.service";
+import type { AccessTokenVerifierPort } from "@modules/auth/application/ports/access-token-verifier.port";
 import { UnauthorizedError } from "@shared/utils/errors";
 
 export function createAuthMiddleware(
   users: AuthSessionUserPort,
-  tokenService: TokenService,
+  tokenVerifier: AccessTokenVerifierPort,
 ) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
@@ -22,11 +22,11 @@ export function createAuthMiddleware(
         throw new UnauthorizedError("No token provided");
       }
 
-      if (await tokenService.isAccessTokenRevoked(token)) {
+      if (await tokenVerifier.isAccessTokenRevoked(token)) {
         throw new UnauthorizedError("Token revoked");
       }
 
-      const decoded = tokenService.verifyAccessToken(token);
+      const decoded = tokenVerifier.verifyAccessToken(token);
 
       const user = await users.findById(decoded.sub);
 
@@ -49,7 +49,7 @@ export function createAuthMiddleware(
 
 export function createOptionalAuthMiddleware(
   users: AuthSessionUserPort,
-  tokenService: TokenService,
+  tokenVerifier: AccessTokenVerifierPort,
 ) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
@@ -58,8 +58,8 @@ export function createOptionalAuthMiddleware(
       if (authHeader?.startsWith("Bearer ")) {
         const token = authHeader.substring(7);
 
-        if (!(await tokenService.isAccessTokenRevoked(token))) {
-          const decoded = tokenService.verifyAccessToken(token);
+        if (!(await tokenVerifier.isAccessTokenRevoked(token))) {
+          const decoded = tokenVerifier.verifyAccessToken(token);
           const user = await users.findById(decoded.sub);
 
           if (user?.isVerified) {

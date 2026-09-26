@@ -7,6 +7,10 @@ import { IAuthRepository } from "../auth.repository";
 import { AuthUser } from "../application/ports/auth-user";
 import { AuthUserResponse } from "../auth.mapper";
 import config from "@config";
+import {
+  AccessTokenClaims,
+  AccessTokenVerifierPort,
+} from "../application/ports/access-token-verifier.port";
 
 export interface PreAuthClaims {
   sub: string;
@@ -14,13 +18,7 @@ export interface PreAuthClaims {
   jti: string;
 }
 
-export interface AccessTokenClaims {
-  sub: string;
-  email: string;
-  role: string;
-}
-
-export class TokenService {
+export class TokenService implements AccessTokenVerifierPort {
   verifyAccessToken(token: string): AccessTokenClaims {
     try {
       return verifyToken<AccessTokenClaims>(token, TokenService.ACCESS_SECRET);

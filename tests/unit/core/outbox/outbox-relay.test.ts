@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { OutboxRelay } from "@core/outbox/outbox-relay";
-import { EventBus } from "@shared/domain/event-bus/event-bus";
+import {
+  EventBus,
+  HandlerExecutionTracker,
+} from "@shared/domain/event-bus/event-bus";
 import { logger } from "@core/logger/winston";
 import { OutboxRelayStore } from "@core/outbox/outbox-relay-store.port";
 
@@ -17,6 +20,13 @@ function createStore(): OutboxRelayStore {
   return {
     claimBatch: vi.fn(),
     updateClaimed: vi.fn(),
+  };
+}
+
+function createHandlerTracker(): HandlerExecutionTracker {
+  return {
+    hasSucceeded: vi.fn().mockResolvedValue(false),
+    recordResult: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -39,18 +49,24 @@ const ROW = {
 };
 
 let store: OutboxRelayStore;
+let handlerTracker: HandlerExecutionTracker;
 
 describe("OutboxRelay.pollOnce", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     store = createStore();
+    handlerTracker = createHandlerTracker();
   });
 
   it("không publish gì khi không có row chờ xử lý", async () => {
     vi.mocked(store.claimBatch).mockResolvedValue([] as never);
     const publish = vi.fn();
 
-    await new OutboxRelay(store, createEventBus(publish)).pollOnce();
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
 
     expect(publish).not.toHaveBeenCalled();
     expect(vi.mocked(store.updateClaimed)).not.toHaveBeenCalled();
@@ -62,7 +78,11 @@ describe("OutboxRelay.pollOnce", () => {
       .fn()
       .mockResolvedValue({ success: true, failedHandlers: [] });
 
-    await new OutboxRelay(store, createEventBus(publish)).pollOnce();
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
 
     expect(publish).toHaveBeenCalledWith(
       expect.objectContaining({ eventName: "OrderPlaced" }),
@@ -82,7 +102,11 @@ describe("OutboxRelay.pollOnce", () => {
       .fn()
       .mockResolvedValue({ success: true, failedHandlers: [] });
 
-    await new OutboxRelay(store, createEventBus(publish)).pollOnce();
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
 
     expect(publish).toHaveBeenCalledTimes(3);
     expect(vi.mocked(store.updateClaimed)).toHaveBeenCalledTimes(3);
@@ -92,7 +116,11 @@ describe("OutboxRelay.pollOnce", () => {
     vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
     const publish = vi.fn().mockRejectedValue(new Error("bus down"));
 
-    await new OutboxRelay(store, createEventBus(publish)).pollOnce();
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
 
     expect(vi.mocked(store.updateClaimed)).toHaveBeenCalledWith(
       "outbox-1",
@@ -115,7 +143,11 @@ describe("OutboxRelay.pollOnce", () => {
       .fn()
       .mockResolvedValue({ success: false, failedHandlers: ["HandlerB"] });
 
-    await new OutboxRelay(store, createEventBus(publish)).pollOnce();
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
 
     expect(vi.mocked(store.updateClaimed)).toHaveBeenCalledWith(
       "outbox-1",
@@ -141,7 +173,11 @@ describe("OutboxRelay.pollOnce", () => {
       .mockRejectedValueOnce(new Error("bus down"))
       .mockResolvedValue({ success: true, failedHandlers: [] });
 
-    await new OutboxRelay(store, createEventBus(publish)).pollOnce();
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
 
     expect(publish).toHaveBeenCalledTimes(2);
     expect(vi.mocked(store.updateClaimed)).toHaveBeenCalledTimes(2);
@@ -153,7 +189,7 @@ describe("OutboxRelay.pollOnce", () => {
     );
 
     await expect(
-      new OutboxRelay(store, createEventBus()).pollOnce(),
+      new OutboxRelay(store, handlerTracker, createEventBus()).pollOnce(),
     ).resolves.toBeUndefined();
     expect(logger.error).toHaveBeenCalledWith(
       "OutboxRelay poll failed",
@@ -168,7 +204,7 @@ describe("OutboxRelay.pollOnce", () => {
         resolveQuery = resolve;
       }) as never,
     );
-    const relay = new OutboxRelay(store, createEventBus());
+    const relay = new OutboxRelay(store, handlerTracker, createEventBus());
 
     const first = relay.pollOnce();
     await relay.pollOnce(); // gọi chồng, phải return ngay
@@ -180,7 +216,7 @@ describe("OutboxRelay.pollOnce", () => {
 
   it("cờ running được giải phóng sau khi poll xong để lần sau chạy tiếp", async () => {
     vi.mocked(store.claimBatch).mockResolvedValue([] as never);
-    const relay = new OutboxRelay(store, createEventBus());
+    const relay = new OutboxRelay(store, handlerTracker, createEventBus());
 
     await relay.pollOnce();
     await relay.pollOnce();
@@ -199,7 +235,7 @@ describe("OutboxRelay.start / stop", () => {
   afterEach(() => vi.useRealTimers());
 
   it("start() bật interval poll định kỳ", async () => {
-    const relay = new OutboxRelay(store, createEventBus());
+    const relay = new OutboxRelay(store, handlerTracker, createEventBus());
 
     relay.start();
     await vi.advanceTimersByTimeAsync(2_000);
@@ -209,7 +245,7 @@ describe("OutboxRelay.start / stop", () => {
   });
 
   it("gọi start() hai lần không tạo hai interval", async () => {
-    const relay = new OutboxRelay(store, createEventBus());
+    const relay = new OutboxRelay(store, handlerTracker, createEventBus());
 
     relay.start();
     relay.start();
@@ -220,7 +256,7 @@ describe("OutboxRelay.start / stop", () => {
   });
 
   it("stop() dừng hẳn việc poll", async () => {
-    const relay = new OutboxRelay(store, createEventBus());
+    const relay = new OutboxRelay(store, handlerTracker, createEventBus());
     relay.start();
 
     relay.stop();
@@ -230,6 +266,8 @@ describe("OutboxRelay.start / stop", () => {
   });
 
   it("stop() khi chưa start() không gây lỗi", () => {
-    expect(() => new OutboxRelay(store, createEventBus()).stop()).not.toThrow();
+    expect(() =>
+      new OutboxRelay(store, handlerTracker, createEventBus()).stop(),
+    ).not.toThrow();
   });
 });

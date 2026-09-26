@@ -50,5 +50,3 @@ export class PrismaOutboxHandlerTracker implements HandlerExecutionTracker {
     }
   }
 }
-
-export const outboxHandlerTracker = new PrismaOutboxHandlerTracker();

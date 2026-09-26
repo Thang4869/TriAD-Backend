@@ -53,7 +53,7 @@ import {
   ProductRestockedEvent,
   ProductStockDepletedEvent,
 } from "@shared/domain/events/product-events";
-import { projectionHandler } from "@core/outbox/projection-handler";
+import { ProjectionHandler } from "@core/outbox/projection-handler";
 
 import { PricingService } from "@modules/checkout/domain/pricing.service";
 import { StockReservationService } from "./modules/checkout/services/stock-reservation.service";
@@ -287,6 +287,7 @@ const orderPlacedHandler = container.resolve(TOKENS.OrderPlacedHandler);
 const orderStatusChangedHandler = container.resolve(
   TOKENS.OrderStatusChangedHandler,
 );
+const projectionHandler = new ProjectionHandler();
 
 eventBus.subscribe(
   OrderPlacedEvent.eventName,

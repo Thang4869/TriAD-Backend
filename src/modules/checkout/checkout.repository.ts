@@ -1,7 +1,7 @@
 import prisma from "@core/database/prisma";
 import { Prisma, Order } from "@prisma/client";
 import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
-import { persistDomainEvents } from "@core/unit-of-work/unit-of-work";
+import { persistDomainEvents } from "@core/outbox/persist-domain-events";
 import { PaymentMethod, PaymentStatus } from "@prisma/client";
 import { CheckoutTransaction } from "./application/ports/checkout-transaction";
 import {

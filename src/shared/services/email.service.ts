@@ -1,9 +1,9 @@
-import { emailQueue } from "@core/queue/bull";
 import { logger } from "@core/logger/winston";
 import {
   withCircuitBreaker,
   withRetry,
 } from "@core/circuit-breaker/circuit-breaker";
+import { EmailQueuePort } from "@shared/application/ports/email-queue.port";
 
 interface OrderConfirmationItem {
   productName: string;
@@ -12,11 +12,22 @@ interface OrderConfirmationItem {
 }
 
 export class EmailService {
-  private readonly enqueue = withCircuitBreaker(
-    (jobName: string, payload: Record<string, unknown>) =>
-      emailQueue.add(jobName, payload),
-    { name: "email-queue-enqueue", timeout: 3000, resetTimeout: 15000 },
-  );
+  private readonly enqueue: (
+    jobName: string,
+    payload: Record<string, unknown>,
+  ) => Promise<void>;
+
+  constructor(private readonly emailQueue: EmailQueuePort) {
+    this.enqueue = withCircuitBreaker(
+      (jobName: string, payload: Record<string, unknown>) =>
+        this.emailQueue.enqueue(jobName, payload),
+      {
+        name: "email-queue-enqueue",
+        timeout: 3000,
+        resetTimeout: 15000,
+      },
+    );
+  }
 
   async sendOrderConfirmation(
     user: { email: string },
@@ -61,7 +72,10 @@ export class EmailService {
         minTimeout: 100,
         maxTimeout: 800,
       });
-      logger.info(`Email job '${jobName}' enqueued`, { to: payload.to });
+
+      logger.info(`Email job '${jobName}' enqueued`, {
+        to: payload.to,
+      });
     } catch (err) {
       logger.error(`Failed to enqueue email job '${jobName}'`, {
         to: payload.to,

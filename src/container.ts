@@ -71,11 +71,18 @@ import {
 import { PrismaErrorClassifier } from "@core/database/prisma-error-classifier";
 import { createErrorHandler } from "@shared/middlewares/error-handler.middleware";
 import { processImage } from "@/jobs/image-process.job";
+import { BullMqImageProcessingQueue } from "@modules/products/infrastructure/queue/bullmq-image-processing-queue";
+import { BullMqEmailQueue } from "@shared/infrastructure/queue/bullmq-email-queue";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
-container.register(TOKENS.EventBus, () => EventBus.getInstance());
-container.register(TOKENS.EmailService, () => new EmailService());
+container.register(TOKENS.EventBus, () => new EventBus());
+container.register(TOKENS.EmailQueue, () => new BullMqEmailQueue());
+
+container.register(
+  TOKENS.EmailService,
+  (c) => new EmailService(c.resolve(TOKENS.EmailQueue)),
+);
 container.register(TOKENS.ImageStorage, () => new CloudinaryImageStorage());
 
 // ---------- Repositories ----------
@@ -125,6 +132,10 @@ container.register(
   () => new PrismaErrorClassifier(),
 );
 
+container.register(
+  TOKENS.ImageProcessingQueue,
+  () => new BullMqImageProcessingQueue(),
+);
 // ---------- Auth sub-services ----------
 container.register(
   TOKENS.TokenService,
@@ -155,11 +166,16 @@ container.register(
     new AdminProductService(
       c.resolve(TOKENS.ProductsRepository),
       c.resolve(TOKENS.ProductImageService),
+      c.resolve(TOKENS.EventBus),
     ),
 );
 container.register(
   TOKENS.ProductImageService,
-  (c) => new ProductImageService(c.resolve(TOKENS.ProductsRepository)),
+  (c) =>
+    new ProductImageService(
+      c.resolve(TOKENS.ProductsRepository),
+      c.resolve(TOKENS.ImageProcessingQueue),
+    ),
 );
 
 // ---------- Checkout sub-services ----------
@@ -178,6 +194,7 @@ container.register(
       c.resolve(TOKENS.TokenService),
       c.resolve(TOKENS.TwoFactorService),
       c.resolve(TOKENS.TokenStore),
+      c.resolve(TOKENS.EventBus),
     ),
 );
 container.register(
@@ -196,7 +213,11 @@ container.register(
 );
 container.register(
   TOKENS.OrdersService,
-  (c) => new OrdersService(c.resolve(TOKENS.OrdersRepository)),
+  (c) =>
+    new OrdersService(
+      c.resolve(TOKENS.OrdersRepository),
+      c.resolve(TOKENS.EventBus),
+    ),
 );
 container.register(
   TOKENS.ReviewsService,

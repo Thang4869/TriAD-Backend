@@ -40,6 +40,8 @@ import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-s
 import type { TokenStorePort } from "@modules/auth/application/ports/token-store.port";
 import type { PersistenceErrorClassifier } from "@shared/errors/persistence-error";
 import type { FeatureFlagPort } from "@shared/application/feature-flags/feature-flag.port";
+import type { ImageProcessingQueuePort } from "@modules/products/application/ports/image-processing-queue.port";
+import type { EmailQueuePort } from "@shared/application/ports/email-queue.port";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
@@ -63,6 +65,7 @@ export const TOKENS = {
   ),
 
   // Cross-cutting infra
+  EmailQueue: createToken<EmailQueuePort>("EmailQueue"),
   EmailService: createToken<EmailService>("EmailService"),
   ImageStorage: createToken<IImageStorage>("ImageStorage"),
   EventBus: createToken<EventBus>("EventBus"),
@@ -109,6 +112,9 @@ export const TOKENS = {
   TwoFactorService: createToken<TwoFactorService>("TwoFactorService"),
 
   // Products
+  ImageProcessingQueue: createToken<ImageProcessingQueuePort>(
+    "ImageProcessingQueue",
+  ),
   CatalogService: createToken<CatalogService>("CatalogService"),
   AdminProductService: createToken<AdminProductService>("AdminProductService"),
   ProductImageService: createToken<ProductImageService>("ProductImageService"),

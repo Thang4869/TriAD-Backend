@@ -55,7 +55,7 @@ import {
 } from "@shared/domain/events/product-events";
 import { ProjectionHandler } from "@core/outbox/projection-handler";
 
-import { PricingService } from "@modules/checkout/domain/pricing.service";
+import { PricingService } from "@modules/checkout/services/pricing.service";
 import { StockReservationService } from "./modules/checkout/services/stock-reservation.service";
 import { ProductImageService } from "./modules/products/services/product-image.service";
 import { TokenService } from "./modules/auth/services/token.service";

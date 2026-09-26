@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { CheckoutService } from "../../src/modules/checkout/checkout.service";
 import { ICheckoutRepository } from "../../src/modules/checkout/checkout.repository";
-import { PricingService } from "../../src/modules/checkout/domain/pricing.service";
+import { PricingService } from "../../src/modules/checkout/services/pricing.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
 import { ConflictError } from "@shared/utils/errors";
 

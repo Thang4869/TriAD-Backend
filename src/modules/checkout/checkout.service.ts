@@ -7,7 +7,7 @@ import {
 } from "@shared/utils/errors";
 import { ICheckoutRepository } from "./checkout.repository";
 import { CheckoutTransaction } from "./application/ports/checkout-transaction";
-import { PricingService } from "./domain/pricing.service";
+import { PricingService } from "./services/pricing.service";
 import { StockReservationService } from "./services/stock-reservation.service";
 import { Order } from "@modules/orders/domain/order.entity";
 import { withSpan } from "@core/tracing/span";

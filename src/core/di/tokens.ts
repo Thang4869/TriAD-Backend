@@ -35,7 +35,7 @@ import type { DashboardController } from "@modules/admin/dashboard/dashboard.con
 import type { NotificationsController } from "@modules/notifications/notifications.controller";
 import type { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-placed.handler";
 import type { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
-import type { PricingService } from "@/modules/checkout/domain/pricing.service";
+import type { PricingService } from "@/modules/checkout/services/pricing.service";
 import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
 import type { TokenStorePort } from "@modules/auth/application/ports/token-store.port";
 import type { PersistenceErrorClassifier } from "@shared/errors/persistence-error";

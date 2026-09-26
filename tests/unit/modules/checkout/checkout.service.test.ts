@@ -7,7 +7,7 @@ import {
   ConflictError,
   NotFoundError,
 } from "@shared/utils/errors";
-import { PricingService } from "@/modules/checkout/domain/pricing.service";
+import { PricingService } from "@/modules/checkout/services/pricing.service";
 
 const discount = {
   id: "d1",

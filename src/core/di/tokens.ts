@@ -35,13 +35,18 @@ import type { DashboardController } from "@modules/admin/dashboard/dashboard.con
 import type { NotificationsController } from "@modules/notifications/notifications.controller";
 import type { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-placed.handler";
 import type { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
-import type { PricingService } from "@/modules/checkout/domain/pricing.service";
+import type { PricingService } from "@/modules/checkout/services/pricing.service";
 import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
 import type { TokenStorePort } from "@modules/auth/application/ports/token-store.port";
 import type { PersistenceErrorClassifier } from "@shared/errors/persistence-error";
 import type { FeatureFlagPort } from "@shared/application/feature-flags/feature-flag.port";
 import type { ImageProcessingQueuePort } from "@modules/products/application/ports/image-processing-queue.port";
 import type { EmailQueuePort } from "@shared/application/ports/email-queue.port";
+import type { ProjectionHandler } from "@core/outbox/projection-handler";
+import type { ProjectionStore } from "@core/outbox/projection-store.port";
+import type { OutboxRelayStore } from "@core/outbox/outbox-relay-store.port";
+import type { HandlerExecutionTracker } from "@shared/domain/event-bus/event-bus";
+import type { OutboxRelay } from "@core/outbox/outbox-relay";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
@@ -70,6 +75,12 @@ export const TOKENS = {
   ImageStorage: createToken<IImageStorage>("ImageStorage"),
   EventBus: createToken<EventBus>("EventBus"),
   FeatureFlags: createToken<FeatureFlagPort>("FeatureFlags"),
+  ProjectionStore: createToken<ProjectionStore>("ProjectionStore"),
+  OutboxRelayStore: createToken<OutboxRelayStore>("OutboxRelayStore"),
+  HandlerExecutionTracker: createToken<HandlerExecutionTracker>(
+    "HandlerExecutionTracker",
+  ),
+  OutboxRelay: createToken<OutboxRelay>("OutboxRelay"),
 
   // Domain services
   AuthService: createToken<AuthService>("AuthService"),
@@ -100,6 +111,7 @@ export const TOKENS = {
   ),
 
   // Domain event handlers
+  ProjectionHandler: createToken<ProjectionHandler>("ProjectionHandler"),
   OrderPlacedHandler: createToken<OrderPlacedHandler>("OrderPlacedHandler"),
   OrderStatusChangedHandler: createToken<OrderStatusChangedHandler>(
     "OrderStatusChangedHandler",

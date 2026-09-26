@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { PricingService } from "@modules/checkout/domain/pricing.service";
+import { PricingService } from "@modules/checkout/services/pricing.service";
 import { ICheckoutRepository } from "@modules/checkout/checkout.repository";
 import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";

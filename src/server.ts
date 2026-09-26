@@ -5,10 +5,8 @@ import prisma from "@core/database/prisma";
 import redis from "@core/redis/client";
 import { config } from "./config";
 import { logger } from "@core/logger/winston";
-import { OutboxRelay } from "@core/outbox/outbox-relay";
-import { PrismaOutboxRelayStore } from "@core/outbox/prisma-outbox-relay.store";
-import { eventBus, imageJobProcessor } from "@/container";
-import { PrismaOutboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
+import { container, imageJobProcessor } from "@/container";
+import { TOKENS } from "@core/di/tokens";
 import { shutdownTracing } from "@core/tracing/tracing";
 import {
   startQueueInfrastructure,
@@ -19,11 +17,7 @@ const PORT = config.PORT;
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
-const outboxRelay = new OutboxRelay(
-  new PrismaOutboxRelayStore(),
-  new PrismaOutboxHandlerTracker(),
-  eventBus,
-);
+const outboxRelay = container.resolve(TOKENS.OutboxRelay);
 
 const startServer = async (): Promise<void> => {
   let databaseConnected = false;

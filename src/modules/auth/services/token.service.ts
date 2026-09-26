@@ -14,7 +14,28 @@ export interface PreAuthClaims {
   jti: string;
 }
 
+export interface AccessTokenClaims {
+  sub: string;
+  email: string;
+  role: string;
+}
+
 export class TokenService {
+  verifyAccessToken(token: string): AccessTokenClaims {
+    try {
+      return verifyToken<AccessTokenClaims>(token, TokenService.ACCESS_SECRET);
+    } catch {
+      throw new UnauthorizedError("Invalid token");
+    }
+  }
+
+  async isAccessTokenRevoked(token: string): Promise<boolean> {
+    const value = await this.tokenStore.get(
+      `${SECURITY.BLACKLIST_KEY_PREFIX}${token}`,
+    );
+
+    return value !== null;
+  }
   constructor(
     private readonly authRepository: IAuthRepository,
     private readonly tokenStore: TokenStorePort,

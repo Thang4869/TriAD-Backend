@@ -12,6 +12,7 @@ import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { logger } from "@core/logger/winston";
 import config from "@config";
+import { EventBus } from "@shared/domain/event-bus/event-bus";
 
 // ---------- Mocks ----------
 const mockEmailService = {
@@ -20,7 +21,12 @@ const mockEmailService = {
   enqueue: vi.fn().mockResolvedValue(undefined),
   enqueueWithRetry: vi.fn().mockResolvedValue(undefined),
 } as unknown as EmailService;
-
+const mockEventBus = {
+  publish: vi.fn().mockResolvedValue({
+    success: true,
+    failedHandlers: [],
+  }),
+} as unknown as EventBus;
 // Mock Redis
 vi.mock("@core/redis/client", () => ({
   default: {
@@ -106,6 +112,10 @@ describe("AuthService", () => {
   let tokenStore: ReturnType<typeof createTokenStore>;
 
   beforeEach(() => {
+    vi.mocked(mockEventBus.publish).mockResolvedValue({
+      success: true,
+      failedHandlers: [],
+    });
     vi.clearAllMocks();
     process.env.JWT_ACCESS_SECRET = "test-access-secret-32charslongenough";
     process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32charslongenough";
@@ -269,6 +279,7 @@ describe("AuthService", () => {
       mockTokenService,
       mockTwoFactorService,
       tokenStore,
+      mockEventBus,
     );
   });
 
@@ -657,6 +668,7 @@ describe("AuthService", () => {
         realTokenService,
         mockTwoFactorService,
         createTokenStore(),
+        mockEventBus,
       );
 
       const result = await serviceWithRealToken.refreshToken(validRefreshToken);
@@ -761,6 +773,7 @@ describe("AuthService", () => {
         realTokenService,
         mockTwoFactorService,
         createTokenStore(),
+        mockEventBus,
       );
       const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
@@ -849,6 +862,7 @@ describe("AuthService", () => {
         realTokenService,
         mockTwoFactorService,
         createTokenStore(),
+        mockEventBus,
       );
       const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
@@ -865,6 +879,7 @@ describe("AuthService", () => {
         realTokenService,
         mockTwoFactorService,
         createTokenStore(),
+        mockEventBus,
       );
       const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");

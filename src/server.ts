@@ -7,7 +7,7 @@ import { config } from "./config";
 import { logger } from "@core/logger/winston";
 import { OutboxRelay } from "@core/outbox/outbox-relay";
 import { PrismaOutboxRelayStore } from "@core/outbox/prisma-outbox-relay.store";
-import { imageJobProcessor } from "@/container";
+import { eventBus, imageJobProcessor } from "@/container";
 import { PrismaOutboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
 import { shutdownTracing } from "@core/tracing/tracing";
 import {
@@ -22,6 +22,7 @@ const SHUTDOWN_TIMEOUT_MS = 10_000;
 const outboxRelay = new OutboxRelay(
   new PrismaOutboxRelayStore(),
   new PrismaOutboxHandlerTracker(),
+  eventBus,
 );
 
 const startServer = async (): Promise<void> => {
@@ -73,7 +74,7 @@ const startServer = async (): Promise<void> => {
       forceShutdownTimer.unref();
 
       try {
-        outboxRelay.stop();
+        await outboxRelay.stop();
 
         await new Promise<void>((resolve, reject) => {
           server.close((error) => {
@@ -126,9 +127,8 @@ const startServer = async (): Promise<void> => {
   } catch (error) {
     logger.error("Failed to start server:", error);
 
-    outboxRelay.stop();
-
     const cleanupResults = await Promise.allSettled([
+      outboxRelay.stop(),
       stopQueueInfrastructure(),
       databaseConnected ? prisma.$disconnect() : Promise.resolve(),
       redisConnected ? redis.quit() : Promise.resolve(),
@@ -154,7 +154,5 @@ const startServer = async (): Promise<void> => {
     process.exit(1);
   }
 };
-
-void startServer();
 
 void startServer();

@@ -19,6 +19,7 @@ export class AdminProductService {
   constructor(
     private readonly repository: IProductsRepository,
     private readonly imageService: ProductImageService,
+    private readonly eventBus: EventBus,
   ) {}
 
   async adminFindAll(params: {
@@ -119,7 +120,7 @@ export class AdminProductService {
     const events = entity.pullEvents();
     for (const event of events) {
       try {
-        await EventBus.getInstance().publish(event);
+        await this.eventBus.publish(event);
       } catch (error) {
         logger.error(`Failed to publish ${event.eventName}`, { error });
       }

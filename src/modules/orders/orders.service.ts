@@ -44,6 +44,7 @@ export class OrdersService implements IOrdersService {
 
   constructor(
     private readonly repository: IOrdersRepository,
+    private readonly eventBus: EventBus,
     readPort: OrderHistoryReadPort = repository,
   ) {
     this.readPort = readPort;
@@ -95,7 +96,7 @@ export class OrdersService implements IOrdersService {
     }
     const updated = await this.repository.updateStatus(orderId, status);
 
-    await EventBus.getInstance()
+    await this.eventBus
       .publish(
         new OrderStatusChangedEvent(
           orderId,

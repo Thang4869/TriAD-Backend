@@ -7,16 +7,27 @@ import { config } from "./config";
 import { logger } from "@core/logger/winston";
 import { OutboxRelay } from "@core/outbox/outbox-relay";
 import { PrismaOutboxRelayStore } from "@core/outbox/prisma-outbox-relay.store";
-import { Worker } from "bullmq";
 import { imageJobProcessor } from "@/container";
 import { PrismaOutboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
+import { shutdownTracing } from "@core/tracing/tracing";
+import {
+  startQueueInfrastructure,
+  stopQueueInfrastructure,
+} from "@core/queue/bull";
 
 const PORT = config.PORT;
+
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+
 const outboxRelay = new OutboxRelay(
   new PrismaOutboxRelayStore(),
   new PrismaOutboxHandlerTracker(),
 );
-const startServer = async () => {
+
+const startServer = async (): Promise<void> => {
+  let databaseConnected = false;
+  let redisConnected = false;
+
   try {
     logger.info("Starting server with config:", {
       NODE_ENV: config.NODE_ENV,
@@ -25,14 +36,14 @@ const startServer = async () => {
     });
 
     await prisma.$connect();
+    databaseConnected = true;
     logger.info("Database connected successfully");
 
     await redis.ping();
+    redisConnected = true;
     logger.info("Redis connected successfully");
-    const imageWorker = new Worker("image", imageJobProcessor, {
-      connection: redis,
-      concurrency: 2,
-    });
+
+    startQueueInfrastructure(imageJobProcessor);
 
     const server = app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
@@ -42,41 +53,108 @@ const startServer = async () => {
 
     outboxRelay.start();
 
-    const shutdown = async (signal: string) => {
+    let isShuttingDown = false;
+
+    const shutdown = async (signal: string): Promise<void> => {
+      if (isShuttingDown) {
+        logger.warn(`Shutdown already in progress, ignoring ${signal}`);
+        return;
+      }
+
+      isShuttingDown = true;
+
       logger.info(`Received ${signal}, shutting down gracefully...`);
-      outboxRelay.stop();
-      server.close(async () => {
-        outboxRelay.stop();
 
-        server.close(async () => {
-          logger.info("HTTP server closed");
-
-          await imageWorker.close();
-          await prisma.$disconnect();
-          await redis.quit();
-
-          logger.info("Connections closed, exiting...");
-          process.exit(0);
-        });
-        logger.info("HTTP server closed");
-        await prisma.$disconnect();
-        await redis.quit();
-        logger.info("Connections closed, exiting...");
-        process.exit(0);
-      });
-
-      setTimeout(() => {
+      const forceShutdownTimer = setTimeout(() => {
         logger.error("Could not close connections gracefully, forcing exit...");
         process.exit(1);
-      }, 10000);
+      }, SHUTDOWN_TIMEOUT_MS);
+
+      forceShutdownTimer.unref();
+
+      try {
+        outboxRelay.stop();
+
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+
+            resolve();
+          });
+        });
+
+        logger.info("HTTP server closed");
+
+        await stopQueueInfrastructure();
+
+        await shutdownTracing();
+
+        if (databaseConnected) {
+          await prisma.$disconnect();
+          databaseConnected = false;
+          logger.info("Database disconnected");
+        }
+
+        if (redisConnected) {
+          await redis.quit();
+          redisConnected = false;
+          logger.info("Redis disconnected");
+        }
+
+        clearTimeout(forceShutdownTimer);
+
+        logger.info("Graceful shutdown completed");
+        process.exit(0);
+      } catch (error) {
+        clearTimeout(forceShutdownTimer);
+
+        logger.error("Error during graceful shutdown:", error);
+        process.exit(1);
+      }
     };
 
-    process.on("SIGTERM", () => shutdown("SIGTERM"));
-    process.on("SIGINT", () => shutdown("SIGINT"));
+    process.once("SIGTERM", () => {
+      void shutdown("SIGTERM");
+    });
+
+    process.once("SIGINT", () => {
+      void shutdown("SIGINT");
+    });
   } catch (error) {
     logger.error("Failed to start server:", error);
+
+    outboxRelay.stop();
+
+    const cleanupResults = await Promise.allSettled([
+      stopQueueInfrastructure(),
+      databaseConnected ? prisma.$disconnect() : Promise.resolve(),
+      redisConnected ? redis.quit() : Promise.resolve(),
+      shutdownTracing(),
+    ]);
+
+    const cleanupFailures = cleanupResults.filter(
+      (result) => result.status === "rejected",
+    );
+
+    if (cleanupFailures.length > 0) {
+      logger.error("Some startup resources failed to clean up", {
+        failures: cleanupFailures.map((result) =>
+          result.status === "rejected"
+            ? result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason)
+            : null,
+        ),
+      });
+    }
+
     process.exit(1);
   }
 };
 
-startServer();
+void startServer();
+
+void startServer();

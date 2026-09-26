@@ -71,11 +71,18 @@ import {
 import { PrismaErrorClassifier } from "@core/database/prisma-error-classifier";
 import { createErrorHandler } from "@shared/middlewares/error-handler.middleware";
 import { processImage } from "@/jobs/image-process.job";
+import { BullMqImageProcessingQueue } from "@modules/products/infrastructure/queue/bullmq-image-processing-queue";
+import { BullMqEmailQueue } from "@shared/infrastructure/queue/bullmq-email-queue";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
-container.register(TOKENS.EventBus, () => EventBus.getInstance());
-container.register(TOKENS.EmailService, () => new EmailService());
+container.register(TOKENS.EventBus, () => new EventBus());
+container.register(TOKENS.EmailQueue, () => new BullMqEmailQueue());
+
+container.register(
+  TOKENS.EmailService,
+  (c) => new EmailService(c.resolve(TOKENS.EmailQueue)),
+);
 container.register(TOKENS.ImageStorage, () => new CloudinaryImageStorage());
 
 // ---------- Repositories ----------
@@ -113,7 +120,11 @@ container.register(
 
 container.register(
   TOKENS.PricingService,
-  (c) => new PricingService(c.resolve(TOKENS.CheckoutRepository)),
+  (c) =>
+    new PricingService(
+      c.resolve(TOKENS.CheckoutRepository),
+      c.resolve(TOKENS.FeatureFlags),
+    ),
 );
 
 container.register(
@@ -121,6 +132,10 @@ container.register(
   () => new PrismaErrorClassifier(),
 );
 
+container.register(
+  TOKENS.ImageProcessingQueue,
+  () => new BullMqImageProcessingQueue(),
+);
 // ---------- Auth sub-services ----------
 container.register(
   TOKENS.TokenService,
@@ -151,11 +166,16 @@ container.register(
     new AdminProductService(
       c.resolve(TOKENS.ProductsRepository),
       c.resolve(TOKENS.ProductImageService),
+      c.resolve(TOKENS.EventBus),
     ),
 );
 container.register(
   TOKENS.ProductImageService,
-  (c) => new ProductImageService(c.resolve(TOKENS.ProductsRepository)),
+  (c) =>
+    new ProductImageService(
+      c.resolve(TOKENS.ProductsRepository),
+      c.resolve(TOKENS.ImageProcessingQueue),
+    ),
 );
 
 // ---------- Checkout sub-services ----------
@@ -174,6 +194,7 @@ container.register(
       c.resolve(TOKENS.TokenService),
       c.resolve(TOKENS.TwoFactorService),
       c.resolve(TOKENS.TokenStore),
+      c.resolve(TOKENS.EventBus),
     ),
 );
 container.register(
@@ -187,12 +208,16 @@ container.register(
       c.resolve(TOKENS.CheckoutRepository),
       c.resolve(TOKENS.PricingService),
       c.resolve(TOKENS.StockReservationService),
-      new EnvironmentFeatureFlags(),
+      c.resolve(TOKENS.FeatureFlags),
     ),
 );
 container.register(
   TOKENS.OrdersService,
-  (c) => new OrdersService(c.resolve(TOKENS.OrdersRepository)),
+  (c) =>
+    new OrdersService(
+      c.resolve(TOKENS.OrdersRepository),
+      c.resolve(TOKENS.EventBus),
+    ),
 );
 container.register(
   TOKENS.ReviewsService,
@@ -281,6 +306,8 @@ container.register(
   (c) => new OrderStatusChangedHandler(c.resolve(TOKENS.NotificationsService)),
 );
 
+container.register(TOKENS.FeatureFlags, () => new EnvironmentFeatureFlags());
+
 // ---------- Wire domain events to their handlers ----------
 const eventBus = container.resolve(TOKENS.EventBus);
 const orderPlacedHandler = container.resolve(TOKENS.OrderPlacedHandler);
@@ -339,11 +366,12 @@ export const notificationsController = container.resolve(
 );
 export const authMiddleware = createAuthMiddleware(
   container.resolve(TOKENS.AuthSessionUser),
-  container.resolve(TOKENS.TokenStore),
+  container.resolve(TOKENS.TokenService),
 );
+
 export const optionalAuthMiddleware = createOptionalAuthMiddleware(
   container.resolve(TOKENS.AuthSessionUser),
-  container.resolve(TOKENS.TokenStore),
+  container.resolve(TOKENS.TokenService),
 );
 export const errorHandler = createErrorHandler(
   container.resolve(TOKENS.PersistenceErrorClassifier),

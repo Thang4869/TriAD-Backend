@@ -3,18 +3,19 @@ import { AdminProductService } from "@modules/products/services/admin-product.se
 import { ProductImageService } from "@modules/products/services/product-image.service";
 import { IProductsRepository } from "@modules/products/products.repository";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
-import { imageQueue } from "@core/queue/bull";
 import { BadRequestError, NotFoundError } from "@shared/utils/errors";
 import { ProductAlreadyActiveError } from "@shared/domain/errors/domain-error";
+import { ImageProcessingQueuePort } from "@modules/products/application/ports/image-processing-queue.port";
 
 vi.mock("@core/logger/winston", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
-
-vi.mock("@core/queue/bull", () => ({
-  imageQueue: { add: vi.fn().mockResolvedValue(undefined) },
-}));
-
+const eventBus = {
+  publish: vi.fn().mockResolvedValue({
+    success: true,
+    failedHandlers: [],
+  }),
+} as unknown as EventBus;
 const PRODUCT = {
   id: "prod-1",
   name: "Áo thun",
@@ -53,10 +54,20 @@ function createRepository(
 }
 
 function createService(repository: IProductsRepository) {
-  const imageService = new ProductImageService(repository);
+  const imageProcessingQueue: ImageProcessingQueuePort = {
+    enqueueProductImage: vi.fn().mockResolvedValue(undefined),
+  };
+
+  const imageService = new ProductImageService(
+    repository,
+    imageProcessingQueue,
+  );
+
   return {
-    service: new AdminProductService(repository, imageService),
+    service: new AdminProductService(repository, imageService, eventBus),
     imageService,
+    imageProcessingQueue,
+    eventBus,
   };
 }
 
@@ -65,7 +76,7 @@ let publishSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.clearAllMocks();
   publishSpy = vi
-    .spyOn(EventBus.getInstance(), "publish")
+    .spyOn(eventBus, "publish")
     .mockResolvedValue({ success: true, failedHandlers: [] });
 });
 
@@ -309,19 +320,19 @@ describe("AdminProductService.restore", () => {
 });
 
 describe("ProductImageService (qua AdminProductService.uploadImage)", () => {
-  it("đẩy job vào imageQueue với buffer mã hoá base64", async () => {
+  it("đẩy job xử lý ảnh với buffer mã hoá base64", async () => {
     const repository = createRepository();
     const buffer = Buffer.from("fake-image");
 
-    const result = await createService(repository).service.uploadImage(
-      "prod-1",
-      buffer,
-    );
+    const { service, imageProcessingQueue } = createService(repository);
 
-    expect(imageQueue.add).toHaveBeenCalledWith("process-product-image", {
+    const result = await service.uploadImage("prod-1", buffer);
+
+    expect(imageProcessingQueue.enqueueProductImage).toHaveBeenCalledWith({
       productId: "prod-1",
       imageBuffer: buffer.toString("base64"),
     });
+
     expect(result).toEqual({ queued: true });
   });
 
@@ -330,9 +341,12 @@ describe("ProductImageService (qua AdminProductService.uploadImage)", () => {
       existsAndActive: vi.fn().mockResolvedValue(false),
     });
 
+    const { service, imageProcessingQueue } = createService(repository);
+
     await expect(
-      createService(repository).service.uploadImage("prod-1", Buffer.from("x")),
+      service.uploadImage("prod-1", Buffer.from("x")),
     ).rejects.toThrow(new NotFoundError("Product not found"));
-    expect(imageQueue.add).not.toHaveBeenCalled();
+
+    expect(imageProcessingQueue.enqueueProductImage).not.toHaveBeenCalled();
   });
 });

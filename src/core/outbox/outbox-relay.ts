@@ -25,6 +25,7 @@ const MAX_ATTEMPTS = 10;
 const LOCK_LEASE_SECONDS = 60;
 
 export class OutboxRelay {
+  private inFlightPoll: Promise<void> | null = null;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private readonly owner = crypto.randomUUID();
@@ -32,20 +33,34 @@ export class OutboxRelay {
   constructor(
     private readonly store: OutboxRelayStore,
     private readonly handlerTracker: HandlerExecutionTracker,
-    private readonly eventBus: EventBus = EventBus.getInstance(),
+    private readonly eventBus: EventBus,
   ) {}
 
   start(): void {
     if (this.timer) return;
+
     this.timer = setInterval(() => {
-      void this.pollOnce();
+      if (this.inFlightPoll) return;
+
+      this.inFlightPoll = this.pollOnce().finally(() => {
+        this.inFlightPoll = null;
+      });
     }, POLL_INTERVAL_MS).unref();
+
     logger.info("OutboxRelay started", { intervalMs: POLL_INTERVAL_MS });
   }
 
-  stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
+  async stop(): Promise<void> {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+
+    if (this.inFlightPoll) {
+      await this.inFlightPoll;
+    }
+
+    logger.info("OutboxRelay stopped");
   }
 
   async pollOnce(): Promise<void> {

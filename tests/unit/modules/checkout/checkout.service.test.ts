@@ -113,16 +113,11 @@ describe("CheckoutService", () => {
       reserveStock: vi.fn().mockResolvedValue(undefined),
     } as unknown as StockReservationService;
 
-    service = new CheckoutService(
-      repository,
-      pricingService,
-      mockStockService,
-      { isEnabled: () => false },
-    );
-
     vi.clearAllMocks();
     repository = createFakeRepository();
-    pricingService = new PricingService(repository);
+    pricingService = new PricingService(repository, {
+      isEnabled: () => true,
+    });
     service = new CheckoutService(
       repository,
       pricingService,

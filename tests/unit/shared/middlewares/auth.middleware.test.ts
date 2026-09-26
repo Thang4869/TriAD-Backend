@@ -1,15 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
 import {
   createAuthMiddleware,
   createOptionalAuthMiddleware,
 } from "@shared/middlewares/auth.middleware";
 import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
-import type { TokenStorePort } from "@modules/auth/application/ports/token-store.port";
+import type { AccessTokenVerifierPort } from "@modules/auth/application/ports/access-token-verifier.port";
 import { UnauthorizedError } from "@shared/utils/errors";
-
-const jwtVerifySpy = vi.spyOn(jwt, "verify");
 
 const VERIFIED_USER = {
   id: "user-1",
@@ -22,19 +19,16 @@ const mockedUsers: AuthSessionUserPort = {
   findById: vi.fn(),
 };
 
-const mockedTokenStore: TokenStorePort = {
-  get: vi.fn(),
-  set: vi.fn(),
-  delete: vi.fn(),
-  getAndDelete: vi.fn(),
-  setIfAbsent: vi.fn(),
+const mockedTokenService: AccessTokenVerifierPort = {
+  verifyAccessToken: vi.fn(),
+  isAccessTokenRevoked: vi.fn(),
 };
 
-const authMiddleware = createAuthMiddleware(mockedUsers, mockedTokenStore);
+const authMiddleware = createAuthMiddleware(mockedUsers, mockedTokenService);
 
 const optionalAuthMiddleware = createOptionalAuthMiddleware(
   mockedUsers,
-  mockedTokenStore,
+  mockedTokenService,
 );
 
 function createReq(overrides: Partial<Request> = {}): Request {
@@ -48,51 +42,61 @@ function createReq(overrides: Partial<Request> = {}): Request {
 describe("authMiddleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    jwtVerifySpy.mockReset();
-    process.env.JWT_ACCESS_SECRET = "test-secret";
-    vi.mocked(mockedTokenStore.get).mockResolvedValue(0 as never);
-    jwtVerifySpy.mockReturnValue({
+
+    vi.mocked(mockedTokenService.isAccessTokenRevoked).mockResolvedValue(false);
+
+    vi.mocked(mockedTokenService.verifyAccessToken).mockReturnValue({
       sub: "user-1",
       email: "a@b.com",
       role: "USER",
-    } as never);
+    });
+
     vi.mocked(mockedUsers.findById).mockResolvedValue(VERIFIED_USER as never);
   });
 
   it("gán req.user và gọi next() khi Bearer token hợp lệ", async () => {
-    const req = createReq({ headers: { authorization: "Bearer valid.token" } });
+    const req = createReq({
+      headers: { authorization: "Bearer valid.token" },
+    });
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(req, {} as Response, next);
 
-    expect(jwtVerifySpy).toHaveBeenCalledWith(
+    expect(mockedTokenService.isAccessTokenRevoked).toHaveBeenCalledWith(
       "valid.token",
-      expect.any(Buffer),
-      { algorithms: ["HS256"] },
     );
+    expect(mockedTokenService.verifyAccessToken).toHaveBeenCalledWith(
+      "valid.token",
+    );
+    expect(mockedUsers.findById).toHaveBeenCalledWith("user-1");
+
     expect(req.user).toEqual({
       id: "user-1",
       email: "a@b.com",
       role: "USER",
     });
+
     expect(next).toHaveBeenCalledWith();
   });
 
-  it("chấp nhận token lấy từ cookie accessToken khi không có header", async () => {
-    const req = createReq({ cookies: { accessToken: "cookie.token" } });
+  it("chấp nhận token từ cookie accessToken khi không có Bearer header", async () => {
+    const req = createReq({
+      cookies: { accessToken: "cookie.token" },
+    });
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(req, {} as Response, next);
 
-    expect(jwtVerifySpy).toHaveBeenCalledWith(
+    expect(mockedTokenService.isAccessTokenRevoked).toHaveBeenCalledWith(
       "cookie.token",
-      expect.any(Buffer),
-      { algorithms: ["HS256"] },
+    );
+    expect(mockedTokenService.verifyAccessToken).toHaveBeenCalledWith(
+      "cookie.token",
     );
     expect(next).toHaveBeenCalledWith();
   });
 
-  it("header không đúng định dạng 'Bearer ' bị bỏ qua, fallback sang cookie", async () => {
+  it("header không phải Bearer fallback sang cookie", async () => {
     const req = createReq({
       headers: { authorization: "Basic abc" },
       cookies: { accessToken: "cookie.token" },
@@ -100,99 +104,125 @@ describe("authMiddleware", () => {
 
     await authMiddleware(req, {} as Response, vi.fn());
 
-    expect(jwtVerifySpy).toHaveBeenCalledWith(
+    expect(mockedTokenService.verifyAccessToken).toHaveBeenCalledWith(
       "cookie.token",
-      expect.any(Buffer),
-      { algorithms: ["HS256"] },
     );
   });
 
-  it("không có token nào → UnauthorizedError 'No token provided'", async () => {
+  it("không có token → UnauthorizedError", async () => {
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(createReq(), {} as Response, next);
 
     const error = vi.mocked(next).mock
       .calls[0][0] as unknown as UnauthorizedError;
+
     expect(error).toBeInstanceOf(UnauthorizedError);
     expect(error.message).toBe("No token provided");
+
+    expect(mockedTokenService.isAccessTokenRevoked).not.toHaveBeenCalled();
+    expect(mockedTokenService.verifyAccessToken).not.toHaveBeenCalled();
   });
 
-  it("token nằm trong blacklist Redis → 'Token revoked', không verify JWT", async () => {
-    vi.mocked(mockedTokenStore.get).mockResolvedValue(1 as never);
+  it("token revoked → UnauthorizedError và không verify token", async () => {
+    vi.mocked(mockedTokenService.isAccessTokenRevoked).mockResolvedValue(true);
+
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(
-      createReq({ headers: { authorization: "Bearer revoked.token" } }),
+      createReq({
+        headers: { authorization: "Bearer revoked.token" },
+      }),
       {} as Response,
       next,
     );
 
-    expect(vi.mocked(mockedTokenStore.get)).toHaveBeenCalledWith(
-      "jwt:blacklist:revoked.token",
+    expect(mockedTokenService.isAccessTokenRevoked).toHaveBeenCalledWith(
+      "revoked.token",
     );
-    expect(jwtVerifySpy).not.toHaveBeenCalled();
+    expect(mockedTokenService.verifyAccessToken).not.toHaveBeenCalled();
+
     const error = vi.mocked(next).mock
       .calls[0][0] as unknown as UnauthorizedError;
+
+    expect(error).toBeInstanceOf(UnauthorizedError);
     expect(error.message).toBe("Token revoked");
   });
 
-  it("token sai chữ ký (JsonWebTokenError) được đổi thành 'Invalid token'", async () => {
-    jwtVerifySpy.mockImplementation(() => {
-      throw new jwt.JsonWebTokenError("invalid signature");
+  it("token không hợp lệ → truyền UnauthorizedError từ TokenService", async () => {
+    const error = new UnauthorizedError("Invalid token");
+
+    vi.mocked(mockedTokenService.verifyAccessToken).mockImplementation(() => {
+      throw error;
     });
+
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(
-      createReq({ headers: { authorization: "Bearer bad.token" } }),
+      createReq({
+        headers: { authorization: "Bearer bad.token" },
+      }),
       {} as Response,
       next,
     );
 
-    const error = vi.mocked(next).mock
-      .calls[0][0] as unknown as UnauthorizedError;
-    expect(error).toBeInstanceOf(UnauthorizedError);
-    expect(error.message).toBe("Invalid token");
+    expect(next).toHaveBeenCalledWith(error);
   });
 
-  it("user không tồn tại trong DB → Unauthorized", async () => {
-    vi.mocked(mockedUsers.findById).mockResolvedValue(null as never);
+  it("user không tồn tại → UnauthorizedError", async () => {
+    vi.mocked(mockedUsers.findById).mockResolvedValue(null);
+
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(
-      createReq({ headers: { authorization: "Bearer valid.token" } }),
+      createReq({
+        headers: { authorization: "Bearer valid.token" },
+      }),
       {} as Response,
       next,
     );
 
     const error = vi.mocked(next).mock
       .calls[0][0] as unknown as UnauthorizedError;
+
+    expect(error).toBeInstanceOf(UnauthorizedError);
     expect(error.message).toBe("User not found or not verified");
   });
 
-  it("user chưa verify email vẫn bị chặn dù token hợp lệ", async () => {
+  it("user chưa verify email → UnauthorizedError", async () => {
     vi.mocked(mockedUsers.findById).mockResolvedValue({
       ...VERIFIED_USER,
       isVerified: false,
     } as never);
+
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(
-      createReq({ headers: { authorization: "Bearer valid.token" } }),
+      createReq({
+        headers: { authorization: "Bearer valid.token" },
+      }),
       {} as Response,
       next,
     );
 
-    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(UnauthorizedError);
+    const error = vi.mocked(next).mock
+      .calls[0][0] as unknown as UnauthorizedError;
+
+    expect(error).toBeInstanceOf(UnauthorizedError);
+    expect(error.message).toBe("User not found or not verified");
   });
 
-  it("lỗi hạ tầng (DB sập) được truyền nguyên vẹn cho error handler", async () => {
+  it("lỗi hạ tầng được truyền nguyên vẹn cho error handler", async () => {
     const dbError = new Error("connection refused");
-    vi.mocked(mockedUsers.findById).mockRejectedValue(dbError as never);
+
+    vi.mocked(mockedUsers.findById).mockRejectedValue(dbError);
+
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(
-      createReq({ headers: { authorization: "Bearer valid.token" } }),
+      createReq({
+        headers: { authorization: "Bearer valid.token" },
+      }),
       {} as Response,
       next,
     );
@@ -204,44 +234,58 @@ describe("authMiddleware", () => {
 describe("optionalAuthMiddleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    jwtVerifySpy.mockReset();
-    process.env.JWT_ACCESS_SECRET = "test-secret";
-    vi.mocked(mockedTokenStore.get).mockResolvedValue(0 as never);
-    jwtVerifySpy.mockReturnValue({ sub: "user-1" } as never);
-    vi.mocked(mockedUsers.findById).mockResolvedValue({
-      id: "user-1",
+
+    vi.mocked(mockedTokenService.isAccessTokenRevoked).mockResolvedValue(false);
+
+    vi.mocked(mockedTokenService.verifyAccessToken).mockReturnValue({
+      sub: "user-1",
       email: "a@b.com",
       role: "USER",
-      isVerified: true,
-    } as never);
+    });
+
+    vi.mocked(mockedUsers.findById).mockResolvedValue(VERIFIED_USER as never);
   });
 
   it("gán req.user khi có token hợp lệ", async () => {
-    const req = createReq({ headers: { authorization: "Bearer valid.token" } });
+    const req = createReq({
+      headers: { authorization: "Bearer valid.token" },
+    });
     const next = vi.fn() as NextFunction;
 
     await optionalAuthMiddleware(req, {} as Response, next);
 
-    expect(req.user).toEqual({ id: "user-1", email: "a@b.com", role: "USER" });
+    expect(mockedTokenService.verifyAccessToken).toHaveBeenCalledWith(
+      "valid.token",
+    );
+
+    expect(req.user).toEqual({
+      id: "user-1",
+      email: "a@b.com",
+      role: "USER",
+    });
+
     expect(next).toHaveBeenCalledWith();
   });
 
-  it("không có header vẫn cho đi tiếp với req.user undefined (guest)", async () => {
+  it("không có header → tiếp tục như guest", async () => {
     const req = createReq();
     const next = vi.fn() as NextFunction;
 
     await optionalAuthMiddleware(req, {} as Response, next);
 
     expect(req.user).toBeUndefined();
-    expect(jwtVerifySpy).not.toHaveBeenCalled();
+    expect(mockedTokenService.verifyAccessToken).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith();
   });
 
-  it("token hỏng không làm fail request — nuốt lỗi và đi tiếp như guest", async () => {
-    jwtVerifySpy.mockImplementation(() => {
-      throw new jwt.JsonWebTokenError("bad");
+  it("token không hợp lệ → tiếp tục như guest", async () => {
+    vi.mocked(mockedTokenService.verifyAccessToken).mockImplementation(() => {
+      throw new UnauthorizedError("Invalid token");
     });
-    const req = createReq({ headers: { authorization: "Bearer bad.token" } });
+
+    const req = createReq({
+      headers: { authorization: "Bearer bad.token" },
+    });
     const next = vi.fn() as NextFunction;
 
     await optionalAuthMiddleware(req, {} as Response, next);
@@ -250,24 +294,49 @@ describe("optionalAuthMiddleware", () => {
     expect(next).toHaveBeenCalledWith();
   });
 
-  it("token bị blacklist thì bỏ qua, không gán req.user", async () => {
-    vi.mocked(mockedTokenStore.get).mockResolvedValue(1 as never);
+  it("token revoked → bỏ qua authentication", async () => {
+    vi.mocked(mockedTokenService.isAccessTokenRevoked).mockResolvedValue(true);
+
     const req = createReq({
       headers: { authorization: "Bearer revoked.token" },
     });
+    const next = vi.fn() as NextFunction;
 
-    await optionalAuthMiddleware(req, {} as Response, vi.fn());
+    await optionalAuthMiddleware(req, {} as Response, next);
 
-    expect(jwtVerifySpy).not.toHaveBeenCalled();
+    expect(mockedTokenService.verifyAccessToken).not.toHaveBeenCalled();
     expect(req.user).toBeUndefined();
+    expect(next).toHaveBeenCalledWith();
   });
 
-  it("user không còn tồn tại thì req.user vẫn undefined", async () => {
-    vi.mocked(mockedUsers.findById).mockResolvedValue(null as never);
-    const req = createReq({ headers: { authorization: "Bearer valid.token" } });
+  it("user không tồn tại → tiếp tục như guest", async () => {
+    vi.mocked(mockedUsers.findById).mockResolvedValue(null);
 
-    await optionalAuthMiddleware(req, {} as Response, vi.fn());
+    const req = createReq({
+      headers: { authorization: "Bearer valid.token" },
+    });
+    const next = vi.fn() as NextFunction;
+
+    await optionalAuthMiddleware(req, {} as Response, next);
 
     expect(req.user).toBeUndefined();
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("user chưa verify → tiếp tục như guest", async () => {
+    vi.mocked(mockedUsers.findById).mockResolvedValue({
+      ...VERIFIED_USER,
+      isVerified: false,
+    } as never);
+
+    const req = createReq({
+      headers: { authorization: "Bearer valid.token" },
+    });
+    const next = vi.fn() as NextFunction;
+
+    await optionalAuthMiddleware(req, {} as Response, next);
+
+    expect(req.user).toBeUndefined();
+    expect(next).toHaveBeenCalledWith();
   });
 });

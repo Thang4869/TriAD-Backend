@@ -10,31 +10,46 @@ import { logger } from "@core/logger/winston";
 
 const OTLP_ENDPOINT =
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://localhost:4318/v1/traces";
+
 const SERVICE_NAME = process.env.OTEL_SERVICE_NAME || "triad-backend";
 const isTracingEnabled = process.env.ENABLE_TRACING === "true";
 
+let sdk: NodeSDK | null = null;
+
 if (isTracingEnabled) {
-  const sdk = new NodeSDK({
+  sdk = new NodeSDK({
     resource: new Resource({
       [ATTR_SERVICE_NAME]: SERVICE_NAME,
       [ATTR_SERVICE_VERSION]: process.env.npm_package_version || "unknown",
     }),
-    traceExporter: new OTLPTraceExporter({ url: OTLP_ENDPOINT }),
+    traceExporter: new OTLPTraceExporter({
+      url: OTLP_ENDPOINT,
+    }),
     instrumentations: [
       getNodeAutoInstrumentations({
-        "@opentelemetry/instrumentation-fs": { enabled: false },
+        "@opentelemetry/instrumentation-fs": {
+          enabled: false,
+        },
       }),
     ],
   });
 
   sdk.start();
-  logger.info(`OpenTelemetry tracing started, exporting to ${OTLP_ENDPOINT}`);
 
-  process.on("SIGTERM", () => {
-    sdk.shutdown().finally(() => process.exit(0));
-  });
+  logger.info(`OpenTelemetry tracing started, exporting to ${OTLP_ENDPOINT}`);
 } else {
   logger.info(
     "OpenTelemetry tracing disabled (set ENABLE_TRACING=true to enable)",
   );
+}
+
+export async function shutdownTracing(): Promise<void> {
+  if (!sdk) {
+    return;
+  }
+
+  await sdk.shutdown();
+  sdk = null;
+
+  logger.info("OpenTelemetry tracing stopped");
 }

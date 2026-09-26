@@ -265,9 +265,43 @@ describe("OutboxRelay.start / stop", () => {
     expect(vi.mocked(store.claimBatch)).not.toHaveBeenCalled();
   });
 
-  it("stop() khi chưa start() không gây lỗi", () => {
-    expect(() =>
+  it("stop() khi chưa start() không gây lỗi", async () => {
+    await expect(
       new OutboxRelay(store, handlerTracker, createEventBus()).stop(),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
+  });
+
+  it("stop() chờ poll đang chạy hoàn thành trước khi resolve", async () => {
+    let resolveClaim: (value: unknown[]) => void = () => undefined;
+
+    vi.mocked(store.claimBatch).mockReturnValue(
+      new Promise((resolve) => {
+        resolveClaim = resolve;
+      }) as never,
+    );
+
+    const relay = new OutboxRelay(store, handlerTracker, createEventBus());
+
+    relay.start();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(store.claimBatch).toHaveBeenCalledTimes(1);
+
+    let stopped = false;
+
+    const stopPromise = relay.stop().then(() => {
+      stopped = true;
+    });
+
+    await Promise.resolve();
+
+    expect(stopped).toBe(false);
+
+    resolveClaim([]);
+
+    await stopPromise;
+
+    expect(stopped).toBe(true);
   });
 });

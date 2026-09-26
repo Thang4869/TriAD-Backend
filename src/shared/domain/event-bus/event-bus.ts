@@ -1,5 +1,4 @@
 import { DomainEvent } from "../events/domain-event";
-import { logger } from "@core/logger/winston";
 
 type EventHandler<T extends DomainEvent = DomainEvent> = (
   event: T,
@@ -30,18 +29,9 @@ export interface PublishResult {
 }
 
 export class EventBus {
-  private static instance: EventBus;
-  private handlers: Map<string, HandlerEntry[]> = new Map();
+  private readonly handlers: Map<string, HandlerEntry[]> = new Map();
 
-  private constructor() {}
-
-  static getInstance(): EventBus {
-    if (!EventBus.instance) {
-      EventBus.instance = new EventBus();
-    }
-    return EventBus.instance;
-  }
-
+  constructor() {}
   /**
    * @param handlerName Định danh ỔN ĐỊNH của handler (không đổi giữa các lần
    * deploy) — dùng làm khóa idempotency cùng với eventId. KHÔNG dùng
@@ -60,7 +50,6 @@ export class EventBus {
     this.handlers
       .get(eventName)!
       .push({ name: handlerName, fn: handler as EventHandler<DomainEvent> });
-    logger.debug(`Subscribed '${handlerName}' to event ${eventName}`);
   }
 
   async publish(
@@ -69,12 +58,8 @@ export class EventBus {
   ): Promise<PublishResult> {
     const handlers = this.handlers.get(event.eventName) || [];
     if (handlers.length === 0) {
-      logger.debug(`No handlers for event ${event.eventName}`);
       return { success: true, failedHandlers: [] };
     }
-    logger.info(
-      `Publishing event ${event.eventName} for aggregate ${event.aggregateId}`,
-    );
 
     const { eventId, tracker } = options;
     const failedHandlers: string[] = [];
@@ -84,9 +69,6 @@ export class EventBus {
         if (eventId && tracker) {
           const alreadyDone = await tracker.hasSucceeded(eventId, name);
           if (alreadyDone) {
-            logger.debug(
-              `Skipping handler '${name}' for event ${eventId} - already processed`,
-            );
             return;
           }
         }
@@ -99,10 +81,6 @@ export class EventBus {
           failedHandlers.push(name);
           const message =
             error instanceof Error ? error.message : String(error);
-          logger.error(`Error handling event ${event.eventName}`, {
-            handler: name,
-            error,
-          });
           if (eventId && tracker) {
             await tracker.recordResult(eventId, name, {
               success: false,

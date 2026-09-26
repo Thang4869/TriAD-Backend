@@ -7,6 +7,10 @@ import { IAuthRepository } from "../auth.repository";
 import { AuthUser } from "../application/ports/auth-user";
 import { AuthUserResponse } from "../auth.mapper";
 import config from "@config";
+import {
+  AccessTokenClaims,
+  AccessTokenVerifierPort,
+} from "../application/ports/access-token-verifier.port";
 
 export interface PreAuthClaims {
   sub: string;
@@ -14,7 +18,22 @@ export interface PreAuthClaims {
   jti: string;
 }
 
-export class TokenService {
+export class TokenService implements AccessTokenVerifierPort {
+  verifyAccessToken(token: string): AccessTokenClaims {
+    try {
+      return verifyToken<AccessTokenClaims>(token, TokenService.ACCESS_SECRET);
+    } catch {
+      throw new UnauthorizedError("Invalid token");
+    }
+  }
+
+  async isAccessTokenRevoked(token: string): Promise<boolean> {
+    const value = await this.tokenStore.get(
+      `${SECURITY.BLACKLIST_KEY_PREFIX}${token}`,
+    );
+
+    return value !== null;
+  }
   constructor(
     private readonly authRepository: IAuthRepository,
     private readonly tokenStore: TokenStorePort,

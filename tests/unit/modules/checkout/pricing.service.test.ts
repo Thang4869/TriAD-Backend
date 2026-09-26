@@ -7,7 +7,9 @@ import { BadRequestError, ConflictError } from "@shared/utils/errors";
 import { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
 
 const tx = {} as CheckoutTransaction;
-
+const enabledFeatureFlags = {
+  isEnabled: vi.fn().mockReturnValue(true),
+};
 function createRepository(
   overrides: Partial<ICheckoutRepository> = {},
 ): ICheckoutRepository {
@@ -36,7 +38,7 @@ describe("PricingService - thuế và phí ship", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("thuế = subtotal × TAX_RATE", async () => {
-    const service = new PricingService(createRepository());
+    const service = new PricingService(createRepository(), enabledFeatureFlags);
 
     const result = await service.calculatePricing(
       new Money(1_000_000),
@@ -50,7 +52,7 @@ describe("PricingService - thuế và phí ship", () => {
   });
 
   it("miễn phí ship khi subtotal vượt ngưỡng", async () => {
-    const service = new PricingService(createRepository());
+    const service = new PricingService(createRepository(), enabledFeatureFlags);
 
     const result = await service.calculatePricing(
       new Money(CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD + 1),
@@ -62,7 +64,7 @@ describe("PricingService - thuế và phí ship", () => {
   });
 
   it("đúng bằng ngưỡng thì vẫn tính phí ship (điều kiện là lớn hơn)", async () => {
-    const service = new PricingService(createRepository());
+    const service = new PricingService(createRepository(), enabledFeatureFlags);
 
     const result = await service.calculatePricing(
       new Money(CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD),
@@ -75,7 +77,7 @@ describe("PricingService - thuế và phí ship", () => {
 
   it("không có mã giảm giá thì discountAmount = 0 và discountCode undefined", async () => {
     const repository = createRepository();
-    const service = new PricingService(repository);
+    const service = new PricingService(repository, enabledFeatureFlags);
 
     const result = await service.calculatePricing(
       new Money(100_000),
@@ -99,11 +101,10 @@ describe("PricingService - mã giảm giá hợp lệ", () => {
         .mockResolvedValue(discount({ type: "PERCENTAGE", value: 10 })),
     });
 
-    const result = await new PricingService(repository).calculatePricing(
-      new Money(1_000_000),
-      "SALE10",
-      tx,
-    );
+    const result = await new PricingService(
+      repository,
+      enabledFeatureFlags,
+    ).calculatePricing(new Money(1_000_000), "SALE10", tx);
 
     expect(result.discountAmount.getValue()).toBe(100_000);
     expect(result.discountCode).toBe("SALE10");
@@ -116,11 +117,10 @@ describe("PricingService - mã giảm giá hợp lệ", () => {
         .mockResolvedValue(discount({ type: "FIXED", value: 50_000 })),
     });
 
-    const result = await new PricingService(repository).calculatePricing(
-      new Money(1_000_000),
-      "FIXED50",
-      tx,
-    );
+    const result = await new PricingService(
+      repository,
+      enabledFeatureFlags,
+    ).calculatePricing(new Money(1_000_000), "FIXED50", tx);
 
     expect(result.discountAmount.getValue()).toBe(50_000);
   });
@@ -132,11 +132,10 @@ describe("PricingService - mã giảm giá hợp lệ", () => {
         .mockResolvedValue(discount({ type: "FIXED", value: 999_999 })),
     });
 
-    const result = await new PricingService(repository).calculatePricing(
-      new Money(100_000),
-      "BIG",
-      tx,
-    );
+    const result = await new PricingService(
+      repository,
+      enabledFeatureFlags,
+    ).calculatePricing(new Money(100_000), "BIG", tx);
 
     expect(result.discountAmount.getValue()).toBe(100_000);
   });
@@ -146,7 +145,7 @@ describe("PricingService - mã giảm giá hợp lệ", () => {
       findDiscountByCode: vi.fn().mockResolvedValue(discount({ maxUses: 100 })),
     });
 
-    await new PricingService(repository).calculatePricing(
+    await new PricingService(repository, enabledFeatureFlags).calculatePricing(
       new Money(1_000_000),
       "SALE10",
       tx,
@@ -169,7 +168,7 @@ describe("PricingService - mã giảm giá hợp lệ", () => {
     });
 
     await expect(
-      new PricingService(repository).calculatePricing(
+      new PricingService(repository, enabledFeatureFlags).calculatePricing(
         new Money(1_000_000),
         "SALE10",
         tx,
@@ -185,7 +184,7 @@ describe("PricingService - mã giảm giá hợp lệ", () => {
     });
 
     await expect(
-      new PricingService(repository).calculatePricing(
+      new PricingService(repository, enabledFeatureFlags).calculatePricing(
         new Money(500_000),
         "SALE10",
         tx,
@@ -201,7 +200,7 @@ describe("PricingService - mã giảm giá không hợp lệ", () => {
     const repository = createRepository();
 
     await expect(
-      new PricingService(repository).calculatePricing(
+      new PricingService(repository, enabledFeatureFlags).calculatePricing(
         new Money(100_000),
         "KHONGCO",
         tx,
@@ -217,7 +216,7 @@ describe("PricingService - mã giảm giá không hợp lệ", () => {
     });
 
     await expect(
-      new PricingService(repository).calculatePricing(
+      new PricingService(repository, enabledFeatureFlags).calculatePricing(
         new Money(100_000),
         "SALE10",
         tx,
@@ -233,7 +232,7 @@ describe("PricingService - mã giảm giá không hợp lệ", () => {
     });
 
     await expect(
-      new PricingService(repository).calculatePricing(
+      new PricingService(repository, enabledFeatureFlags).calculatePricing(
         new Money(100_000),
         "SALE10",
         tx,
@@ -249,7 +248,7 @@ describe("PricingService - mã giảm giá không hợp lệ", () => {
     });
 
     await expect(
-      new PricingService(repository).calculatePricing(
+      new PricingService(repository, enabledFeatureFlags).calculatePricing(
         new Money(100_000),
         "SALE10",
         tx,
@@ -264,7 +263,7 @@ describe("PricingService - mã giảm giá không hợp lệ", () => {
     });
 
     await expect(
-      new PricingService(repository).calculatePricing(
+      new PricingService(repository, enabledFeatureFlags).calculatePricing(
         new Money(1_000_000),
         "SALE10",
         tx,
@@ -279,10 +278,40 @@ describe("PricingService - mã giảm giá không hợp lệ", () => {
         .mockResolvedValue(discount({ isActive: false })),
     });
 
-    await new PricingService(repository)
+    await new PricingService(repository, enabledFeatureFlags)
       .calculatePricing(new Money(100_000), "SALE10", tx)
       .catch(() => undefined);
 
     expect(repository.incrementDiscountUsage).not.toHaveBeenCalled();
+  });
+});
+
+describe("PricingService - feature flags", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("does not apply discount when DiscountSystem is disabled", async () => {
+    const repository = createRepository({
+      findDiscountByCode: vi.fn().mockResolvedValue(discount()),
+    });
+
+    const disabledFeatureFlags = {
+      isEnabled: vi.fn().mockReturnValue(false),
+    };
+
+    const service = new PricingService(repository, disabledFeatureFlags);
+
+    const result = await service.calculatePricing(
+      new Money(1_000_000),
+      "SALE10",
+      tx,
+    );
+
+    expect(result.discountAmount.getValue()).toBe(0);
+    expect(result.discountCode).toBeUndefined();
+
+    expect(repository.findDiscountByCode).not.toHaveBeenCalled();
+    expect(repository.incrementDiscountUsage).not.toHaveBeenCalled();
+
+    expect(disabledFeatureFlags.isEnabled).toHaveBeenCalled();
   });
 });

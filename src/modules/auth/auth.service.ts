@@ -40,6 +40,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly twoFactorService: TwoFactorService,
     private readonly tokenStore: TokenStorePort,
+    private readonly eventBus: EventBus,
   ) {}
 
   async generateTokens(user: AuthUser) {
@@ -179,7 +180,7 @@ export class AuthService {
     const events = user.pullEvents();
     for (const event of events) {
       try {
-        await EventBus.getInstance().publish(event);
+        await this.eventBus.publish(event);
       } catch (error) {
         logger.error(`Failed to publish ${event.eventName}`, { error });
       }

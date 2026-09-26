@@ -147,11 +147,3 @@ export class ProjectionHandler {
     });
   }
 }
-
-export const projectionHandler = new ProjectionHandler();
-
-export function isProjectionEvent(event: DomainEvent): boolean {
-  return (
-    event.eventName.startsWith("Order") || event.eventName.startsWith("Product")
-  );
-}

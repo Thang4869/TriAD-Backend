@@ -73,12 +73,31 @@ import { createErrorHandler } from "@shared/middlewares/error-handler.middleware
 import { processImage } from "@/jobs/image-process.job";
 import { BullMqImageProcessingQueue } from "@modules/products/infrastructure/queue/bullmq-image-processing-queue";
 import { BullMqEmailQueue } from "@shared/infrastructure/queue/bullmq-email-queue";
+import { PrismaProjectionStore } from "@core/outbox/prisma-projection.store";
+import { OutboxRelay } from "@core/outbox/outbox-relay";
+import { PrismaOutboxRelayStore } from "@core/outbox/prisma-outbox-relay.store";
+import { PrismaOutboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
 container.register(TOKENS.EventBus, () => new EventBus());
 container.register(TOKENS.EmailQueue, () => new BullMqEmailQueue());
+container.register(TOKENS.ProjectionStore, () => new PrismaProjectionStore());
+container.register(TOKENS.OutboxRelayStore, () => new PrismaOutboxRelayStore());
 
+container.register(
+  TOKENS.HandlerExecutionTracker,
+  () => new PrismaOutboxHandlerTracker(),
+);
+container.register(
+  TOKENS.OutboxRelay,
+  (c) =>
+    new OutboxRelay(
+      c.resolve(TOKENS.OutboxRelayStore),
+      c.resolve(TOKENS.HandlerExecutionTracker),
+      c.resolve(TOKENS.EventBus),
+    ),
+);
 container.register(
   TOKENS.EmailService,
   (c) => new EmailService(c.resolve(TOKENS.EmailQueue)),
@@ -298,6 +317,10 @@ container.register(
 
 // ---------- Domain event handlers ----------
 container.register(
+  TOKENS.ProjectionHandler,
+  (c) => new ProjectionHandler(c.resolve(TOKENS.ProjectionStore)),
+);
+container.register(
   TOKENS.OrderPlacedHandler,
   (c) => new OrderPlacedHandler(c.resolve(TOKENS.EmailService)),
 );
@@ -314,7 +337,7 @@ const orderPlacedHandler = container.resolve(TOKENS.OrderPlacedHandler);
 const orderStatusChangedHandler = container.resolve(
   TOKENS.OrderStatusChangedHandler,
 );
-const projectionHandler = new ProjectionHandler();
+const projectionHandler = container.resolve(TOKENS.ProjectionHandler);
 
 eventBus.subscribe(
   OrderPlacedEvent.eventName,

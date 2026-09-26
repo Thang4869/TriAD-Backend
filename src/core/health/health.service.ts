@@ -1,6 +1,4 @@
-import prisma from "@core/database/prisma";
-import { redis } from "@core/redis/client";
-import { imageQueue, emailQueue } from "@core/queue/bull";
+import type { HealthCheckPort } from "./health-check.port";
 import { logger } from "@core/logger/winston";
 
 export type ComponentStatus = "up" | "down";
@@ -48,21 +46,17 @@ async function measure(
 }
 
 export class HealthService {
+  constructor(private readonly healthCheck: HealthCheckPort) {}
   async checkDatabase(): Promise<ComponentHealth> {
-    return measure(() => prisma.$queryRaw`SELECT 1`);
+    return measure(() => this.healthCheck.checkDatabase());
   }
 
   async checkRedis(): Promise<ComponentHealth> {
-    return measure(async () => {
-      const pong = await redis.ping();
-      if (pong !== "PONG") throw new Error("Unexpected Redis ping response");
-    });
+    return measure(() => this.healthCheck.checkCache());
   }
 
   async checkQueues(): Promise<ComponentHealth> {
-    return measure(async () => {
-      await Promise.all([imageQueue.client, emailQueue.client]);
-    });
+    return measure(() => this.healthCheck.checkQueues());
   }
 
   async getReadiness(): Promise<ReadinessReport> {

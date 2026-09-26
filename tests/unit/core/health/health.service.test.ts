@@ -1,35 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { HealthService } from "@core/health/health.service";
-import prisma from "@core/database/prisma";
-import redis from "@core/redis/client";
+import type { HealthCheckPort } from "@core/health/health-check.port";
 
-vi.mock("@core/database/prisma", () => ({
-  default: {
-    $queryRaw: vi.fn().mockResolvedValue([{ "?column?": 1 }]),
-  },
-}));
-
-vi.mock("@core/redis/client", () => {
-  const mockRedis = { ping: vi.fn().mockResolvedValue("PONG") };
-  return {
-    default: mockRedis,
-    redis: mockRedis,
-  };
-});
-
-vi.mock("@core/queue/bull", () => ({
-  imageQueue: { client: { ping: vi.fn().mockResolvedValue("PONG") } },
-  emailQueue: { client: { ping: vi.fn().mockResolvedValue("PONG") } },
-}));
 vi.mock("@core/logger/winston", () => ({ logger: { warn: vi.fn() } }));
 
 describe("HealthService", () => {
   let service: HealthService;
+  let healthCheck: HealthCheckPort;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(redis.ping).mockResolvedValue("PONG");
-    service = new HealthService();
+
+    healthCheck = {
+      checkDatabase: vi.fn().mockResolvedValue(undefined),
+      checkCache: vi.fn().mockResolvedValue(undefined),
+      checkQueues: vi.fn().mockResolvedValue(undefined),
+    };
+
+    service = new HealthService(healthCheck);
   });
 
   it("should check database successfully", async () => {
@@ -39,11 +27,11 @@ describe("HealthService", () => {
   });
 
   it("should handle database timeout", async () => {
-    vi.mocked(prisma.$queryRaw).mockImplementationOnce(
+    vi.mocked(healthCheck.checkDatabase).mockImplementationOnce(
       () =>
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error("timeout")), 3000),
-        ) as any,
+        ),
     );
     const result = await service.checkDatabase();
     expect(result.status).toBe("down");
@@ -51,8 +39,8 @@ describe("HealthService", () => {
   });
 
   it("should report database down with 'Unknown error' when a non-Error value is thrown", async () => {
-    vi.mocked(prisma.$queryRaw).mockImplementationOnce(
-      () => Promise.reject("just a string, not an Error") as any,
+    vi.mocked(healthCheck.checkDatabase).mockRejectedValueOnce(
+      "just a string, not an Error",
     );
     const result = await service.checkDatabase();
     expect(result.status).toBe("down");
@@ -60,24 +48,18 @@ describe("HealthService", () => {
   });
 
   it("should check redis successfully", async () => {
-    vi.mocked(redis.ping).mockResolvedValue("PONG");
     const result = await service.checkRedis();
+
     expect(result.status).toBe("up");
+    expect(healthCheck.checkCache).toHaveBeenCalledOnce();
   });
 
   it("should handle redis failure", async () => {
-    vi.mocked(redis.ping).mockRejectedValueOnce(
+    vi.mocked(healthCheck.checkCache).mockRejectedValueOnce(
       new Error("connection refused"),
     );
     const result = await service.checkRedis();
     expect(result.status).toBe("down");
-  });
-
-  it("should mark redis down when ping responds with an unexpected value (not PONG)", async () => {
-    vi.mocked(redis.ping).mockResolvedValueOnce("WEIRD" as any);
-    const result = await service.checkRedis();
-    expect(result.status).toBe("down");
-    expect(result.error).toContain("Unexpected Redis ping response");
   });
 
   it("should check queues successfully", async () => {
@@ -85,20 +67,20 @@ describe("HealthService", () => {
     expect(result.status).toBe("up");
   });
 
-  it("should mark queues down when a queue client connection rejects", async () => {
-    const { imageQueue } = await import("@core/queue/bull");
-    const originalClient = imageQueue.client;
-    (imageQueue as any).client = Promise.reject(new Error("queue unreachable"));
+  it("should mark queues down when queue check fails", async () => {
+    vi.mocked(healthCheck.checkQueues).mockRejectedValueOnce(
+      new Error("queue unreachable"),
+    );
 
     const result = await service.checkQueues();
-    expect(result.status).toBe("down");
 
-    (imageQueue as any).client = originalClient;
+    expect(result.status).toBe("down");
+    expect(result.error).toBe("queue unreachable");
   });
 
   it("should return overall readiness", async () => {
-    vi.mocked(redis.ping).mockResolvedValue("PONG");
     const report = await service.getReadiness();
+
     expect(report.status).toBe("up");
     expect(report.components).toHaveProperty("database");
     expect(report.components).toHaveProperty("cache");
@@ -106,8 +88,10 @@ describe("HealthService", () => {
   });
 
   it("should mark overall as down if any component down", async () => {
-    vi.mocked(redis.ping).mockRejectedValueOnce(new Error("down"));
+    vi.mocked(healthCheck.checkCache).mockRejectedValueOnce(new Error("down"));
+
     const report = await service.getReadiness();
+
     expect(report.status).toBe("down");
   });
 });

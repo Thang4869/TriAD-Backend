@@ -1,40 +1,12 @@
 import prisma from "@core/database/prisma";
 import { Cart as PrismaCart, CartItem as PrismaCartItem } from "@prisma/client";
 
-import {
-  CartRecord,
+import type { ICartRepository } from "../../application/ports/cart.repository.port";
+import type {
   CartWithItems,
-  CartItemRecord,
   CartItemWithProduct,
   ProductStockInfo,
-} from "./application/ports/cart-models";
-
-// ---------- Repository contract ----------
-
-export interface ICartRepository {
-  findCartWithItems(userId: string): Promise<CartWithItems | null>;
-  createCartWithItems(userId: string): Promise<CartWithItems>;
-  findCartByUserId(userId: string): Promise<CartRecord | null>;
-  createCart(userId: string): Promise<CartRecord>;
-  findProductStockInfo(productId: string): Promise<ProductStockInfo | null>;
-
-  findCartItem(
-    cartId: string,
-    productId: string,
-  ): Promise<CartItemRecord | null>;
-  createCartItem(
-    cartId: string,
-    productId: string,
-    quantity: number,
-  ): Promise<CartItemWithProduct>;
-  updateCartItemQuantity(
-    itemId: string,
-    quantity: number,
-  ): Promise<CartItemWithProduct>;
-
-  deleteCartItem(itemId: string): Promise<void>;
-  deleteCartItemsByCartId(cartId: string): Promise<number>;
-}
+} from "../../application/ports/cart-models";
 
 // ---------- Prisma implementation ----------
 

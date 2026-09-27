@@ -1,5 +1,5 @@
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
-import { ICartRepository } from "./cart.repository";
+import type { ICartRepository } from "./application/ports/cart.repository.port";
 import {
   CartWithItems,
   CartItemWithProduct,

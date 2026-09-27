@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import prisma from "@core/database/prisma";
-import { PrismaCartRepository } from "@modules/cart/cart.repository";
+import { PrismaCartRepository } from "@modules/cart/infrastructure/repositories/prisma-cart.repository";
 
 describe("PrismaCartRepository (integration)", () => {
   const repository = new PrismaCartRepository();

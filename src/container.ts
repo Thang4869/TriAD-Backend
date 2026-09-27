@@ -20,7 +20,7 @@ import { PrismaOrdersRepository } from "@modules/orders/infrastructure/repositor
 import { OrdersService } from "@modules/orders/orders.service";
 import { OrdersController } from "@modules/orders/orders.controller";
 
-import { PrismaReviewsRepository } from "@modules/reviews/reviews.repository";
+import { PrismaReviewsRepository } from "@modules/reviews/infrastructure/repositories/prisma-reviews.repository";
 import { ReviewsService } from "@modules/reviews/reviews.service";
 import { ReviewsController } from "@modules/reviews/reviews.controller";
 

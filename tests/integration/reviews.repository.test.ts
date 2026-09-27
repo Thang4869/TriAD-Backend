@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import prisma from "@core/database/prisma";
-import { PrismaReviewsRepository } from "@modules/reviews/reviews.repository";
+import { PrismaReviewsRepository } from "@modules/reviews/infrastructure/repositories/prisma-reviews.repository";
 
 describe("PrismaReviewsRepository (integration)", () => {
   const repository = new PrismaReviewsRepository();

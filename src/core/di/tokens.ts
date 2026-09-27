@@ -4,7 +4,7 @@ import type { IAuthRepository } from "@modules/auth/application/ports/auth.repos
 import type { ICartRepository } from "@modules/cart/application/ports/cart.repository.port";
 import type { ICheckoutRepository } from "@modules/checkout/application/ports/checkout.repository.port";
 import type { IOrdersRepository } from "@modules/orders/application/ports/orders.repository.port";
-import type { IReviewsRepository } from "@modules/reviews/reviews.repository";
+import type { IReviewsRepository } from "@modules/reviews/application/ports/reviews.repository.port";
 import type { IUsersRepository } from "@modules/users/users.repository";
 import type { IWishlistRepository } from "@modules/wishlist/wishlist.repository";
 import type { IDashboardRepository } from "@modules/admin/dashboard/dashboard.repository";

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ReviewRecord } from "@modules/reviews/application/ports/review-models";
 import { ReviewsService } from "@modules/reviews/reviews.service";
-import { IReviewsRepository } from "@modules/reviews/reviews.repository";
+import type { IReviewsRepository } from "@modules/reviews/application/ports/reviews.repository.port";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 
 function createFakeRepository(

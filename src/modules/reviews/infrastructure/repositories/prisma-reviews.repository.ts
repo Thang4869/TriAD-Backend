@@ -1,10 +1,12 @@
 import prisma from "@core/database/prisma";
-import {
+
+import type { IReviewsRepository } from "../../application/ports/reviews.repository.port";
+import type {
   CreateReviewData,
   ReviewRecord,
   ReviewWithUser,
   ReviewWithUserAndProduct,
-} from "./application/ports/review-models";
+} from "../../application/ports/review-models";
 
 const REVIEWER_SELECT = {
   id: true,
@@ -12,30 +14,6 @@ const REVIEWER_SELECT = {
   lastName: true,
   email: true,
 } as const;
-
-// ---------- Repository contract ----------
-
-export interface IReviewsRepository {
-  findByProduct(
-    productId: string,
-    skip: number,
-    take: number,
-  ): Promise<ReviewWithUser[]>;
-  countByProduct(productId: string): Promise<number>;
-
-  productExists(productId: string): Promise<boolean>;
-  findByUserAndProduct(
-    userId: string,
-    productId: string,
-  ): Promise<ReviewRecord | null>;
-  create(data: CreateReviewData): Promise<ReviewWithUser>;
-
-  findById(reviewId: string): Promise<ReviewRecord | null>;
-  delete(reviewId: string): Promise<void>;
-
-  findAllAdmin(skip: number, take: number): Promise<ReviewWithUserAndProduct[]>;
-  count(): Promise<number>;
-}
 
 // ---------- Prisma implementation ----------
 

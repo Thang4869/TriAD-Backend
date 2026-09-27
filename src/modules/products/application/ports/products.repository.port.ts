@@ -1,4 +1,3 @@
-import type { ProductCatalogSort } from "../product-catalog-read.port";
 import type { ProductFilter } from "../../domain/specifications/product-specification";
 import type {
   ProductIdRecord,
@@ -7,7 +6,9 @@ import type {
   ProductWithRatingReviews,
   ProductWithShortReviews,
 } from "../product-models";
+export type ProductCatalogSortOrder = "asc" | "desc";
 
+export type ProductCatalogSort = Record<string, ProductCatalogSortOrder>;
 export interface ProductListQuery {
   where: ProductFilter;
   orderBy: ProductCatalogSort;

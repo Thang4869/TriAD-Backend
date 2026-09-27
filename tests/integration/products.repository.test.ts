@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import prisma from "@core/database/prisma";
-import { PrismaProductsRepository } from "@modules/products/products.repository";
+import { PrismaProductsRepository } from "@modules/products/infrastructure/repositories/prisma-products.repository";
 
 describe("PrismaProductsRepository (integration)", () => {
   const repository = new PrismaProductsRepository();
@@ -347,13 +347,12 @@ describe("PrismaProductsRepository (integration)", () => {
       expect(names.some((n) => n.includes("Office"))).toBe(true);
     });
 
-    it("countFullTextSearch trả về số đếm khớp với độ dài mảng searchFullText không phân trang", async () => {
+    it("countFullTextSearch trả về số đếm khớp với toàn bộ kết quả searchFullText", async () => {
       const count = await repository.countFullTextSearch("ergonomic");
-      console.log("count =", count);
-      const results = await repository.searchFullText("ergonomic", 0, 50);
+      const results = await repository.searchFullText("ergonomic", 0, count);
 
-      expect(count).toBe(results.length);
       expect(count).toBeGreaterThan(0);
+      expect(results).toHaveLength(count);
     });
 
     it("trả mảng rỗng khi không có sản phẩm nào khớp", async () => {

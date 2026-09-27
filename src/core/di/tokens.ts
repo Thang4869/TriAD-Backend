@@ -5,7 +5,7 @@ import type { ICartRepository } from "@modules/cart/application/ports/cart.repos
 import type { ICheckoutRepository } from "@modules/checkout/application/ports/checkout.repository.port";
 import type { IOrdersRepository } from "@modules/orders/application/ports/orders.repository.port";
 import type { IReviewsRepository } from "@modules/reviews/application/ports/reviews.repository.port";
-import type { IUsersRepository } from "@modules/users/users.repository";
+import type { IUsersRepository } from "@modules/users/application/ports/users.repository.port";
 import type { IWishlistRepository } from "@modules/wishlist/wishlist.repository";
 import type { IDashboardRepository } from "@modules/admin/dashboard/dashboard.repository";
 import type { INotificationsRepository } from "@modules/notifications/notifications.repository";

@@ -24,7 +24,7 @@ import { PrismaReviewsRepository } from "@modules/reviews/infrastructure/reposit
 import { ReviewsService } from "@modules/reviews/reviews.service";
 import { ReviewsController } from "@modules/reviews/reviews.controller";
 
-import { PrismaUsersRepository } from "@modules/users/users.repository";
+import { PrismaUsersRepository } from "@modules/users/infrastructure/repositories/prisma-users.repository";
 import { UsersService } from "@modules/users/users.service";
 import { UsersController } from "@modules/users/users.controller";
 

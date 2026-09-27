@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import prisma from "@core/database/prisma";
-import { PrismaUsersRepository } from "@modules/users/users.repository";
+import { PrismaUsersRepository } from "@modules/users/infrastructure/repositories/prisma-users.repository";
 
 describe("PrismaUsersRepository (integration)", () => {
   const repository = new PrismaUsersRepository();

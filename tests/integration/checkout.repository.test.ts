@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import prisma from "@core/database/prisma";
-import { PrismaCheckoutRepository } from "@modules/checkout/checkout.repository";
+import { PrismaCheckoutRepository } from "@modules/checkout/infrastructure/repositories/prisma-checkout.repository";
 import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import { Money } from "@shared/value-objects/money";
 

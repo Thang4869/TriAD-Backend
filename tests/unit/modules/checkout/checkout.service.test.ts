@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CheckoutService } from "@modules/checkout/checkout.service";
-import { ICheckoutRepository } from "@modules/checkout/checkout.repository";
+import { ICheckoutRepository } from "@modules/checkout/application/ports/checkout.repository.port";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
 import {
   BadRequestError,

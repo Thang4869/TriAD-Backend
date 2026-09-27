@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PricingService } from "@modules/checkout/services/pricing.service";
-import { ICheckoutRepository } from "@modules/checkout/checkout.repository";
+import { ICheckoutRepository } from "@modules/checkout/application/ports/checkout.repository.port";
 import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
 import { BadRequestError, ConflictError } from "@shared/utils/errors";

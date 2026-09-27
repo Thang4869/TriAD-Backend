@@ -12,7 +12,7 @@ import { PrismaCartRepository } from "@modules/cart/cart.repository";
 import { CartService } from "@modules/cart/cart.service";
 import { CartController } from "@modules/cart/cart.controller";
 
-import { PrismaCheckoutRepository } from "@modules/checkout/checkout.repository";
+import { PrismaCheckoutRepository } from "@modules/checkout/infrastructure/repositories/prisma-checkout.repository";
 import { CheckoutService } from "@modules/checkout/checkout.service";
 import { CheckoutController } from "@modules/checkout/checkout.controller";
 

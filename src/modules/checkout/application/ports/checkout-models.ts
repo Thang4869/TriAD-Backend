@@ -88,3 +88,27 @@ export interface OrderWithItems {
   version: number;
   items: CheckoutOrderItem[];
 }
+
+export interface SavedCheckoutOrder {
+  id: string;
+  orderNumber: string;
+  userId: string;
+  status: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  subtotal: number;
+  tax: number;
+  shippingFee: number;
+  total: number;
+  discountAmount: number;
+  discountCode: string | null;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  customerAddress: string;
+  notes: string | null;
+  idempotencyKey: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  version: number;
+}

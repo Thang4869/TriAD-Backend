@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { DashboardService } from "@modules/admin/dashboard/dashboard.service";
-import { IDashboardRepository } from "@modules/admin/dashboard/dashboard.repository";
+import type { IDashboardRepository } from "@modules/admin/dashboard/application/ports/dashboard.repository.port";
 import { OrderStatus } from "@prisma/client";
 
 function createFakeRepository(

@@ -32,7 +32,7 @@ import { PrismaWishlistRepository } from "@modules/wishlist/infrastructure/repos
 import { WishlistService } from "@modules/wishlist/wishlist.service";
 import { WishlistController } from "@modules/wishlist/wishlist.controller";
 
-import { PrismaDashboardRepository } from "@modules/admin/dashboard/dashboard.repository";
+import { PrismaDashboardRepository } from "@modules/admin/dashboard/infrastructure/repositories/prisma-dashboard.repository";
 import { DashboardService } from "@modules/admin/dashboard/dashboard.service";
 import { DashboardController } from "@modules/admin/dashboard/dashboard.controller";
 

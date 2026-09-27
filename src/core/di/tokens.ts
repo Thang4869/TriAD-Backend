@@ -7,7 +7,7 @@ import type { IOrdersRepository } from "@modules/orders/application/ports/orders
 import type { IReviewsRepository } from "@modules/reviews/application/ports/reviews.repository.port";
 import type { IUsersRepository } from "@modules/users/application/ports/users.repository.port";
 import type { IWishlistRepository } from "@modules/wishlist/application/ports/wishlist.repository.port";
-import type { IDashboardRepository } from "@modules/admin/dashboard/dashboard.repository";
+import type { IDashboardRepository } from "@modules/admin/dashboard/application/ports/dashboard.repository.port";
 import type { INotificationsRepository } from "@modules/notifications/application/ports/notifications.repository.port";
 
 import type { AuthService } from "@modules/auth/auth.service";

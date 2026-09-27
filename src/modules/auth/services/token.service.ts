@@ -3,7 +3,7 @@ import { TokenStorePort } from "../application/ports/token-store.port";
 import { SECURITY } from "@shared/constants/security.constant";
 import { signToken, verifyToken, decodeToken } from "@shared/utils/jwt";
 import { UnauthorizedError } from "@shared/utils/errors";
-import { IAuthRepository } from "../auth.repository";
+import type { IAuthRepository } from "../application/ports/auth.repository.port";
 import { AuthUser } from "../application/ports/auth-user";
 import { AuthUserResponse } from "../auth.mapper";
 import config from "@config";

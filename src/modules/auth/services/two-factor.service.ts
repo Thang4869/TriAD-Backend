@@ -2,7 +2,7 @@ import speakeasy from "speakeasy";
 import { BadRequestError } from "@shared/utils/errors";
 import { UnauthorizedError } from "@shared/utils/errors";
 import { TokenStorePort } from "../application/ports/token-store.port";
-import { IAuthRepository } from "../auth.repository";
+import type { IAuthRepository } from "../application/ports/auth.repository.port";
 import { TokenService } from "./token.service";
 import { AuthUserResponse } from "../auth.mapper";
 import config from "@config";

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import speakeasy from "speakeasy";
 import { TwoFactorService } from "@modules/auth/services/two-factor.service";
 import { TokenService } from "@modules/auth/services/token.service";
-import type { IAuthRepository } from "@modules/auth/auth.repository";
+import type { IAuthRepository } from "@modules/auth/application/ports/auth.repository.port";
 import config from "@config";
 import { encryptTotpSecret } from "@modules/auth/services/totp-secret.crypto";
 

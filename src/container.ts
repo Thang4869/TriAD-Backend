@@ -4,7 +4,7 @@ import { TOKENS } from "@core/di/tokens";
 import { PrismaProductsRepository } from "@modules/products/products.repository";
 import { ProductsController } from "@modules/products/products.controller";
 
-import { PrismaAuthRepository } from "@modules/auth/auth.repository";
+import { PrismaAuthRepository } from "@modules/auth/infrastructure/repositories/prisma-auth.repository";
 import { AuthService } from "@modules/auth/auth.service";
 import { AuthController } from "@modules/auth/auth.controller";
 

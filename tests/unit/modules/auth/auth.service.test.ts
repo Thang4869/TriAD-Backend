@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import bcrypt from "bcrypt";
 import { User } from "@prisma/client";
 import { AuthService } from "@modules/auth/auth.service";
-import { IAuthRepository } from "@modules/auth/auth.repository";
+import { IAuthRepository } from "@modules/auth/application/ports/auth.repository.port";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
 import redis from "@core/redis/client";
 import speakeasy from "speakeasy";

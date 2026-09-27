@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TokenService } from "@modules/auth/services/token.service";
-import type { IAuthRepository } from "@modules/auth/auth.repository";
+import type { IAuthRepository } from "@modules/auth/application/ports/auth.repository.port";
 import { AuthRefreshTokenWithUser } from "@modules/auth/application/ports/auth-refresh-token";
 import { UnauthorizedError } from "@shared/utils/errors";
 import { signToken, verifyToken, decodeToken } from "@shared/utils/jwt";

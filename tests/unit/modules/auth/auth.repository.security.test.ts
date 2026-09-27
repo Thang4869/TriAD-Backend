@@ -10,7 +10,7 @@ const { prismaMock } = vi.hoisted(() => ({
 
 vi.mock("@core/database/prisma", () => ({ default: prismaMock }));
 
-import { PrismaAuthRepository } from "@modules/auth/auth.repository";
+import { PrismaAuthRepository } from "@modules/auth/infrastructure/repositories/prisma-auth.repository";
 
 describe("refresh token persistence", () => {
   beforeEach(() => vi.clearAllMocks());

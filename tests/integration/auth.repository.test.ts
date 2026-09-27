@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import prisma from "@core/database/prisma";
-import { PrismaAuthRepository } from "@modules/auth/auth.repository";
+import { PrismaAuthRepository } from "@modules/auth/infrastructure/repositories/prisma-auth.repository";
 
 describe("PrismaAuthRepository (integration)", () => {
   const repository = new PrismaAuthRepository();

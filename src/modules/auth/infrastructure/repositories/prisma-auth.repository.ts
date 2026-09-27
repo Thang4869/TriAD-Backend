@@ -5,73 +5,19 @@ import {
   RefreshToken as PrismaRefreshToken,
 } from "@prisma/client";
 
-import { AuthUser } from "./application/ports/auth-user";
-import {
-  AuthRefreshToken,
-  AuthRefreshTokenWithUser,
-} from "./application/ports/auth-refresh-token";
-import {
+import type {
+  CreateOAuthUserData,
+  CreateUserData,
+  IAuthRepository,
+} from "../../application/ports/auth.repository.port";
+import type {
   AuthSessionUser,
   AuthSessionUserPort,
-} from "./application/ports/auth-session-user.port";
+} from "../../application/ports/auth-session-user.port";
+import type { AuthUser } from "../../application/ports/auth-user";
 
-export interface CreateUserData {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  phone?: string;
-}
-
-export interface CreateOAuthUserData {
-  email: string;
-  firstName: string;
-  lastName: string;
-}
-
-export function hashRefreshToken(token: string): string {
+function hashRefreshToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
-}
-
-// ---------- Repository contract ----------
-
-export interface IAuthRepository {
-  findUserByEmail(email: string): Promise<AuthUser | null>;
-  findUserById(id: string): Promise<AuthUser | null>;
-  createUser(data: CreateUserData): Promise<AuthUser>;
-  createOAuthUser(data: CreateOAuthUserData): Promise<AuthUser>;
-  createCartForUser(userId: string): Promise<void>;
-  updateUser(id: string, data: Partial<AuthUser>): Promise<AuthUser>;
-
-  createRefreshToken(
-    token: string,
-    userId: string,
-    familyId: string,
-    expiresAt: Date,
-  ): Promise<AuthRefreshToken>;
-
-  findRefreshTokenByToken(token: string): Promise<AuthRefreshToken | null>;
-
-  revokeRefreshToken(id: string): Promise<void>;
-
-  findRefreshTokenWithUser(
-    token: string,
-  ): Promise<AuthRefreshTokenWithUser | null>;
-
-  deleteRefreshTokenById(id: string): Promise<void>;
-  deleteRefreshTokenByToken(token: string): Promise<void>;
-  deleteRefreshTokensByUserId(userId: string): Promise<void>;
-
-  findRefreshTokenByFamilyAndToken(
-    familyId: string,
-    token: string,
-  ): Promise<AuthRefreshToken | null>;
-
-  findActiveRefreshTokenByFamily(
-    familyId: string,
-  ): Promise<AuthRefreshToken | null>;
-
-  revokeAllTokensInFamily(familyId: string): Promise<void>;
 }
 
 // ---------- Prisma implementation ----------

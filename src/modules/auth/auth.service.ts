@@ -4,11 +4,11 @@ import { logger } from "@core/logger/winston";
 import { AuthUser } from "./application/ports/auth-user";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
 import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
-import {
-  IAuthRepository,
-  CreateUserData,
+import type {
   CreateOAuthUserData,
-} from "./auth.repository";
+  CreateUserData,
+  IAuthRepository,
+} from "./application/ports/auth.repository.port";
 import { EmailService } from "@shared/services/email.service";
 import { TokenService } from "./services/token.service";
 import { TwoFactorService } from "./services/two-factor.service";

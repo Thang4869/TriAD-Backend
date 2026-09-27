@@ -1,5 +1,5 @@
 import { createToken } from "./container";
-import type { IProductsRepository } from "@modules/products/products.repository";
+import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
 import type { IAuthRepository } from "@modules/auth/application/ports/auth.repository.port";
 import type { ICartRepository } from "@modules/cart/application/ports/cart.repository.port";
 import type { ICheckoutRepository } from "@modules/checkout/application/ports/checkout.repository.port";

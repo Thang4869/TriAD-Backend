@@ -1,4 +1,4 @@
-import { IProductsRepository } from "../products.repository";
+import type { IProductsRepository } from "./ports/products.repository.port";
 import { ProductFilter } from "../domain/specifications/product-specification";
 
 export type ProductCatalogReadPort = Pick<

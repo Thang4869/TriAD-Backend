@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AdminProductService } from "@modules/products/services/admin-product.service";
 import { ProductImageService } from "@modules/products/services/product-image.service";
-import { IProductsRepository } from "@modules/products/products.repository";
+import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { BadRequestError, NotFoundError } from "@shared/utils/errors";
 import { ProductAlreadyActiveError } from "@shared/domain/errors/domain-error";

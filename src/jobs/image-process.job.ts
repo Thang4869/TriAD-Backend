@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import type { IProductsRepository } from "@modules/products/products.repository";
+import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
 import { logger } from "@core/logger/winston";
 import type { IImageStorage } from "@core/storage/cloudinary";
 

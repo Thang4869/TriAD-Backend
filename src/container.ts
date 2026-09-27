@@ -1,7 +1,7 @@
 import { Container, Lifetime } from "@core/di/container";
 import { TOKENS } from "@core/di/tokens";
 
-import { PrismaProductsRepository } from "@modules/products/products.repository";
+import { PrismaProductsRepository } from "@modules/products/infrastructure/repositories/prisma-products.repository";
 import { ProductsController } from "@modules/products/products.controller";
 
 import { PrismaAuthRepository } from "@modules/auth/infrastructure/repositories/prisma-auth.repository";

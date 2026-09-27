@@ -1,82 +1,22 @@
 import prisma from "@core/database/prisma";
 import { Prisma } from "@prisma/client";
-import { ProductCatalogSort } from "./application/product-catalog-read.port";
-import { ProductFilter } from "./domain/specifications/product-specification";
-import {
+
+import type {
+  CategoryCount,
+  CreateProductData,
+  FullTextSearchResult,
+  IProductsRepository,
+  ProductListQuery,
+  UpdateProductData,
+} from "../../application/ports/products.repository.port";
+import type {
   ProductIdRecord,
   ProductRecord,
   ProductWithFullReviews,
   ProductWithRatingReviews,
   ProductWithShortReviews,
-} from "./application/product-models";
-
-// ---------- Shared query/result types ----------
-
-export interface ProductListQuery {
-  where: ProductFilter;
-  orderBy: ProductCatalogSort;
-  skip: number;
-  take: number;
-}
-
-export interface CategoryCount {
-  category: string;
-  count: number;
-}
-
-export interface CreateProductData {
-  name: string;
-  description: string;
-  price: number;
-  stock: number;
-  category: string;
-  images: string[];
-  slug: string;
-}
-
-export interface FullTextSearchResult {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  stock: number;
-  category: string;
-  images: string[];
-  slug: string;
-  rank: number;
-}
-
-export type UpdateProductData = Partial<
-  CreateProductData & { isActive: boolean }
->;
-
-// ---------- Repository contract ----------
-
-export interface IProductsRepository {
-  findManyWithRatings(
-    query: ProductListQuery,
-  ): Promise<ProductWithRatingReviews[]>;
-  count(where: ProductFilter): Promise<number>;
-  findByIdWithReviews(id: string): Promise<ProductWithFullReviews | null>;
-  findBySlugWithReviews(slug: string): Promise<ProductWithShortReviews | null>;
-  findBySlugId(slug: string): Promise<ProductIdRecord | null>;
-
-  groupByCategory(): Promise<CategoryCount[]>;
-
-  findManyAdmin(query: ProductListQuery): Promise<ProductRecord[]>;
-  findById(id: string): Promise<ProductRecord | null>;
-  create(data: CreateProductData): Promise<ProductRecord>;
-
-  update(id: string, data: UpdateProductData): Promise<ProductRecord>;
-  setActive(id: string, isActive: boolean): Promise<ProductRecord>;
-  existsAndActive(id: string): Promise<boolean>;
-  searchFullText(
-    query: string,
-    skip: number,
-    take: number,
-  ): Promise<FullTextSearchResult[]>;
-  countFullTextSearch(query: string): Promise<number>;
-}
+} from "../../application/product-models";
+import type { ProductFilter } from "../../domain/specifications/product-specification";
 
 // ---------- Prisma implementation ----------
 

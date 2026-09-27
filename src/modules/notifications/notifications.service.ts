@@ -4,7 +4,7 @@ import {
   resolvePagination,
 } from "@shared/constants/pagination.constant";
 import { NotificationType } from "@shared/constants/notification-type.enum";
-import { INotificationsRepository } from "./notifications.repository";
+import type { INotificationsRepository } from "./application/ports/notifications.repository.port";
 
 export interface INotificationsService {
   getNotifications(

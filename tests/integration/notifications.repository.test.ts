@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import prisma from "@core/database/prisma";
-import { PrismaNotificationsRepository } from "@modules/notifications/notifications.repository";
+import { PrismaNotificationsRepository } from "@modules/notifications/infrastructure/repositories/prisma-notifications.repository";
 
 describe("PrismaNotificationsRepository (integration)", () => {
   const repository = new PrismaNotificationsRepository();

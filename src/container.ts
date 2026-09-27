@@ -36,7 +36,7 @@ import { PrismaDashboardRepository } from "@modules/admin/dashboard/dashboard.re
 import { DashboardService } from "@modules/admin/dashboard/dashboard.service";
 import { DashboardController } from "@modules/admin/dashboard/dashboard.controller";
 
-import { PrismaNotificationsRepository } from "@modules/notifications/notifications.repository";
+import { PrismaNotificationsRepository } from "@modules/notifications/infrastructure/repositories/prisma-notifications.repository";
 import { NotificationsService } from "@modules/notifications/notifications.service";
 import { NotificationsController } from "@modules/notifications/notifications.controller";
 

@@ -1,5 +1,5 @@
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
-import { IReviewsRepository } from "./reviews.repository";
+import type { IReviewsRepository } from "./application/ports/reviews.repository.port";
 
 export interface IReviewsService {
   getReviewsByProduct(

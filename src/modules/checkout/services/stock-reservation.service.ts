@@ -1,4 +1,4 @@
-import { ICheckoutRepository } from "../checkout.repository";
+import { ICheckoutRepository } from "../application/ports/checkout.repository.port";
 import { CheckoutTransaction } from "../application/ports/checkout-transaction";
 import {
   NotFoundError,

@@ -1,5 +1,5 @@
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
-import { IUsersRepository } from "@modules/users/users.repository";
+import type { IUsersRepository } from "@modules/users/application/ports/users.repository.port";
 import {
   UpdateProfileData,
   UserProfile,

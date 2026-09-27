@@ -1,6 +1,6 @@
 import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
-import { ICheckoutRepository } from "../checkout.repository";
+import { ICheckoutRepository } from "../application/ports/checkout.repository.port";
 import { CheckoutTransaction } from "../application/ports/checkout-transaction";
 import { BadRequestError, ConflictError } from "@shared/utils/errors";
 import {

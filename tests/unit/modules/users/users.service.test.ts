@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { UserPasswordRecord } from "@modules/users/application/ports/user-models";
 import { UsersService } from "@modules/users/users.service";
-import { IUsersRepository } from "@modules/users/users.repository";
+import type { IUsersRepository } from "@modules/users/application/ports/users.repository.port";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 
 vi.mock("bcrypt", () => ({

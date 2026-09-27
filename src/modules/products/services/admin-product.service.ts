@@ -1,10 +1,10 @@
 import { BadRequestError, NotFoundError } from "@shared/utils/errors";
 import { Money } from "@shared/value-objects/money";
-import {
-  IProductsRepository,
+import type {
   CreateProductData,
+  IProductsRepository,
   UpdateProductData,
-} from "../products.repository";
+} from "../application/ports/products.repository.port";
 import { Product } from "../domain/product.entity";
 import { ProductImageService } from "./product-image.service";
 import { EventBus } from "@shared/domain/event-bus/event-bus";

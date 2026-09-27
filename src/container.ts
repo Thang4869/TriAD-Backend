@@ -1,18 +1,18 @@
 import { Container, Lifetime } from "@core/di/container";
 import { TOKENS } from "@core/di/tokens";
 
-import { PrismaProductsRepository } from "@modules/products/products.repository";
+import { PrismaProductsRepository } from "@modules/products/infrastructure/repositories/prisma-products.repository";
 import { ProductsController } from "@modules/products/products.controller";
 
-import { PrismaAuthRepository } from "@modules/auth/auth.repository";
+import { PrismaAuthRepository } from "@modules/auth/infrastructure/repositories/prisma-auth.repository";
 import { AuthService } from "@modules/auth/auth.service";
 import { AuthController } from "@modules/auth/auth.controller";
 
-import { PrismaCartRepository } from "@modules/cart/cart.repository";
+import { PrismaCartRepository } from "@modules/cart/infrastructure/repositories/prisma-cart.repository";
 import { CartService } from "@modules/cart/cart.service";
 import { CartController } from "@modules/cart/cart.controller";
 
-import { PrismaCheckoutRepository } from "@modules/checkout/checkout.repository";
+import { PrismaCheckoutRepository } from "@modules/checkout/infrastructure/repositories/prisma-checkout.repository";
 import { CheckoutService } from "@modules/checkout/checkout.service";
 import { CheckoutController } from "@modules/checkout/checkout.controller";
 
@@ -20,11 +20,11 @@ import { PrismaOrdersRepository } from "@modules/orders/infrastructure/repositor
 import { OrdersService } from "@modules/orders/orders.service";
 import { OrdersController } from "@modules/orders/orders.controller";
 
-import { PrismaReviewsRepository } from "@modules/reviews/reviews.repository";
+import { PrismaReviewsRepository } from "@modules/reviews/infrastructure/repositories/prisma-reviews.repository";
 import { ReviewsService } from "@modules/reviews/reviews.service";
 import { ReviewsController } from "@modules/reviews/reviews.controller";
 
-import { PrismaUsersRepository } from "@modules/users/users.repository";
+import { PrismaUsersRepository } from "@modules/users/infrastructure/repositories/prisma-users.repository";
 import { UsersService } from "@modules/users/users.service";
 import { UsersController } from "@modules/users/users.controller";
 

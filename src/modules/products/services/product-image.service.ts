@@ -1,4 +1,4 @@
-import { IProductsRepository } from "../products.repository";
+import type { IProductsRepository } from "../application/ports/products.repository.port";
 import { NotFoundError } from "@shared/utils/errors";
 import { ImageProcessingQueuePort } from "../application/ports/image-processing-queue.port";
 

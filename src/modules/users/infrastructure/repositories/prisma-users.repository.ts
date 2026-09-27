@@ -1,9 +1,11 @@
 import prisma from "@core/database/prisma";
-import {
+
+import type { IUsersRepository } from "../../application/ports/users.repository.port";
+import type {
   UpdateProfileData,
   UserPasswordRecord,
   UserProfile,
-} from "./application/ports/user-models";
+} from "../../application/ports/user-models";
 
 const PROFILE_SELECT = {
   id: true,
@@ -17,15 +19,6 @@ const PROFILE_SELECT = {
   createdAt: true,
   updatedAt: true,
 } as const;
-
-// ---------- Repository contract ----------
-
-export interface IUsersRepository {
-  findProfileById(userId: string): Promise<UserProfile | null>;
-  findById(userId: string): Promise<UserPasswordRecord | null>;
-  updateProfile(userId: string, data: UpdateProfileData): Promise<UserProfile>;
-  updatePassword(userId: string, hashedPassword: string): Promise<void>;
-}
 
 // ---------- Prisma implementation ----------
 

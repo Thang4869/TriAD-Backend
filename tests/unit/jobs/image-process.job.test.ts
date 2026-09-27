@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { processImage } from "@/jobs/image-process.job";
 import sharp from "sharp";
-import type { IProductsRepository } from "@modules/products/products.repository";
+import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
 import type { IImageStorage } from "@core/storage/cloudinary";
 
 vi.mock("sharp", () => ({

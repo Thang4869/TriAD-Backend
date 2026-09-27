@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CatalogService } from "@modules/products/services/catalog.service";
-import { IProductsRepository } from "@modules/products/products.repository";
+import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
 import { NotFoundError } from "@shared/utils/errors";
 
 function productRow(overrides: Record<string, unknown> = {}) {

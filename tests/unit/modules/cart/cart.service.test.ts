@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CartService } from "@modules/cart/cart.service";
-import { ICartRepository } from "@modules/cart/cart.repository";
+import type { ICartRepository } from "@modules/cart/application/ports/cart.repository.port";
 import { BadRequestError, NotFoundError } from "@shared/utils/errors";
 
 function createFakeRepository(

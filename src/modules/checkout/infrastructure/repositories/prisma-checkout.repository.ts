@@ -1,13 +1,17 @@
 import prisma from "@core/database/prisma";
-import { Prisma, Order } from "@prisma/client";
-import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
+import { Order, PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
 import { persistDomainEvents } from "@core/outbox/persist-domain-events";
-import { PaymentMethod, PaymentStatus } from "@prisma/client";
-import { CheckoutTransaction } from "./application/ports/checkout-transaction";
-import {
+import type {
+  DiscountRecord,
+  ICheckoutRepository,
+  LockedProductRow,
+} from "../../application/ports/checkout.repository.port";
+import type { CheckoutTransaction } from "../../application/ports/checkout-transaction";
+import type {
   OrderWithItems,
   UserCartForCheckout,
-} from "./application/ports/checkout-models";
+} from "../../application/ports/checkout-models";
+import type { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 
 const TRANSACTION_TIMEOUT_MS = 10_000;
 
@@ -15,27 +19,7 @@ function toPrismaTx(tx: CheckoutTransaction): Prisma.TransactionClient {
   return tx as unknown as Prisma.TransactionClient;
 }
 
-export interface LockedProductRow {
-  id: string;
-  stock: number;
-  version: number;
-  name: string;
-  price: number;
-}
-
-export interface DiscountRecord {
-  id: string;
-  code: string;
-  isActive: boolean;
-  expiresAt: Date | null;
-  minOrderAmount: number | null;
-  maxUses: number | null;
-  usedCount: number;
-  type: "PERCENTAGE" | "FIXED";
-  value: number;
-}
-
-export interface CreateOrderData {
+interface CreateOrderData {
   orderNumber: string;
   userId: string;
   status: "PENDING";
@@ -55,61 +39,12 @@ export interface CreateOrderData {
   idempotencyKey?: string;
 }
 
-export interface CreateOrderItemData {
+interface CreateOrderItemData {
   orderId: string;
   productId: string;
   quantity: number;
   price: number;
   total: number;
-}
-
-// ---------- Repository contract ----------
-
-export interface ICheckoutRepository {
-  findOrderWithItems(orderId: string): Promise<OrderWithItems | null>;
-  findUserCartForCheckout(userId: string): Promise<UserCartForCheckout | null>;
-
-  runInTransaction<T>(fn: (tx: CheckoutTransaction) => Promise<T>): Promise<T>;
-
-  lockProductsForUpdate(
-    tx: CheckoutTransaction,
-    productIds: string[],
-  ): Promise<LockedProductRow[]>;
-  decrementProductStock(
-    tx: CheckoutTransaction,
-    productId: string,
-    expectedVersion: number,
-    quantity: number,
-  ): Promise<boolean>;
-
-  findDiscountByCode(
-    tx: CheckoutTransaction,
-    code: string,
-  ): Promise<DiscountRecord | null>;
-  incrementDiscountUsage(
-    tx: CheckoutTransaction,
-    discountId: string,
-    maxUses: number | null,
-  ): Promise<boolean>;
-
-  clearCartItems(tx: CheckoutTransaction, cartId: string): Promise<void>;
-
-  saveNewOrder(
-    tx: CheckoutTransaction,
-    order: OrderAggregate,
-    idempotencyKey?: string,
-  ): Promise<Order>;
-
-  findOrdersByUser(
-    userId: string,
-    skip: number,
-    take: number,
-  ): Promise<OrderWithItems[]>;
-  countOrdersByUser(userId: string): Promise<number>;
-  findOrderByUserAndId(
-    orderId: string,
-    userId: string,
-  ): Promise<OrderWithItems | null>;
 }
 
 // ---------- Prisma implementation ----------

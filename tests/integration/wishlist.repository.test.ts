@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import prisma from "@core/database/prisma";
-import { PrismaWishlistRepository } from "@modules/wishlist/wishlist.repository";
+import { PrismaWishlistRepository } from "@modules/wishlist/infrastructure/repositories/prisma-wishlist.repository";
 
 describe("PrismaWishlistRepository (integration, real DB)", () => {
   const repository = new PrismaWishlistRepository();

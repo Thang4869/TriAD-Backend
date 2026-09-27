@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WishlistService } from "@modules/wishlist/wishlist.service";
-import { IWishlistRepository } from "@modules/wishlist/wishlist.repository";
+import type { IWishlistRepository } from "@modules/wishlist/application/ports/wishlist.repository.port";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 
 function createFakeRepository(

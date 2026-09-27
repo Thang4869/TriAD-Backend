@@ -28,7 +28,7 @@ import { PrismaUsersRepository } from "@modules/users/infrastructure/repositorie
 import { UsersService } from "@modules/users/users.service";
 import { UsersController } from "@modules/users/users.controller";
 
-import { PrismaWishlistRepository } from "@modules/wishlist/wishlist.repository";
+import { PrismaWishlistRepository } from "@modules/wishlist/infrastructure/repositories/prisma-wishlist.repository";
 import { WishlistService } from "@modules/wishlist/wishlist.service";
 import { WishlistController } from "@modules/wishlist/wishlist.controller";
 

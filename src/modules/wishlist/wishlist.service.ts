@@ -3,7 +3,7 @@ import {
   PAGINATION_DEFAULTS,
   resolvePagination,
 } from "@shared/constants/pagination.constant";
-import { IWishlistRepository } from "./wishlist.repository";
+import type { IWishlistRepository } from "./application/ports/wishlist.repository.port";
 
 export interface IWishlistService {
   getWishlist(userId: string, page?: number, limit?: number): Promise<unknown>;

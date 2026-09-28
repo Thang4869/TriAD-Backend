@@ -6,7 +6,7 @@ export async function persistDomainEvents(
   tx: Prisma.TransactionClient,
   aggregates: AggregateRoot[],
 ): Promise<void> {
-  const events = aggregates.flatMap((aggregate) => aggregate.pullEvents());
+  const events = aggregates.flatMap((aggregate) => aggregate.domainEvents);
 
   if (events.length === 0) return;
 
@@ -19,6 +19,9 @@ export async function persistDomainEvents(
         occurredAt: event.occurredAt,
       })),
     });
+    for (const aggregate of aggregates) {
+      aggregate.pullEvents();
+    }
   } catch (error) {
     logger.error(
       "Failed to write domain events to outbox - see prisma/schema.additions.prisma",

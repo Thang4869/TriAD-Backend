@@ -99,6 +99,8 @@ describe("persistDomainEvents", () => {
     aggregate.emit("EventA");
 
     await expect(persistDomainEvents(tx, [aggregate])).rejects.toThrow(error);
+    expect(aggregate.domainEvents).toHaveLength(1);
+    expect(aggregate.domainEvents[0].eventName).toBe("EventA");
 
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining("Failed to write domain events"),

@@ -140,6 +140,7 @@ model Notification {
   message   String
   type      String
   read      Boolean  @default(false)
+  idempotencyKey String? @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)

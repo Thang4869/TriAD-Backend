@@ -105,4 +105,27 @@ describe("PrismaNotificationsRepository (integration)", () => {
 
     expect(count).toBe(1);
   });
+
+  it("create() không tạo duplicate khi dùng cùng idempotencyKey", async () => {
+    const data = {
+      userId,
+      title: "Order updated",
+      message: "Order status changed to SHIPPED",
+      type: "order_update",
+      idempotencyKey: `order-status-order-1-SHIPPED-${Date.now()}`,
+    };
+
+    const first = await repository.create(data);
+    const second = await repository.create(data);
+
+    expect(second.id).toBe(first.id);
+
+    const count = await prisma.notification.count({
+      where: {
+        idempotencyKey: data.idempotencyKey,
+      },
+    });
+
+    expect(count).toBe(1);
+  });
 });

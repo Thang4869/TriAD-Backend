@@ -49,8 +49,21 @@ export class PrismaNotificationsRepository implements INotificationsRepository {
   }
 
   async create(data: CreateNotificationData): Promise<NotificationRecord> {
-    return prisma.notification.create({
-      data: { ...data, read: false },
+    if (!data.idempotencyKey) {
+      return prisma.notification.create({
+        data: { ...data, read: false },
+      });
+    }
+
+    return prisma.notification.upsert({
+      where: {
+        idempotencyKey: data.idempotencyKey,
+      },
+      create: {
+        ...data,
+        read: false,
+      },
+      update: {},
     });
   }
 }

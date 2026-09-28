@@ -21,8 +21,8 @@ describe("OrderPlacedHandler", () => {
     await handler.handle(event);
 
     expect(emailService.sendOrderConfirmation).toHaveBeenCalledWith(
-      { email: "customer@example.com" },
-      { orderNumber: "ORD-001", total: 100 },
+      { email: "test@example.com" },
+      { orderNumber: "ORD-001", total: 200 },
       [
         {
           productName: "Product 1",
@@ -48,9 +48,13 @@ function createEvent(): OrderPlacedEvent {
     "order-1",
     "user-1",
     "ORD-001",
-    "Customer Name",
-    "customer@example.com",
-    100,
+    "Test User",
+    "test@example.com",
+    "PENDING",
+    200,
+    0,
+    0,
+    200,
     [
       {
         productId: "product-1",

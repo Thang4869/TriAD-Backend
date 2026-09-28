@@ -11,6 +11,7 @@ import {
   InvalidOrderTransitionError,
   OrderNotCancellableError,
 } from "@shared/domain/errors/domain-error";
+import { OrderPlacedEvent } from "@shared/domain/events/order-events";
 
 function newOrder(notes?: string) {
   return Order.create({
@@ -231,21 +232,41 @@ describe("Order.total", () => {
 });
 
 describe("Order.place", () => {
-  it("phát OrderPlacedEvent với tổng tiền và danh sách item", () => {
+  it("phát OrderPlacedEvent với đầy đủ pricing snapshot", () => {
     const order = newOrder();
+
     order.addItem("p1", "Áo", 2, new Money(100_000));
+
     order.applyPricing({
-      tax: new Money(0),
+      tax: new Money(20_000),
       shippingFee: new Money(30_000),
-      discountAmount: new Money(0),
+      discountAmount: new Money(10_000),
     });
 
     order.place();
 
     const events = order.pullEvents();
+
     expect(events).toHaveLength(1);
-    expect(events[0].eventName).toBe("OrderPlaced");
-    expect(events[0].aggregateId).toBe("ord-1");
+
+    const event = events[0] as OrderPlacedEvent;
+
+    expect(event.eventName).toBe("OrderPlaced");
+    expect(event.aggregateId).toBe("ord-1");
+    expect(event.paymentStatus).toBe("PENDING");
+    expect(event.subtotal).toBe(200_000);
+    expect(event.tax).toBe(20_000);
+    expect(event.shippingFee).toBe(30_000);
+    expect(event.total).toBe(240_000);
+    expect(event.items).toEqual([
+      {
+        productId: "p1",
+        productName: "Áo",
+        quantity: 2,
+        unitPrice: 100_000,
+      },
+    ]);
+
     expect(order.version).toBe(1);
   });
 

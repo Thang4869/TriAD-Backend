@@ -3,9 +3,9 @@
 ## First response
 
 1. Check `/health/ready` and `/metrics`.
-2. Check application logs using the request id and saga id.
+2. Check application logs using the request id and relevant order or outbox event id.
 3. Confirm PostgreSQL and Redis connectivity before restarting workers.
-4. Do not manually delete outbox or saga rows; both are recovery state.
+4. Do not manually delete outbox rows; they are production recovery state.
 
 ## Outbox lag or dead letters
 
@@ -14,12 +14,11 @@
 - Check `leaseUntil`, `attempts` and `lastError`. Expired leases are safe to reclaim.
 - Fix the downstream handler or dependency, then replay eligible events through the normal relay. Preserve event ids so handler idempotency remains effective.
 
-## Saga stuck or compensating
+## Saga operations
 
-- Find the `saga_states` row by saga id and inspect `sagaType`, `state`, `version` and `updatedAt`.
-- Check the corresponding `checkout_failure_total` and `saga_compensation_total` metrics.
-- A process restart is safe: persisted state resumes from the last completed step.
-- If a dependency is unavailable, restore it before replaying. Compensation operations are designed to be idempotent.
+`CheckoutSaga` and `CancellationRefundSaga` are not currently wired into the production request path. The `saga_states` table and Prisma state adapter are prepared for future orchestration.
+
+Do not treat Saga state as active production recovery state until the payment and Saga port adapters are integrated and the Sagas are wired through the composition root.
 
 ## Projection lag
 

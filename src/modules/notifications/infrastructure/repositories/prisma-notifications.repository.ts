@@ -1,26 +1,10 @@
 import prisma from "@core/database/prisma";
-import {
+
+import type { INotificationsRepository } from "../../application/ports/notifications.repository.port";
+import type {
   CreateNotificationData,
   NotificationRecord,
-} from "./application/ports/notification-models";
-
-// ---------- Repository contract ----------
-
-export interface INotificationsRepository {
-  findByUser(
-    userId: string,
-    skip: number,
-    take: number,
-  ): Promise<NotificationRecord[]>;
-  countByUser(userId: string): Promise<number>;
-  findByIdAndUser(
-    id: string,
-    userId: string,
-  ): Promise<NotificationRecord | null>;
-  markAsRead(id: string): Promise<NotificationRecord>;
-  markAllAsReadForUser(userId: string): Promise<number>;
-  create(data: CreateNotificationData): Promise<NotificationRecord>;
-}
+} from "../../application/ports/notification-models";
 
 // ---------- Prisma implementation ----------
 
@@ -65,8 +49,21 @@ export class PrismaNotificationsRepository implements INotificationsRepository {
   }
 
   async create(data: CreateNotificationData): Promise<NotificationRecord> {
-    return prisma.notification.create({
-      data: { ...data, read: false },
+    if (!data.idempotencyKey) {
+      return prisma.notification.create({
+        data: { ...data, read: false },
+      });
+    }
+
+    return prisma.notification.upsert({
+      where: {
+        idempotencyKey: data.idempotencyKey,
+      },
+      create: {
+        ...data,
+        read: false,
+      },
+      update: {},
     });
   }
 }

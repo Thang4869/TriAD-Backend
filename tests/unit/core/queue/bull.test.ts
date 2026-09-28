@@ -150,8 +150,14 @@ describe("Bull queue infrastructure", () => {
         type: "exponential",
         delay: 1000,
       },
-      removeOnComplete: true,
-      removeOnFail: false,
+      removeOnComplete: {
+        age: 24 * 60 * 60,
+        count: 10_000,
+      },
+      removeOnFail: {
+        age: 7 * 24 * 60 * 60,
+        count: 10_000,
+      },
     });
 
     expect((imageQueue as any).name).toBe("image");

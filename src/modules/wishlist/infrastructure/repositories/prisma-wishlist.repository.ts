@@ -1,5 +1,7 @@
 import prisma from "@core/database/prisma";
-import { WishlistItemWithProduct } from "./application/ports/wishlist-models";
+
+import type { IWishlistRepository } from "../../application/ports/wishlist.repository.port";
+import type { WishlistItemWithProduct } from "../../application/ports/wishlist-models";
 
 const PRODUCT_SUMMARY_SELECT = {
   id: true,
@@ -10,21 +12,6 @@ const PRODUCT_SUMMARY_SELECT = {
   slug: true,
   isActive: true,
 } as const;
-
-// ---------- Repository contract ----------
-
-export interface IWishlistRepository {
-  findByUser(
-    userId: string,
-    skip: number,
-    take: number,
-  ): Promise<WishlistItemWithProduct[]>;
-  countByUser(userId: string): Promise<number>;
-  exists(userId: string, productId: string): Promise<boolean>;
-  productExists(productId: string): Promise<boolean>;
-  create(userId: string, productId: string): Promise<WishlistItemWithProduct>;
-  delete(userId: string, productId: string): Promise<void>;
-}
 
 // ---------- Prisma implementation ----------
 

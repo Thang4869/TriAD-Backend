@@ -5,6 +5,7 @@ export interface NotificationRecord {
   message: string;
   type: string;
   read: boolean;
+  idempotencyKey: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -14,4 +15,5 @@ export interface CreateNotificationData {
   title: string;
   message: string;
   type: string;
+  idempotencyKey?: string;
 }

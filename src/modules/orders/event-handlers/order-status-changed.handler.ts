@@ -13,12 +13,14 @@ export class OrderStatusChangedHandler {
         `Order ${event.aggregateId} status changed to ${event.newStatus}`,
         `Your order status has been updated to ${event.newStatus}.`,
         NotificationType.ORDER_UPDATE,
+        `order-status-${event.aggregateId}-${event.newStatus}`,
       );
       logger.info(
         `Notification sent for order ${event.aggregateId} status change.`,
       );
     } catch (error) {
       logger.error("Error handling OrderStatusChangedEvent", { error });
+      throw error;
     }
   }
 }

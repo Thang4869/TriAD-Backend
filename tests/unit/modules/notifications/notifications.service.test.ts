@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NotificationsService } from "@modules/notifications/notifications.service";
-import { INotificationsRepository } from "@modules/notifications/notifications.repository";
+import type { INotificationsRepository } from "@modules/notifications/application/ports/notifications.repository.port";
 import { NotFoundError } from "@shared/utils/errors";
 import { NotificationType } from "@shared/constants/notification-type.enum";
 

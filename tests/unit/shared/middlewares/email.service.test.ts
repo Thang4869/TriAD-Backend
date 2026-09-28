@@ -41,10 +41,13 @@ describe("EmailService", () => {
             items: [{ name: "Item A", quantity: 2, price: 50 }],
           }),
         }),
+        {
+          idempotencyKey: undefined,
+        },
       );
     });
 
-    it("nuốt lỗi và log error thay vì throw khi enqueue thất bại (không làm fail luồng checkout)", async () => {
+    it("throws và log error khi enqueue order confirmation thất bại", async () => {
       const emailQueue = createEmailQueue();
 
       vi.mocked(emailQueue.enqueue).mockRejectedValueOnce(
@@ -59,7 +62,7 @@ describe("EmailService", () => {
           { orderNumber: "ORD-1", total: 100 },
           [],
         ),
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow("queue down");
 
       expect(logger.error).toHaveBeenCalled();
     }, 10000);
@@ -84,10 +87,13 @@ describe("EmailService", () => {
             verifyUrl: "https://app.com/verify?token=abc",
           },
         }),
+        {
+          idempotencyKey: undefined,
+        },
       );
     });
 
-    it("nuốt lỗi và log error thay vì throw khi enqueue thất bại", async () => {
+    it("throws và log error khi enqueue verification email thất bại", async () => {
       const emailQueue = createEmailQueue();
 
       vi.mocked(emailQueue.enqueue).mockRejectedValueOnce(
@@ -101,7 +107,7 @@ describe("EmailService", () => {
           { email: "a@test.com", firstName: "A" },
           "url",
         ),
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow("queue down");
 
       expect(logger.error).toHaveBeenCalled();
     }, 10000);

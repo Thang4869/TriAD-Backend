@@ -163,6 +163,38 @@ describe("OutboxRelay.pollOnce", () => {
     );
   });
 
+  it("dead-letters the event after the maximum number of attempts", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([
+      {
+        ...ROW,
+        attempts: 9,
+      },
+    ] as never);
+
+    const publish = vi
+      .fn()
+      .mockResolvedValue({ success: false, failedHandlers: ["HandlerB"] });
+
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
+
+    expect(vi.mocked(store.updateClaimed)).toHaveBeenCalledWith(
+      "outbox-1",
+      expect.any(String),
+      expect.objectContaining({
+        attempts: { increment: 1 },
+        lockedAt: null,
+        lockOwner: null,
+        leaseUntil: null,
+        deadLetteredAt: expect.any(Date),
+        lastError: "Handlers failed: HandlerB",
+      }),
+    );
+  });
+
   it("một row lỗi không chặn các row còn lại trong batch", async () => {
     vi.mocked(store.claimBatch).mockResolvedValue([
       ROW,

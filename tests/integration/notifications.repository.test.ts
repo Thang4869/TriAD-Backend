@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import prisma from "@core/database/prisma";
-import { PrismaNotificationsRepository } from "@modules/notifications/notifications.repository";
+import { PrismaNotificationsRepository } from "@modules/notifications/infrastructure/repositories/prisma-notifications.repository";
 
 describe("PrismaNotificationsRepository (integration)", () => {
   const repository = new PrismaNotificationsRepository();
@@ -102,6 +102,29 @@ describe("PrismaNotificationsRepository (integration)", () => {
     await repository.markAsRead(n1.id);
 
     const count = await repository.markAllAsReadForUser(userId);
+
+    expect(count).toBe(1);
+  });
+
+  it("create() không tạo duplicate khi dùng cùng idempotencyKey", async () => {
+    const data = {
+      userId,
+      title: "Order updated",
+      message: "Order status changed to SHIPPED",
+      type: "order_update",
+      idempotencyKey: `order-status-order-1-SHIPPED-${Date.now()}`,
+    };
+
+    const first = await repository.create(data);
+    const second = await repository.create(data);
+
+    expect(second.id).toBe(first.id);
+
+    const count = await prisma.notification.count({
+      where: {
+        idempotencyKey: data.idempotencyKey,
+      },
+    });
 
     expect(count).toBe(1);
   });

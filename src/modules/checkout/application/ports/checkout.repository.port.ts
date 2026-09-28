@@ -1,7 +1,10 @@
-import type { Order } from "@prisma/client";
 import type { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import type { CheckoutTransaction } from "./checkout-transaction";
-import type { OrderWithItems, UserCartForCheckout } from "./checkout-models";
+import type {
+  OrderWithItems,
+  SavedCheckoutOrder,
+  UserCartForCheckout,
+} from "./checkout-models";
 
 export interface LockedProductRow {
   id: string;
@@ -58,7 +61,7 @@ export interface ICheckoutRepository {
     tx: CheckoutTransaction,
     order: OrderAggregate,
     idempotencyKey?: string,
-  ): Promise<Order>;
+  ): Promise<SavedCheckoutOrder>;
 
   findOrdersByUser(
     userId: string,

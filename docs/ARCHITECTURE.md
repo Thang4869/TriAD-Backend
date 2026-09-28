@@ -76,22 +76,25 @@ Domain code depends only on domain types and application ports. Prisma, Redis, q
 
 ## Checkout sequence
 
+The current production checkout path is transaction-based. `CheckoutSaga` is a prepared orchestration state machine and is not wired into the production request path until payment and Saga port adapters are available.
+
 ```mermaid
 sequenceDiagram
   participant API as Checkout API
-  participant Saga as CheckoutSaga
-  participant Stock as Stock port
-  participant Order as Order port
-  participant Pay as Payment port
+  participant Service as CheckoutService
+  participant DB as PostgreSQL
+  participant Stock as StockReservationService
   participant Outbox as Transactional outbox
-  API->>Saga: execute(idempotency key)
-  Saga->>Stock: reserve with timeout/retry
-  Saga->>Order: place and persist event
-  Saga->>Pay: authorize with timeout/retry
-  Pay-->>Saga: payment id
-  Saga->>Order: confirm
-  Saga-->>API: completed state
-  Note over Saga,Outbox: Failure triggers refund, cancel and release compensation
+  participant Relay as OutboxRelay
+
+  API->>Service: checkout(userId, input)
+  Service->>DB: begin Serializable transaction
+  Service->>Stock: reserve stock
+  Service->>DB: create order and items
+  Service->>Outbox: persist domain events
+  Service->>DB: clear cart
+  Service->>DB: commit
+  Outbox-->>Relay: committed events available
 ```
 
 ## Projection update sequence

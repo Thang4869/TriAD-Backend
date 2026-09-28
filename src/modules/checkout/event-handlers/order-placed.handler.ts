@@ -15,10 +15,12 @@ export class OrderPlacedHandler {
           quantity: item.quantity,
           price: item.unitPrice,
         })),
+        `order-confirmation-${event.orderId}`,
       );
       logger.info(`Order ${event.aggregateId} placed, notifications sent.`);
     } catch (error) {
       logger.error("Error handling OrderPlacedEvent", { error });
+      throw error;
     }
   }
 }

@@ -28,15 +28,15 @@ import { PrismaUsersRepository } from "@modules/users/infrastructure/repositorie
 import { UsersService } from "@modules/users/users.service";
 import { UsersController } from "@modules/users/users.controller";
 
-import { PrismaWishlistRepository } from "@modules/wishlist/wishlist.repository";
+import { PrismaWishlistRepository } from "@modules/wishlist/infrastructure/repositories/prisma-wishlist.repository";
 import { WishlistService } from "@modules/wishlist/wishlist.service";
 import { WishlistController } from "@modules/wishlist/wishlist.controller";
 
-import { PrismaDashboardRepository } from "@modules/admin/dashboard/dashboard.repository";
+import { PrismaDashboardRepository } from "@modules/admin/dashboard/infrastructure/repositories/prisma-dashboard.repository";
 import { DashboardService } from "@modules/admin/dashboard/dashboard.service";
 import { DashboardController } from "@modules/admin/dashboard/dashboard.controller";
 
-import { PrismaNotificationsRepository } from "@modules/notifications/notifications.repository";
+import { PrismaNotificationsRepository } from "@modules/notifications/infrastructure/repositories/prisma-notifications.repository";
 import { NotificationsService } from "@modules/notifications/notifications.service";
 import { NotificationsController } from "@modules/notifications/notifications.controller";
 

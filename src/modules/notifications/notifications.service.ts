@@ -4,7 +4,7 @@ import {
   resolvePagination,
 } from "@shared/constants/pagination.constant";
 import { NotificationType } from "@shared/constants/notification-type.enum";
-import { INotificationsRepository } from "./notifications.repository";
+import type { INotificationsRepository } from "./application/ports/notifications.repository.port";
 
 export interface INotificationsService {
   getNotifications(
@@ -19,6 +19,7 @@ export interface INotificationsService {
     title: string,
     message: string,
     type?: NotificationType,
+    idempotencyKey?: string,
   ): Promise<unknown>;
 }
 
@@ -67,7 +68,14 @@ export class NotificationsService implements INotificationsService {
     title: string,
     message: string,
     type: NotificationType = NotificationType.INFO,
+    idempotencyKey?: string,
   ) {
-    return this.repository.create({ userId, title, message, type });
+    return this.repository.create({
+      userId,
+      title,
+      message,
+      type,
+      idempotencyKey,
+    });
   }
 }

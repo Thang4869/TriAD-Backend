@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import prisma from "@core/database/prisma";
-import { PrismaDashboardRepository } from "@modules/admin/dashboard/dashboard.repository";
+import { PrismaDashboardRepository } from "@modules/admin/dashboard/infrastructure/repositories/prisma-dashboard.repository";
 import { OrderStatus } from "@prisma/client";
 
 describe("PrismaDashboardRepository (integration, real DB)", () => {
@@ -35,6 +35,11 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
       },
     });
 
+    const sinceDate = new Date();
+    const before = await repository.getTotalRevenue(sinceDate);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     await prisma.order.create({
       data: {
         userId,
@@ -54,6 +59,7 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
         idempotencyKey: `dash-top-${suffix}`,
       },
     });
+
     await prisma.order.create({
       data: {
         userId,
@@ -74,10 +80,9 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
       },
     });
 
-    const sinceDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const total = await repository.getTotalRevenue(sinceDate);
 
-    expect(total).toBe(500);
+    expect(total - before).toBe(500);
   });
 
   it("getTotalRevenue() trả về 0 khi không có order nào trong khoảng thời gian", async () => {
@@ -90,20 +95,20 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
     await prisma.product.createMany({
       data: [
         {
-          name: "Low Stock A",
+          name: `Low Stock A${suffix}`,
           description: "test",
           price: 100,
-          stock: 2,
+          stock: -2,
           category: "test",
           slug: `low-stock-a-${Date.now()}`,
           images: [],
           isActive: true,
         },
         {
-          name: "Low Stock B",
+          name: `Low Stock B${suffix}`,
           description: "test",
           price: 100,
-          stock: 5,
+          stock: -1,
           category: "test",
           slug: `low-stock-b-${Date.now()}`,
           images: [],
@@ -132,12 +137,20 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
       ],
     });
 
-    const result = await repository.getLowStockProducts(10);
-    const own = result.filter((p) => p.name.startsWith("Low Stock"));
-    expect(own.map((p) => p.name)).toEqual(["Low Stock A", "Low Stock B"]);
+    const result = await repository.getLowStockProducts(-1);
+    const own = result.filter(
+      (p) =>
+        p.name === `Low Stock A${suffix}` || p.name === `Low Stock B${suffix}`,
+    );
+
+    expect(own.map((p) => p.name)).toEqual([
+      `Low Stock A${suffix}`,
+      `Low Stock B${suffix}`,
+    ]);
+
     const names = result.map((p) => p.name);
-    expect(names).toContain("Low Stock A");
-    expect(names).toContain("Low Stock B");
+    expect(names).toContain(`Low Stock A${suffix}`);
+    expect(names).toContain(`Low Stock B${suffix}`);
     expect(names).not.toContain("Plenty Stock");
     expect(names).not.toContain("Low Stock Inactive");
     expect(result[0].stock).toBeLessThanOrEqual(result[1]?.stock ?? Infinity);
@@ -276,6 +289,8 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
   });
 
   it("getTopSellingProducts returns sorted list", async () => {
+    const sinceDate = new Date();
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const product1 = await prisma.product.create({
       data: {
         name: "Top1",
@@ -338,7 +353,6 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
       ],
     });
 
-    const sinceDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const result = await repository.getTopSellingProducts(2, sinceDate);
     expect(result[0].productId).toBe(product1.id);
     expect(result[0].totalQuantitySold).toBeGreaterThan(

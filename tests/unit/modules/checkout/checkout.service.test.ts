@@ -125,7 +125,10 @@ describe("CheckoutService", () => {
       pricingService,
       mockStockService,
       {
-        isEnabled: () => false,
+        isEnabled: vi.fn().mockReturnValue(false),
+      },
+      {
+        generate: vi.fn().mockReturnValue("ORD-TEST-123"),
       },
     );
   });
@@ -458,6 +461,39 @@ describe("CheckoutService", () => {
               }),
             }),
           ],
+        }),
+        "idem-1",
+      );
+    });
+
+    it("uses the injected order number generator", async () => {
+      const orderNumberGenerator = {
+        generate: vi.fn().mockReturnValue("ORD-COLLISION-SAFE-123"),
+      };
+
+      service = new CheckoutService(
+        repository,
+        pricingService,
+        mockStockService,
+        {
+          isEnabled: vi.fn().mockReturnValue(false),
+        },
+        orderNumberGenerator,
+      );
+
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      mockFindOrderSuccess();
+
+      await service.checkout("user-1", baseInput);
+
+      expect(orderNumberGenerator.generate).toHaveBeenCalledTimes(1);
+
+      expect(repository.saveNewOrder).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          _orderNumber: expect.objectContaining({
+            value: "ORD-COLLISION-SAFE-123",
+          }),
         }),
         "idem-1",
       );

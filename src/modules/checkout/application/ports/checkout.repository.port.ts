@@ -28,6 +28,10 @@ export interface DiscountRecord {
 
 export interface ICheckoutRepository {
   findOrderWithItems(orderId: string): Promise<OrderWithItems | null>;
+  findOrderByIdempotencyKey(
+    userId: string,
+    idempotencyKey: string,
+  ): Promise<OrderWithItems | null>;
   findUserCartForCheckout(userId: string): Promise<UserCartForCheckout | null>;
 
   runInTransaction<T>(fn: (tx: CheckoutTransaction) => Promise<T>): Promise<T>;

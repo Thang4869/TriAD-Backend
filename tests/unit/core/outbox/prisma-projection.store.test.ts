@@ -52,7 +52,6 @@ const mockedPrisma = prisma as unknown as {
 
 describe("PrismaProjectionStore", () => {
   const store = new PrismaProjectionStore();
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -66,28 +65,45 @@ describe("PrismaProjectionStore", () => {
       "ORD-1",
       "User",
       "u@example.com",
+      "PENDING",
       100,
+      10,
+      30,
+      140,
       [],
     );
-
+    const occurredAt = event.occurredAt;
     await store.upsertOrderPlaced(event);
 
-    expect(mockedPrisma.orderHistoryProjection.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { orderId: "order-1" },
-        create: expect.objectContaining({
-          orderId: "order-1",
-          userId: "user-1",
-          orderNumber: "ORD-1",
-          total: 100,
-        }),
-        update: expect.objectContaining({
-          userId: "user-1",
-          orderNumber: "ORD-1",
-          total: 100,
-        }),
-      }),
-    );
+    expect(prisma.orderHistoryProjection.upsert).toHaveBeenCalledWith({
+      where: {
+        orderId: "order-1",
+      },
+      create: {
+        orderId: "order-1",
+        userId: "user-1",
+        orderNumber: "ORD-1",
+        status: "PENDING",
+        paymentStatus: "PENDING",
+        subtotal: 100,
+        tax: 10,
+        shippingFee: 30,
+        total: 140,
+        items: [],
+        placedAt: occurredAt,
+      },
+      update: {
+        userId: "user-1",
+        orderNumber: "ORD-1",
+        paymentStatus: "PENDING",
+        subtotal: 100,
+        tax: 10,
+        shippingFee: 30,
+        total: 140,
+        items: [],
+        placedAt: occurredAt,
+      },
+    });
   });
 
   it("upserts the current product into the catalog projection", async () => {

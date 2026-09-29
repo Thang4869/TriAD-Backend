@@ -95,7 +95,7 @@ model Order {
   customerPhone   String
   customerAddress String
   notes           String?
-  idempotencyKey  String?       @unique
+  idempotencyKey  String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   items           OrderItem[]
@@ -103,6 +103,7 @@ model Order {
   version         Int           @default(0)
 
   @@map("orders")
+  @@unique([userId, idempotencyKey])
 }
 
 model OrderItem {

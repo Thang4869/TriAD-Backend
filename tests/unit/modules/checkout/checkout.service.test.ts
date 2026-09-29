@@ -8,6 +8,7 @@ import {
   NotFoundError,
 } from "@shared/utils/errors";
 import { PricingService } from "@/modules/checkout/services/pricing.service";
+import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
 
 const discount = {
   id: "d1",
@@ -77,6 +78,7 @@ function createFakeRepository(
   ];
   return {
     findOrderWithItems: vi.fn().mockResolvedValue(null),
+    findOrderByIdempotencyKey: vi.fn().mockResolvedValue(null),
     findUserCartForCheckout: vi.fn().mockResolvedValue(null),
     runInTransaction: vi.fn().mockImplementation(async (fn) => fn({} as any)),
     lockProductsForUpdate: vi.fn().mockResolvedValue(defaultLocked),
@@ -102,7 +104,15 @@ describe("CheckoutService", () => {
 
   beforeEach(() => {
     mockStockService = {
-      reserveStock: vi.fn().mockResolvedValue(undefined),
+      reserveStock: vi.fn().mockResolvedValue([
+        {
+          id: baseUser.cart.items[0].productId,
+          stock: baseUser.cart.items[0].product.stock,
+          version: 0,
+          name: baseUser.cart.items[0].product.name,
+          price: baseUser.cart.items[0].product.price,
+        },
+      ]),
     } as unknown as StockReservationService;
 
     vi.clearAllMocks();
@@ -115,7 +125,10 @@ describe("CheckoutService", () => {
       pricingService,
       mockStockService,
       {
-        isEnabled: () => false,
+        isEnabled: vi.fn().mockReturnValue(false),
+      },
+      {
+        generate: vi.fn().mockReturnValue("ORD-TEST-123"),
       },
     );
   });
@@ -172,6 +185,85 @@ describe("CheckoutService", () => {
   });
 
   describe("checkout", () => {
+    it("returns the existing order for the same idempotency key without executing checkout again", async () => {
+      repository.findOrderByIdempotencyKey = vi
+        .fn()
+        .mockResolvedValue(mockOrder);
+
+      const result = await service.checkout("user-1", baseInput);
+
+      expect(repository.findOrderByIdempotencyKey).toHaveBeenCalledWith(
+        "user-1",
+        "idem-1",
+      );
+
+      expect(result).toEqual({
+        order: mockOrder,
+        idempotent: true,
+      });
+
+      expect(repository.findUserCartForCheckout).not.toHaveBeenCalled();
+      expect(repository.runInTransaction).not.toHaveBeenCalled();
+      expect(mockStockService.reserveStock).not.toHaveBeenCalled();
+      expect(repository.saveNewOrder).not.toHaveBeenCalled();
+      expect(repository.clearCartItems).not.toHaveBeenCalled();
+    });
+
+    it("returns the existing order when a concurrent checkout wins the idempotency race", async () => {
+      repository.findOrderByIdempotencyKey = vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockOrder);
+
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
+      repository.runInTransaction = vi
+        .fn()
+        .mockRejectedValue(new IdempotencyConflictError());
+
+      const result = await service.checkout("user-1", baseInput);
+
+      expect(repository.findOrderByIdempotencyKey).toHaveBeenNthCalledWith(
+        1,
+        "user-1",
+        "idem-1",
+      );
+
+      expect(repository.findOrderByIdempotencyKey).toHaveBeenNthCalledWith(
+        2,
+        "user-1",
+        "idem-1",
+      );
+
+      expect(result).toEqual({
+        order: mockOrder,
+        idempotent: true,
+      });
+
+      expect(repository.runInTransaction).toHaveBeenCalledTimes(1);
+      expect(repository.findOrderWithItems).not.toHaveBeenCalled();
+    });
+
+    it("rethrows idempotency conflict when the existing order cannot be recovered", async () => {
+      repository.findOrderByIdempotencyKey = vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
+      repository.runInTransaction = vi
+        .fn()
+        .mockRejectedValue(new IdempotencyConflictError());
+
+      await expect(
+        service.checkout("user-1", baseInput),
+      ).rejects.toBeInstanceOf(IdempotencyConflictError);
+
+      expect(repository.findOrderByIdempotencyKey).toHaveBeenCalledTimes(2);
+      expect(repository.findOrderWithItems).not.toHaveBeenCalled();
+    });
+
     it("throws if cart is empty", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue({
         ...baseUser,
@@ -207,7 +299,7 @@ describe("CheckoutService", () => {
       };
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(bigCart);
       mockFindOrderSuccess();
-      repository.lockProductsForUpdate = vi.fn().mockResolvedValue([
+      mockStockService.reserveStock = vi.fn().mockResolvedValue([
         {
           id: baseUser.cart.items[0].productId,
           stock: 10,
@@ -324,6 +416,87 @@ describe("CheckoutService", () => {
       const result = await service.checkout("user-1", baseInput);
       expect(result.order.id).toBeDefined();
       expect(callCount).toBe(2);
+    });
+
+    it("uses the locked product price instead of the stale cart price", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue({
+        ...baseUser,
+        cart: {
+          ...baseUser.cart,
+          items: [
+            {
+              ...baseUser.cart.items[0],
+              product: {
+                ...baseUser.cart.items[0].product,
+                price: 100,
+              },
+            },
+          ],
+        },
+      });
+
+      mockStockService.reserveStock = vi.fn().mockResolvedValue([
+        {
+          id: "prod-1",
+          name: "Glass",
+          stock: 10,
+          version: 2,
+          price: 150,
+        },
+      ]);
+
+      mockFindOrderSuccess();
+
+      await service.checkout("user-1", baseInput);
+
+      expect(repository.saveNewOrder).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          _items: [
+            expect.objectContaining({
+              productId: "prod-1",
+              quantity: 2,
+              unitPrice: expect.objectContaining({
+                amount: 150,
+              }),
+            }),
+          ],
+        }),
+        "idem-1",
+      );
+    });
+
+    it("uses the injected order number generator", async () => {
+      const orderNumberGenerator = {
+        generate: vi.fn().mockReturnValue("ORD-COLLISION-SAFE-123"),
+      };
+
+      service = new CheckoutService(
+        repository,
+        pricingService,
+        mockStockService,
+        {
+          isEnabled: vi.fn().mockReturnValue(false),
+        },
+        orderNumberGenerator,
+      );
+
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      mockFindOrderSuccess();
+
+      await service.checkout("user-1", baseInput);
+
+      expect(orderNumberGenerator.generate).toHaveBeenCalledTimes(1);
+
+      expect(repository.saveNewOrder).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          _orderNumber: expect.objectContaining({
+            value: "ORD-COLLISION-SAFE-123",
+          }),
+        }),
+        "idem-1",
+      );
     });
   });
 

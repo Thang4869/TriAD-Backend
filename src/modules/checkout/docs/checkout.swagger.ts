@@ -26,7 +26,7 @@
  *             type: object
  *             required: [paymentMethod, address, phone]
  *             properties:
- *               paymentMethod: { type: string, enum: [COD, CARD, BANKING] }
+ *               paymentMethod: { type: string, enum: [COD], example: COD }
  *               address: { type: string, minLength: 5 }
  *               phone: { type: string, pattern: '^[0-9]{10,11}$' }
  *               notes: { type: string }

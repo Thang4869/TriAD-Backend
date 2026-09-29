@@ -1,4 +1,5 @@
 import { BaseDomainEvent } from "./domain-event";
+import type { PaymentStatus } from "@shared/constants/order.constant";
 
 export type OrderStatus =
   "PENDING" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED" | "REFUNDED";
@@ -19,10 +20,22 @@ export class OrderPlacedEvent extends BaseDomainEvent {
     public readonly orderNumber: string,
     public readonly customerName: string,
     public readonly customerEmail: string,
+    public readonly paymentStatus: PaymentStatus,
+    public readonly subtotal: number,
+    public readonly tax: number,
+    public readonly shippingFee: number,
     public readonly total: number,
     public readonly items: OrderPlacedItemSnapshot[],
   ) {
-    super(orderId, "OrderPlaced", { userId, total, orderNumber });
+    super(orderId, "OrderPlaced", {
+      userId,
+      orderNumber,
+      paymentStatus,
+      subtotal,
+      tax,
+      shippingFee,
+      total,
+    });
   }
 }
 

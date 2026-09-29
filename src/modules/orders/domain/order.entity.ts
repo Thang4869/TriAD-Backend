@@ -19,6 +19,7 @@ import {
   InvalidOrderTransitionError,
   OrderNotCancellableError,
 } from "@shared/domain/errors/domain-error";
+import type { PaymentStatus } from "@shared/constants/order.constant";
 
 export class OrderItem {
   constructor(
@@ -53,7 +54,7 @@ export class Order extends AggregateRoot {
     private readonly _customerPhone: PhoneNumber,
     private readonly _customerAddress: Address,
     public readonly paymentMethod: string,
-    public readonly paymentStatus: string,
+    public readonly paymentStatus: PaymentStatus,
     discountAmount: Money,
     shippingFee: Money,
     tax: Money,
@@ -221,6 +222,10 @@ export class Order extends AggregateRoot {
         this.orderNumber,
         this.customerName,
         this.customerEmail,
+        this.paymentStatus,
+        this.subtotal.getValue(),
+        this.tax.getValue(),
+        this.shippingFee.getValue(),
         this.total.getValue(),
         this._items.map((item) => ({
           productId: item.productId,
@@ -293,7 +298,7 @@ export class Order extends AggregateRoot {
     customerPhone: string;
     customerAddress: string;
     paymentMethod: string;
-    paymentStatus: string;
+    paymentStatus: PaymentStatus;
     discountAmount: number;
     shippingFee: number;
     tax: number;

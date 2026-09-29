@@ -47,6 +47,7 @@ import type { ProjectionStore } from "@core/outbox/projection-store.port";
 import type { OutboxRelayStore } from "@core/outbox/outbox-relay-store.port";
 import type { HandlerExecutionTracker } from "@shared/domain/event-bus/event-bus";
 import type { OutboxRelay } from "@core/outbox/outbox-relay";
+import type { OrderNumberGenerator } from "@modules/checkout/application/ports/order-number-generator.port";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
@@ -134,6 +135,9 @@ export const TOKENS = {
   // Checkout
   StockReservationService: createToken<StockReservationService>(
     "StockReservationService",
+  ),
+  OrderNumberGenerator: createToken<OrderNumberGenerator>(
+    "OrderNumberGenerator",
   ),
 
   PersistenceErrorClassifier: createToken<PersistenceErrorClassifier>(

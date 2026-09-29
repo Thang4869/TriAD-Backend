@@ -24,6 +24,7 @@ describe("Checkout Concurrency", () => {
     const mockOrder = { id: orderId, items: [] };
 
     const repository = {
+      findOrderByIdempotencyKey: vi.fn().mockResolvedValue(null),
       findCachedOrderId: vi.fn().mockResolvedValue(null),
       cacheOrderId: vi.fn().mockResolvedValue(undefined),
       findOrderWithItems: vi.fn().mockResolvedValue(mockOrder),
@@ -82,6 +83,9 @@ describe("Checkout Concurrency", () => {
       stockService,
       {
         isEnabled: () => false,
+      },
+      {
+        generate: vi.fn().mockReturnValue("ORD-CONCURRENT-TEST"),
       },
     );
 

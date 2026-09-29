@@ -25,7 +25,11 @@ describe("ProjectionHandler", () => {
       "ORD-1",
       "User",
       "u@example.com",
+      "PENDING",
       100,
+      10,
+      30,
+      140,
       [],
     );
 

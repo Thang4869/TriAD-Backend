@@ -1,4 +1,7 @@
-import { ICheckoutRepository } from "../application/ports/checkout.repository.port";
+import {
+  ICheckoutRepository,
+  LockedProductRow,
+} from "../application/ports/checkout.repository.port";
 import { CheckoutTransaction } from "../application/ports/checkout-transaction";
 import {
   NotFoundError,
@@ -18,7 +21,7 @@ export class StockReservationService {
   async reserveStock(
     tx: CheckoutTransaction,
     cartItems: { productId: string; quantity: number }[],
-  ): Promise<void> {
+  ): Promise<LockedProductRow[]> {
     if (cartItems.length === 0) {
       throw new BadRequestError("Cart is empty");
     }
@@ -40,7 +43,7 @@ export class StockReservationService {
     tx: CheckoutTransaction,
     cartItems: { productId: string; quantity: number }[],
     setAttributes: (attrs: Attributes) => void,
-  ): Promise<void> {
+  ): Promise<LockedProductRow[]> {
     const productIds = cartItems.map((item) => item.productId);
     const lockedProducts = await this.repository.lockProductsForUpdate(
       tx,
@@ -75,5 +78,6 @@ export class StockReservationService {
         );
       }
     }
+    return lockedProducts;
   }
 }

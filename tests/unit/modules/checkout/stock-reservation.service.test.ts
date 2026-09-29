@@ -140,18 +140,18 @@ describe("StockReservationService.reserveStock", () => {
     expect(repository.decrementProductStock).not.toHaveBeenCalled();
   });
 
-  it("mua đúng bằng số tồn kho là hợp lệ", async () => {
+  it("mua đúng bằng số tồn kho là hợp lệ và trả về product snapshot đã lock", async () => {
+    const product = lockedProduct({ stock: 3 });
+
     const repository = createRepository({
-      lockProductsForUpdate: vi
-        .fn()
-        .mockResolvedValue([lockedProduct({ stock: 3 })]),
+      lockProductsForUpdate: vi.fn().mockResolvedValue([product]),
     });
 
     await expect(
       new StockReservationService(repository).reserveStock(tx, [
         { productId: "prod-1", quantity: 3 },
       ]),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual([product]);
   });
 
   it("version đã bị thay đổi bởi giao dịch khác → ConflictError yêu cầu retry", async () => {

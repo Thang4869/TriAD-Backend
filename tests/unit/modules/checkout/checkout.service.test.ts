@@ -104,7 +104,15 @@ describe("CheckoutService", () => {
 
   beforeEach(() => {
     mockStockService = {
-      reserveStock: vi.fn().mockResolvedValue(undefined),
+      reserveStock: vi.fn().mockResolvedValue([
+        {
+          id: baseUser.cart.items[0].productId,
+          stock: baseUser.cart.items[0].product.stock,
+          version: 0,
+          name: baseUser.cart.items[0].product.name,
+          price: baseUser.cart.items[0].product.price,
+        },
+      ]),
     } as unknown as StockReservationService;
 
     vi.clearAllMocks();
@@ -288,7 +296,7 @@ describe("CheckoutService", () => {
       };
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(bigCart);
       mockFindOrderSuccess();
-      repository.lockProductsForUpdate = vi.fn().mockResolvedValue([
+      mockStockService.reserveStock = vi.fn().mockResolvedValue([
         {
           id: baseUser.cart.items[0].productId,
           stock: 10,
@@ -405,6 +413,54 @@ describe("CheckoutService", () => {
       const result = await service.checkout("user-1", baseInput);
       expect(result.order.id).toBeDefined();
       expect(callCount).toBe(2);
+    });
+
+    it("uses the locked product price instead of the stale cart price", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue({
+        ...baseUser,
+        cart: {
+          ...baseUser.cart,
+          items: [
+            {
+              ...baseUser.cart.items[0],
+              product: {
+                ...baseUser.cart.items[0].product,
+                price: 100,
+              },
+            },
+          ],
+        },
+      });
+
+      mockStockService.reserveStock = vi.fn().mockResolvedValue([
+        {
+          id: "prod-1",
+          name: "Glass",
+          stock: 10,
+          version: 2,
+          price: 150,
+        },
+      ]);
+
+      mockFindOrderSuccess();
+
+      await service.checkout("user-1", baseInput);
+
+      expect(repository.saveNewOrder).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          _items: [
+            expect.objectContaining({
+              productId: "prod-1",
+              quantity: 2,
+              unitPrice: expect.objectContaining({
+                amount: 150,
+              }),
+            }),
+          ],
+        }),
+        "idem-1",
+      );
     });
   });
 

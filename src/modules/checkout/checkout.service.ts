@@ -82,7 +82,13 @@ export class CheckoutService {
         try {
           persistedOrder = await this.executeWithRetry(async (tx) => {
             attemptCount += 1;
-            await this.stockService.reserveStock(tx, cart.items);
+            const lockedProducts = await this.stockService.reserveStock(
+              tx,
+              cart.items,
+            );
+            const lockedProductMap = new Map(
+              lockedProducts.map((product) => [product.id, product]),
+            );
 
             const order = Order.create({
               id: crypto.randomUUID(),
@@ -97,11 +103,17 @@ export class CheckoutService {
             });
 
             for (const item of cart.items) {
+              const product = lockedProductMap.get(item.productId);
+
+              if (!product) {
+                throw new NotFoundError(`Product ${item.productId} not found`);
+              }
+
               order.addItem(
                 item.productId,
-                item.product.name,
+                product.name,
                 item.quantity,
-                new Money(item.product.price),
+                new Money(product.price),
               );
             }
 

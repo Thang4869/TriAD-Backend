@@ -16,6 +16,7 @@ import {
   FeatureFlagPort,
 } from "@shared/application/feature-flags/feature-flag.port";
 import { ordersPlaced } from "@core/metrics/metrics.registry";
+import { IdempotencyConflictError } from "./application/errors/idempotency-conflict.error";
 
 export interface CheckoutInput {
   idempotencyKey?: string;
@@ -41,6 +42,25 @@ export class CheckoutService {
     return withSpan(
       "checkout.place_order",
       async (setAttributes) => {
+        if (input.idempotencyKey) {
+          const existingOrder = await this.repository.findOrderByIdempotencyKey(
+            userId,
+            input.idempotencyKey,
+          );
+
+          if (existingOrder) {
+            setAttributes({
+              "checkout.order_id": existingOrder.id,
+              "checkout.order_number": existingOrder.orderNumber,
+              "checkout.idempotent": true,
+            });
+
+            return {
+              order: existingOrder,
+              idempotent: true,
+            };
+          }
+        }
         const user = await this.repository.findUserCartForCheckout(userId);
         if (!user || !user.cart || user.cart.items.length === 0) {
           throw new BadRequestError("Cart is empty");
@@ -57,43 +77,73 @@ export class CheckoutService {
         });
 
         let attemptCount = 0;
-        const persistedOrder = await this.executeWithRetry(async (tx) => {
-          attemptCount += 1;
-          await this.stockService.reserveStock(tx, cart.items);
+        let persistedOrder: Order;
 
-          const order = Order.create({
-            id: crypto.randomUUID(),
-            userId,
-            orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
-            customerName: `${user.firstName} ${user.lastName}`,
-            customerEmail: user.email,
-            customerPhone: input.phone || user.phone || "",
-            customerAddress: input.address,
-            paymentMethod: input.paymentMethod,
-            notes: input.notes,
-          });
+        try {
+          persistedOrder = await this.executeWithRetry(async (tx) => {
+            attemptCount += 1;
+            await this.stockService.reserveStock(tx, cart.items);
 
-          for (const item of cart.items) {
-            order.addItem(
-              item.productId,
-              item.product.name,
-              item.quantity,
-              new Money(item.product.price),
+            const order = Order.create({
+              id: crypto.randomUUID(),
+              userId,
+              orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
+              customerName: `${user.firstName} ${user.lastName}`,
+              customerEmail: user.email,
+              customerPhone: input.phone || user.phone || "",
+              customerAddress: input.address,
+              paymentMethod: input.paymentMethod,
+              notes: input.notes,
+            });
+
+            for (const item of cart.items) {
+              order.addItem(
+                item.productId,
+                item.product.name,
+                item.quantity,
+                new Money(item.product.price),
+              );
+            }
+
+            const pricing = await this.pricingService.calculatePricing(
+              order.subtotal,
+              input.discountCode,
+              tx,
             );
+            order.applyPricing(pricing);
+            order.place();
+
+            await this.repository.saveNewOrder(tx, order, input.idempotencyKey);
+            await this.repository.clearCartItems(tx, cart.id);
+            return order;
+          });
+        } catch (error) {
+          if (
+            error instanceof IdempotencyConflictError &&
+            input.idempotencyKey
+          ) {
+            const existingOrder =
+              await this.repository.findOrderByIdempotencyKey(
+                userId,
+                input.idempotencyKey,
+              );
+
+            if (existingOrder) {
+              setAttributes({
+                "checkout.order_id": existingOrder.id,
+                "checkout.order_number": existingOrder.orderNumber,
+                "checkout.idempotent": true,
+              });
+
+              return {
+                order: existingOrder,
+                idempotent: true,
+              };
+            }
           }
 
-          const pricing = await this.pricingService.calculatePricing(
-            order.subtotal,
-            input.discountCode,
-            tx,
-          );
-          order.applyPricing(pricing);
-          order.place();
-
-          await this.repository.saveNewOrder(tx, order, input.idempotencyKey);
-          await this.repository.clearCartItems(tx, cart.id);
-          return order;
-        });
+          throw error;
+        }
 
         setAttributes({
           "checkout.order_id": persistedOrder.id,

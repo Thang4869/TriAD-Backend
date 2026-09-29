@@ -3,6 +3,7 @@ import prisma from "@core/database/prisma";
 import { PrismaCheckoutRepository } from "@modules/checkout/infrastructure/repositories/prisma-checkout.repository";
 import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import { Money } from "@shared/value-objects/money";
+import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
 
 describe("PrismaCheckoutRepository (integration)", () => {
   const repository = new PrismaCheckoutRepository();
@@ -324,6 +325,165 @@ describe("PrismaCheckoutRepository (integration)", () => {
     expect(orderWithItems?.items[0].quantity).toBe(2);
     expect(orderWithItems?.items[0].price).toBe(100);
     expect(orderWithItems?.items[0].total).toBe(200);
+  });
+
+  it("translates duplicate idempotencyKey into IdempotencyConflictError", async () => {
+    const idempotencyKey = `idem-duplicate-${Date.now()}`;
+
+    const firstOrder = OrderAggregate.create({
+      id: `order-first-${Date.now()}`,
+      userId,
+      orderNumber: `ORD-FIRST-${Date.now()}`,
+      customerName: "A",
+      customerEmail: "a@test.com",
+      customerPhone: "0123456789",
+      customerAddress: "Address",
+      paymentMethod: "COD",
+    });
+    firstOrder.addItem(productId, "Checkout Product", 1, new Money(100));
+    firstOrder.place();
+
+    await repository.runInTransaction((tx) =>
+      repository.saveNewOrder(tx, firstOrder, idempotencyKey),
+    );
+
+    const secondOrder = OrderAggregate.create({
+      id: `order-second-${Date.now()}`,
+      userId,
+      orderNumber: `ORD-SECOND-${Date.now()}`,
+      customerName: "A",
+      customerEmail: "a@test.com",
+      customerPhone: "0123456789",
+      customerAddress: "Address",
+      paymentMethod: "COD",
+    });
+    secondOrder.addItem(productId, "Checkout Product", 1, new Money(100));
+    secondOrder.place();
+
+    await expect(
+      repository.runInTransaction((tx) =>
+        repository.saveNewOrder(tx, secondOrder, idempotencyKey),
+      ),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  });
+
+  it("allows different users to use the same idempotencyKey", async () => {
+    const sharedIdempotencyKey = `idem-shared-${Date.now()}`;
+
+    const secondUser = await prisma.user.create({
+      data: {
+        email: `checkout-repo-second-${Date.now()}@test.com`,
+        password: "h",
+        firstName: "Second",
+        lastName: "User",
+        isVerified: true,
+      },
+    });
+
+    const firstOrder = OrderAggregate.create({
+      id: `order-user-a-${Date.now()}`,
+      userId,
+      orderNumber: `ORD-USER-A-${Date.now()}`,
+      customerName: "User A",
+      customerEmail: "a@test.com",
+      customerPhone: "0123456789",
+      customerAddress: "Address A",
+      paymentMethod: "COD",
+    });
+
+    firstOrder.addItem(productId, "Checkout Product", 1, new Money(100));
+    firstOrder.place();
+
+    await repository.runInTransaction((tx) =>
+      repository.saveNewOrder(tx, firstOrder, sharedIdempotencyKey),
+    );
+
+    const secondOrder = OrderAggregate.create({
+      id: `order-user-b-${Date.now()}`,
+      userId: secondUser.id,
+      orderNumber: `ORD-USER-B-${Date.now()}`,
+      customerName: "User B",
+      customerEmail: "b@test.com",
+      customerPhone: "0123456789",
+      customerAddress: "Address B",
+      paymentMethod: "COD",
+    });
+
+    secondOrder.addItem(productId, "Checkout Product", 1, new Money(100));
+    secondOrder.place();
+
+    await expect(
+      repository.runInTransaction((tx) =>
+        repository.saveNewOrder(tx, secondOrder, sharedIdempotencyKey),
+      ),
+    ).resolves.toBeDefined();
+
+    const orders = await prisma.order.findMany({
+      where: {
+        idempotencyKey: sharedIdempotencyKey,
+      },
+    });
+
+    expect(orders).toHaveLength(2);
+    expect(orders.map((order) => order.userId)).toEqual(
+      expect.arrayContaining([userId, secondUser.id]),
+    );
+  });
+
+  it("does not translate duplicate orderNumber into IdempotencyConflictError", async () => {
+    const orderNumber = `ORD-DUPLICATE-${Date.now()}`;
+
+    const firstOrder = OrderAggregate.create({
+      id: `order-number-first-${Date.now()}`,
+      userId,
+      orderNumber,
+      customerName: "A",
+      customerEmail: "a@test.com",
+      customerPhone: "0123456789",
+      customerAddress: "Address",
+      paymentMethod: "COD",
+    });
+    firstOrder.addItem(productId, "Checkout Product", 1, new Money(100));
+    firstOrder.place();
+
+    await repository.runInTransaction((tx) =>
+      repository.saveNewOrder(
+        tx,
+        firstOrder,
+        `idem-order-number-first-${Date.now()}`,
+      ),
+    );
+
+    const secondOrder = OrderAggregate.create({
+      id: `order-number-second-${Date.now()}`,
+      userId,
+      orderNumber,
+      customerName: "A",
+      customerEmail: "a@test.com",
+      customerPhone: "0123456789",
+      customerAddress: "Address",
+      paymentMethod: "COD",
+    });
+    secondOrder.addItem(productId, "Checkout Product", 1, new Money(100));
+    secondOrder.place();
+
+    const operation = repository.runInTransaction((tx) =>
+      repository.saveNewOrder(
+        tx,
+        secondOrder,
+        `idem-order-number-second-${Date.now()}`,
+      ),
+    );
+
+    try {
+      await operation;
+      throw new Error("Expected duplicate orderNumber to fail");
+    } catch (error) {
+      expect(error).not.toBeInstanceOf(IdempotencyConflictError);
+      expect(error).toMatchObject({
+        code: "P2002",
+      });
+    }
   });
 
   it("saveNewOrder cho phép notes/discountCode undefined và discountAmount = 0", async () => {

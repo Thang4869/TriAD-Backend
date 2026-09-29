@@ -32,7 +32,8 @@ export const idempotencyMiddleware = (
       .createHash("sha256")
       .update(JSON.stringify(body))
       .digest("hex");
-    const ttl = config.IDEMPOTENCY_TTL;
+    const completedTtl = config.IDEMPOTENCY_TTL;
+    const inProgressTtl = Math.min(completedTtl, 60);
 
     const cached = await redis.get(cacheKey);
     if (cached) return replayOrReject(cached, requestHash, res, next);
@@ -41,7 +42,7 @@ export const idempotencyMiddleware = (
       cacheKey,
       JSON.stringify({ state: "IN_PROGRESS", requestHash }),
       "EX",
-      ttl,
+      inProgressTtl,
       "NX",
     );
     if (claimed !== "OK") {
@@ -57,7 +58,7 @@ export const idempotencyMiddleware = (
         redis
           .setex(
             cacheKey,
-            ttl,
+            completedTtl,
             JSON.stringify({
               state: "COMPLETED",
               requestHash,

@@ -8,6 +8,7 @@ import {
   NotFoundError,
 } from "@shared/utils/errors";
 import { PricingService } from "@/modules/checkout/services/pricing.service";
+import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
 
 const discount = {
   id: "d1",
@@ -77,6 +78,7 @@ function createFakeRepository(
   ];
   return {
     findOrderWithItems: vi.fn().mockResolvedValue(null),
+    findOrderByIdempotencyKey: vi.fn().mockResolvedValue(null),
     findUserCartForCheckout: vi.fn().mockResolvedValue(null),
     runInTransaction: vi.fn().mockImplementation(async (fn) => fn({} as any)),
     lockProductsForUpdate: vi.fn().mockResolvedValue(defaultLocked),
@@ -172,6 +174,85 @@ describe("CheckoutService", () => {
   });
 
   describe("checkout", () => {
+    it("returns the existing order for the same idempotency key without executing checkout again", async () => {
+      repository.findOrderByIdempotencyKey = vi
+        .fn()
+        .mockResolvedValue(mockOrder);
+
+      const result = await service.checkout("user-1", baseInput);
+
+      expect(repository.findOrderByIdempotencyKey).toHaveBeenCalledWith(
+        "user-1",
+        "idem-1",
+      );
+
+      expect(result).toEqual({
+        order: mockOrder,
+        idempotent: true,
+      });
+
+      expect(repository.findUserCartForCheckout).not.toHaveBeenCalled();
+      expect(repository.runInTransaction).not.toHaveBeenCalled();
+      expect(mockStockService.reserveStock).not.toHaveBeenCalled();
+      expect(repository.saveNewOrder).not.toHaveBeenCalled();
+      expect(repository.clearCartItems).not.toHaveBeenCalled();
+    });
+
+    it("returns the existing order when a concurrent checkout wins the idempotency race", async () => {
+      repository.findOrderByIdempotencyKey = vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockOrder);
+
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
+      repository.runInTransaction = vi
+        .fn()
+        .mockRejectedValue(new IdempotencyConflictError());
+
+      const result = await service.checkout("user-1", baseInput);
+
+      expect(repository.findOrderByIdempotencyKey).toHaveBeenNthCalledWith(
+        1,
+        "user-1",
+        "idem-1",
+      );
+
+      expect(repository.findOrderByIdempotencyKey).toHaveBeenNthCalledWith(
+        2,
+        "user-1",
+        "idem-1",
+      );
+
+      expect(result).toEqual({
+        order: mockOrder,
+        idempotent: true,
+      });
+
+      expect(repository.runInTransaction).toHaveBeenCalledTimes(1);
+      expect(repository.findOrderWithItems).not.toHaveBeenCalled();
+    });
+
+    it("rethrows idempotency conflict when the existing order cannot be recovered", async () => {
+      repository.findOrderByIdempotencyKey = vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
+      repository.runInTransaction = vi
+        .fn()
+        .mockRejectedValue(new IdempotencyConflictError());
+
+      await expect(
+        service.checkout("user-1", baseInput),
+      ).rejects.toBeInstanceOf(IdempotencyConflictError);
+
+      expect(repository.findOrderByIdempotencyKey).toHaveBeenCalledTimes(2);
+      expect(repository.findOrderWithItems).not.toHaveBeenCalled();
+    });
+
     it("throws if cart is empty", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue({
         ...baseUser,

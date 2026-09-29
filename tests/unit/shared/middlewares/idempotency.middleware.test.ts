@@ -4,7 +4,6 @@ import { Request, Response, NextFunction } from "express";
 import redis from "@core/redis/client";
 import {
   BadRequestError,
-  ConflictError,
   UnprocessableEntityError,
 } from "@shared/utils/errors";
 import crypto from "crypto";
@@ -136,16 +135,19 @@ describe("idempotencyMiddleware", () => {
     );
   });
 
-  it("returns 409 when an identical request is already in progress", async () => {
-    const requestHash = crypto.createHash("sha256").update("{}").digest("hex");
-    vi.mocked(redis.get).mockResolvedValueOnce(
-      JSON.stringify({ state: "IN_PROGRESS", requestHash }),
+  it("should use a short TTL for the IN_PROGRESS claim", async () => {
+    req.headers = { "idempotency-key": "short-lived-claim" };
+
+    const middleware = idempotencyMiddleware();
+    await middleware(req as Request, res as Response, next);
+
+    expect(redis.set).toHaveBeenCalledWith(
+      "idempotency:anonymous:unknown:short-lived-claim",
+      expect.stringContaining('"state":"IN_PROGRESS"'),
+      "EX",
+      60,
+      "NX",
     );
-    req.headers = { "idempotency-key": "progress-key" };
-
-    await idempotencyMiddleware()(req as Request, res as Response, next);
-
-    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(ConflictError);
   });
 
   it("should attach idempotencyKey to body and override res.json to cache", async () => {

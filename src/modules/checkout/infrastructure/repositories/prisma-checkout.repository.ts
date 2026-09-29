@@ -12,6 +12,7 @@ import type {
   UserCartForCheckout,
 } from "../../application/ports/checkout-models";
 import type { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
+import { IdempotencyConflictError } from "../../application/errors/idempotency-conflict.error";
 
 const TRANSACTION_TIMEOUT_MS = 10_000;
 
@@ -54,6 +55,25 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     return prisma.order.findUnique({
       where: { id: orderId },
       include: { items: { include: { product: true } } },
+    }) as unknown as Promise<OrderWithItems | null>;
+  }
+
+  async findOrderByIdempotencyKey(
+    userId: string,
+    idempotencyKey: string,
+  ): Promise<OrderWithItems | null> {
+    return prisma.order.findFirst({
+      where: {
+        userId,
+        idempotencyKey,
+      },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
     }) as unknown as Promise<OrderWithItems | null>;
   }
 
@@ -150,28 +170,52 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     idempotencyKey?: string,
   ): Promise<Order> {
     const prismaTx = toPrismaTx(tx);
-    const created = await prismaTx.order.create({
-      data: {
-        id: order.id,
-        orderNumber: order.orderNumber,
-        userId: order.userId,
-        status: order.status,
-        paymentMethod: order.paymentMethod as PaymentMethod,
-        paymentStatus: order.paymentStatus as PaymentStatus,
-        subtotal: order.subtotal.getValue(),
-        tax: order.tax.getValue(),
-        shippingFee: order.shippingFee.getValue(),
-        total: order.total.getValue(),
-        discountAmount: order.discountAmount.getValue(),
-        discountCode: order.discountCode,
-        customerName: order.customerName,
-        customerEmail: order.customerEmail,
-        customerPhone: order.customerPhone,
-        customerAddress: order.customerAddress,
-        notes: order.notes,
-        ...(idempotencyKey ? { idempotencyKey } : {}),
-      },
-    });
+    let created: Order;
+
+    try {
+      created = await prismaTx.order.create({
+        data: {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          userId: order.userId,
+          status: order.status,
+          paymentMethod: order.paymentMethod as PaymentMethod,
+          paymentStatus: order.paymentStatus as PaymentStatus,
+          subtotal: order.subtotal.getValue(),
+          tax: order.tax.getValue(),
+          shippingFee: order.shippingFee.getValue(),
+          total: order.total.getValue(),
+          discountAmount: order.discountAmount.getValue(),
+          discountCode: order.discountCode,
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          customerPhone: order.customerPhone,
+          customerAddress: order.customerAddress,
+          notes: order.notes,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        },
+      });
+    } catch (error) {
+      if (
+        idempotencyKey &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const target = error.meta?.target;
+
+        const targets = Array.isArray(target)
+          ? target.map(String)
+          : typeof target === "string"
+            ? [target]
+            : [];
+
+        if (targets.some((field) => field.includes("idempotencyKey"))) {
+          throw new IdempotencyConflictError();
+        }
+      }
+
+      throw error;
+    }
 
     await prismaTx.orderItem.createMany({
       data: order.items.map((item) => ({

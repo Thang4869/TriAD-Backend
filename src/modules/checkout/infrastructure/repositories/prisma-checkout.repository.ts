@@ -23,7 +23,7 @@ interface CreateOrderData {
   orderNumber: string;
   userId: string;
   status: "PENDING";
-  paymentMethod: "COD" | "CARD" | "BANKING";
+  paymentMethod: "COD";
   paymentStatus: "PENDING";
   subtotal: number;
   tax: number;

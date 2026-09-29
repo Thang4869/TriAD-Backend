@@ -19,7 +19,7 @@ import { ordersPlaced } from "@core/metrics/metrics.registry";
 
 export interface CheckoutInput {
   idempotencyKey?: string;
-  paymentMethod: "COD" | "CARD" | "BANKING";
+  paymentMethod: "COD";
   address: string;
   phone: string;
   notes?: string;

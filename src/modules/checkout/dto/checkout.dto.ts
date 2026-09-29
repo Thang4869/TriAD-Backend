@@ -3,9 +3,9 @@ import { z } from "zod";
 export const checkoutSchema = z.object({
   body: z.object({
     idempotencyKey: z.string().optional(),
-    paymentMethod: z.enum(["COD", "CARD", "BANKING"], {
+    paymentMethod: z.literal("COD", {
       errorMap: () => ({
-        message: "Payment method must be COD, CARD, or BANKING",
+        message: "Only COD payment is currently supported",
       }),
     }),
     address: z

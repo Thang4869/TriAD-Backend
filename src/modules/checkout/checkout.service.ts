@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import { Money } from "@shared/value-objects/money";
 import {
   BadRequestError,
@@ -17,6 +16,7 @@ import {
 } from "@shared/application/feature-flags/feature-flag.port";
 import { ordersPlaced } from "@core/metrics/metrics.registry";
 import { IdempotencyConflictError } from "./application/errors/idempotency-conflict.error";
+import { OrderNumberGenerator } from "./application/ports/order-number-generator.port";
 
 export interface CheckoutInput {
   idempotencyKey?: string;
@@ -36,6 +36,7 @@ export class CheckoutService {
     private readonly pricingService: PricingService,
     private readonly stockService: StockReservationService,
     private readonly featureFlags: FeatureFlagPort,
+    private readonly orderNumberGenerator: OrderNumberGenerator,
   ) {}
 
   async checkout(userId: string, input: CheckoutInput) {
@@ -93,7 +94,7 @@ export class CheckoutService {
             const order = Order.create({
               id: crypto.randomUUID(),
               userId,
-              orderNumber: `ORD-${Date.now().toString(36).toUpperCase()}`,
+              orderNumber: this.orderNumberGenerator.generate(),
               customerName: `${user.firstName} ${user.lastName}`,
               customerEmail: user.email,
               customerPhone: input.phone || user.phone || "",

@@ -77,6 +77,7 @@ import { PrismaProjectionStore } from "@core/outbox/prisma-projection.store";
 import { OutboxRelay } from "@core/outbox/outbox-relay";
 import { PrismaOutboxRelayStore } from "@core/outbox/prisma-outbox-relay.store";
 import { PrismaOutboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
+import { CryptoOrderNumberGenerator } from "@modules/checkout/infrastructure/order-number-generator";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -203,6 +204,11 @@ container.register(
   (c) => new StockReservationService(c.resolve(TOKENS.CheckoutRepository)),
 );
 
+container.register(
+  TOKENS.OrderNumberGenerator,
+  () => new CryptoOrderNumberGenerator(),
+);
+
 // ---------- Domain services ----------
 container.register(
   TOKENS.AuthService,
@@ -228,6 +234,7 @@ container.register(
       c.resolve(TOKENS.PricingService),
       c.resolve(TOKENS.StockReservationService),
       c.resolve(TOKENS.FeatureFlags),
+      c.resolve(TOKENS.OrderNumberGenerator),
     ),
 );
 container.register(

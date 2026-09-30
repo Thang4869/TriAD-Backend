@@ -267,4 +267,80 @@ describe("idempotencyMiddleware", () => {
 
     process.env.IDEMPOTENCY_TTL = originalTtl;
   });
+
+  it("forwards redis.get failure to next(error)", async () => {
+    req.headers = { "idempotency-key": "redis-get-fail" };
+
+    const redisError = new Error("redis get failed");
+    vi.mocked(redis.get).mockRejectedValueOnce(redisError);
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith(redisError);
+  });
+
+  it("forwards redis.set failure to next(error)", async () => {
+    req.headers = { "idempotency-key": "redis-set-fail" };
+
+    const redisError = new Error("redis set failed");
+
+    vi.mocked(redis.get).mockResolvedValueOnce(null);
+    vi.mocked(redis.set).mockRejectedValueOnce(redisError);
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith(redisError);
+  });
+
+  it("forwards the second redis.get failure after a failed NX claim", async () => {
+    req.headers = { "idempotency-key": "redis-concurrent-get-fail" };
+
+    const redisError = new Error("redis concurrent get failed");
+
+    vi.mocked(redis.get)
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(redisError);
+
+    vi.mocked(redis.set).mockResolvedValueOnce(null);
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(redis.get).toHaveBeenCalledTimes(2);
+    expect(next).toHaveBeenCalledWith(redisError);
+  });
+
+  it("logs redis.setex failure after a successful response", async () => {
+    req.headers = { "idempotency-key": "setex-log-fail" };
+
+    const redisError = new Error("redis setex failed");
+    vi.mocked(redis.setex).mockRejectedValueOnce(redisError);
+
+    const middleware = idempotencyMiddleware();
+    await middleware(req as Request, res as Response, next);
+
+    (res as any).json({ success: true });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(redis.setex).toHaveBeenCalled();
+  });
+
+  it("logs redis.del failure after a non-2xx response", async () => {
+    req.headers = { "idempotency-key": "del-log-fail" };
+    (res as any).statusCode = 500;
+
+    const redisError = new Error("redis del failed");
+    vi.mocked(redis.del).mockRejectedValueOnce(redisError);
+
+    const middleware = idempotencyMiddleware();
+    await middleware(req as Request, res as Response, next);
+
+    (res as any).json({ error: "failed" });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(redis.del).toHaveBeenCalled();
+  });
 });

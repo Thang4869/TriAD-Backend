@@ -1,6 +1,7 @@
 import prisma from "@core/database/prisma";
 import { Prisma } from "@prisma/client";
-
+import { persistDomainEvents } from "@core/outbox/persist-domain-events";
+import type { Product } from "../../domain/product.entity";
 import type {
   CategoryCount,
   CreateProductData,
@@ -20,7 +21,12 @@ import type { ProductFilter } from "../../domain/specifications/product-specific
 
 // ---------- Prisma implementation ----------
 
+type PersistDomainEvents = typeof persistDomainEvents;
+
 export class PrismaProductsRepository implements IProductsRepository {
+  constructor(
+    private readonly persistEvents: PersistDomainEvents = persistDomainEvents,
+  ) {}
   async findManyWithRatings(
     query: ProductListQuery,
   ): Promise<ProductWithRatingReviews[]> {
@@ -125,6 +131,23 @@ export class PrismaProductsRepository implements IProductsRepository {
 
   async update(id: string, data: UpdateProductData): Promise<ProductRecord> {
     return prisma.product.update({ where: { id }, data });
+  }
+
+  async updateWithEvents(
+    id: string,
+    data: UpdateProductData,
+    aggregate: Product,
+  ): Promise<ProductRecord> {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({
+        where: { id },
+        data,
+      });
+
+      await this.persistEvents(tx, [aggregate]);
+
+      return updated;
+    });
   }
 
   async setActive(id: string, isActive: boolean): Promise<ProductRecord> {

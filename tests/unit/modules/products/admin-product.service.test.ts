@@ -45,6 +45,7 @@ function createRepository(
     findById: vi.fn().mockResolvedValue(PRODUCT),
     create: vi.fn().mockResolvedValue(PRODUCT),
     update: vi.fn().mockResolvedValue(PRODUCT),
+    updateWithEvents: vi.fn().mockResolvedValue(PRODUCT),
     setActive: vi.fn().mockResolvedValue(PRODUCT),
     existsAndActive: vi.fn().mockResolvedValue(true),
     searchFullText: vi.fn().mockResolvedValue([]),
@@ -204,18 +205,34 @@ describe("AdminProductService.update", () => {
     expect(repository.update).toHaveBeenCalled();
   });
 
-  it("đổi giá thì publish ProductPriceChanged", async () => {
+  it("đổi giá thì lưu product và domain event qua atomic repository path", async () => {
     const repository = createRepository();
 
     await createService(repository).service.update("prod-1", {
       price: 200_000,
     } as never);
 
-    expect(publishSpy).toHaveBeenCalledTimes(1);
-    expect(publishSpy.mock.calls[0][0]).toMatchObject({
+    expect(repository.updateWithEvents).toHaveBeenCalledTimes(1);
+
+    expect(repository.updateWithEvents).toHaveBeenCalledWith(
+      "prod-1",
+      { price: 200_000 },
+      expect.any(Object),
+    );
+
+    const aggregate = vi.mocked(repository.updateWithEvents).mock.calls[0][2];
+
+    expect(aggregate.domainEvents).toHaveLength(1);
+    expect(aggregate.domainEvents[0]).toMatchObject({
       eventName: "ProductPriceChanged",
-      metadata: { oldPrice: 100_000, newPrice: 200_000 },
+      metadata: {
+        oldPrice: 100_000,
+        newPrice: 200_000,
+      },
     });
+
+    expect(repository.update).not.toHaveBeenCalled();
+    expect(publishSpy).not.toHaveBeenCalled();
   });
 
   it("giá không đổi thì không publish event", async () => {
@@ -238,16 +255,20 @@ describe("AdminProductService.update", () => {
     expect(publishSpy).not.toHaveBeenCalled();
   });
 
-  it("lỗi khi publish event không làm hỏng thao tác update", async () => {
-    publishSpy.mockRejectedValue(new Error("bus down"));
-    const repository = createRepository();
+  it("lỗi atomic update với outbox thì update bị fail", async () => {
+    const repository = createRepository({
+      updateWithEvents: vi.fn().mockRejectedValue(new Error("outbox failed")),
+    });
 
     await expect(
       createService(repository).service.update("prod-1", {
         price: 200_000,
       } as never),
-    ).resolves.toBeDefined();
-    expect(repository.update).toHaveBeenCalled();
+    ).rejects.toThrow("outbox failed");
+
+    expect(repository.updateWithEvents).toHaveBeenCalledTimes(1);
+    expect(repository.update).not.toHaveBeenCalled();
+    expect(publishSpy).not.toHaveBeenCalled();
   });
 });
 

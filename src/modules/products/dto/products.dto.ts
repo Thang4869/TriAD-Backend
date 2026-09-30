@@ -4,31 +4,22 @@ export const getProductsQuerySchema = z.object({
   query: z.object({
     page: z
       .string()
-      .optional()
+      .default("1")
       .transform(Number)
-      .pipe(z.number().int().min(1).default(1)),
+      .pipe(z.number().int().min(1)),
     limit: z
       .string()
-      .optional()
+      .default("12")
       .transform(Number)
-      .pipe(z.number().int().min(1).max(50).default(12)),
+      .pipe(z.number().int().min(1).max(50)),
     category: z.string().optional(),
-    minPrice: z
-      .string()
-      .optional()
-      .transform(Number)
-      .pipe(z.number().min(0).optional()),
-    maxPrice: z
-      .string()
-      .optional()
-      .transform(Number)
-      .pipe(z.number().min(0).optional()),
+    minPrice: z.string().transform(Number).pipe(z.number().min(0)).optional(),
+    maxPrice: z.string().transform(Number).pipe(z.number().min(0)).optional(),
     keyword: z.string().optional(),
     sortBy: z
       .enum(["createdAt", "price", "name", "rating"])
-      .optional()
       .default("createdAt"),
-    sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
+    sortOrder: z.enum(["asc", "desc"]).default("desc"),
   }),
 });
 

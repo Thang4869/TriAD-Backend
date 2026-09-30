@@ -1,3 +1,4 @@
+import type { Product } from "../../domain/product.entity";
 import type { ProductFilter } from "../../domain/specifications/product-specification";
 import type {
   ProductIdRecord,
@@ -66,6 +67,11 @@ export interface IProductsRepository {
   findById(id: string): Promise<ProductRecord | null>;
   create(data: CreateProductData): Promise<ProductRecord>;
   update(id: string, data: UpdateProductData): Promise<ProductRecord>;
+  updateWithEvents(
+    id: string,
+    data: UpdateProductData,
+    aggregate: Product,
+  ): Promise<ProductRecord>;
   setActive(id: string, isActive: boolean): Promise<ProductRecord>;
   existsAndActive(id: string): Promise<boolean>;
 

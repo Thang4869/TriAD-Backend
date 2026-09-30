@@ -86,7 +86,8 @@ export class AdminProductService {
     if (data.price !== undefined && data.price !== product.price) {
       const entity = Product.hydrate(product);
       entity.changePrice(new Money(data.price));
-      await this.publishEvents(entity);
+
+      return this.repository.updateWithEvents(id, data, entity);
     }
 
     return this.repository.update(id, data);

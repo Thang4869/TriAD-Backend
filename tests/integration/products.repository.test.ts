@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import prisma from "@core/database/prisma";
 import { PrismaProductsRepository } from "@modules/products/infrastructure/repositories/prisma-products.repository";
+import { Product } from "@modules/products/domain/product.entity";
+import { Money } from "@shared/value-objects/money";
 
 describe("PrismaProductsRepository (integration)", () => {
   const repository = new PrismaProductsRepository();
@@ -26,6 +28,90 @@ describe("PrismaProductsRepository (integration)", () => {
 
     const deactivated = await repository.setActive(product.id, false);
     expect(deactivated.isActive).toBe(false);
+  });
+
+  it("updateWithEvents cập nhật giá và ghi ProductPriceChanged vào outbox cùng transaction", async () => {
+    const suffix = Date.now();
+
+    const product = await repository.create({
+      name: "Atomic Price Product",
+      description: "d",
+      price: 100,
+      stock: 5,
+      category: "atomic",
+      images: [],
+      slug: `atomic-price-${suffix}`,
+    });
+
+    const entity = Product.hydrate(product);
+    entity.changePrice(new Money(200));
+
+    const updated = await repository.updateWithEvents(
+      product.id,
+      { price: 200 },
+      entity,
+    );
+
+    expect(updated.price).toBe(200);
+
+    const persisted = await prisma.product.findUnique({
+      where: { id: product.id },
+    });
+
+    expect(persisted?.price).toBe(200);
+
+    const outboxEvent = await prisma.outboxEvent.findFirst({
+      where: {
+        aggregateId: product.id,
+        eventName: "ProductPriceChanged",
+      },
+      orderBy: {
+        occurredAt: "desc",
+      },
+    });
+
+    expect(outboxEvent).not.toBeNull();
+    expect(outboxEvent?.payload).toMatchObject({
+      eventName: "ProductPriceChanged",
+      aggregateId: product.id,
+      metadata: {
+        oldPrice: 100,
+        newPrice: 200,
+      },
+    });
+
+    expect(entity.domainEvents).toHaveLength(0);
+  });
+
+  it("updateWithEvents rollback product update khi persist outbox thất bại", async () => {
+    const suffix = Date.now();
+
+    const product = await repository.create({
+      name: "Rollback Price Product",
+      description: "d",
+      price: 100,
+      stock: 5,
+      category: "atomic",
+      images: [],
+      slug: `rollback-price-${suffix}`,
+    });
+
+    const entity = Product.hydrate(product);
+    entity.changePrice(new Money(200));
+
+    const failingRepository = new PrismaProductsRepository(async () => {
+      throw new Error("outbox persistence failed");
+    });
+
+    await expect(
+      failingRepository.updateWithEvents(product.id, { price: 200 }, entity),
+    ).rejects.toThrow("outbox persistence failed");
+
+    const persisted = await prisma.product.findUnique({
+      where: { id: product.id },
+    });
+
+    expect(persisted?.price).toBe(100);
   });
 
   it("findManyWithRatings trả về sản phẩm kèm reviews, hỗ trợ where/orderBy/skip/take", async () => {

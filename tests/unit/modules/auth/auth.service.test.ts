@@ -68,6 +68,7 @@ function createFakeRepository(overrides = {}): IAuthRepository {
     createRefreshToken: vi.fn(),
     findRefreshTokenByToken: vi.fn(),
     revokeRefreshToken: vi.fn(),
+    rotateRefreshToken: vi.fn().mockResolvedValue(true),
     findRefreshTokenWithUser: vi.fn(),
     deleteRefreshTokenById: vi.fn(),
     deleteRefreshTokenByToken: vi.fn(),

@@ -37,7 +37,15 @@ export interface IAuthRepository {
 
   findRefreshTokenByToken(token: string): Promise<AuthRefreshToken | null>;
 
-  revokeRefreshToken(id: string): Promise<void>;
+  revokeRefreshToken(id: string): Promise<boolean>;
+
+  rotateRefreshToken(
+    currentTokenId: string,
+    token: string,
+    userId: string,
+    familyId: string,
+    expiresAt: Date,
+  ): Promise<boolean>;
 
   findRefreshTokenWithUser(
     token: string,

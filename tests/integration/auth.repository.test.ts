@@ -284,5 +284,65 @@ describe("PrismaAuthRepository (integration)", () => {
       expect(rb?.revokedAt).not.toBeNull();
       expect(rOther?.revokedAt).toBeNull();
     });
+
+    it("chỉ cho đúng một request atomically revoke cùng refresh token", async () => {
+      const created = await repository.createRefreshToken(
+        `rt-race-${Date.now()}`,
+        userId,
+        `family-race-${Date.now()}`,
+        new Date(Date.now() + 100_000),
+      );
+
+      const results = await Promise.all([
+        repository.revokeRefreshToken(created.id),
+        repository.revokeRefreshToken(created.id),
+      ]);
+
+      expect(results.filter(Boolean)).toHaveLength(1);
+      expect(results.filter((result) => !result)).toHaveLength(1);
+
+      const persisted = await prisma.refreshToken.findUnique({
+        where: { id: created.id },
+      });
+
+      expect(persisted?.revokedAt).not.toBeNull();
+    });
+
+    it("rolls back revocation when creating the rotated refresh token fails", async () => {
+      const familyId = `family-rotate-rollback-${Date.now()}`;
+      const originalToken = `rt-original-${Date.now()}`;
+
+      const current = await repository.createRefreshToken(
+        originalToken,
+        userId,
+        familyId,
+        new Date(Date.now() + 100_000),
+      );
+
+      const duplicateToken = `rt-duplicate-${Date.now()}`;
+
+      await repository.createRefreshToken(
+        duplicateToken,
+        userId,
+        `other-family-${Date.now()}`,
+        new Date(Date.now() + 100_000),
+      );
+
+      await expect(
+        repository.rotateRefreshToken(
+          current.id,
+          duplicateToken,
+          userId,
+          familyId,
+          new Date(Date.now() + 100_000),
+        ),
+      ).rejects.toThrow();
+
+      const persisted = await prisma.refreshToken.findUnique({
+        where: { id: current.id },
+      });
+
+      expect(persisted?.revokedAt).toBeNull();
+    });
   });
 });

@@ -207,7 +207,10 @@ export class CheckoutService {
       return await this.repository.runInTransaction(operation);
     } catch (error) {
       if (error instanceof ConflictError && retryCount < MAX_RETRIES) {
-        const delay = BASE_DELAY_MS * Math.pow(2, retryCount);
+        const exponentialDelay = BASE_DELAY_MS * Math.pow(2, retryCount);
+        const jitter = Math.random() * BASE_DELAY_MS;
+        const delay = exponentialDelay + jitter;
+
         await new Promise((resolve) => setTimeout(resolve, delay));
         return this.executeWithRetry(operation, retryCount + 1);
       }

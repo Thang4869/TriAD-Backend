@@ -661,5 +661,30 @@ describe("CheckoutService", () => {
       await vi.runAllTimersAsync();
       await assertion;
     });
+    it("retries transaction conflict with exponential backoff and jitter", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      mockFindOrderSuccess();
+
+      const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+      repository.runInTransaction = vi
+        .fn()
+        .mockRejectedValueOnce(new ConflictError("Transaction conflict"))
+        .mockImplementationOnce(async (fn) => fn({} as any));
+
+      const promise = service.checkout("user-1", baseInput);
+
+      await vi.advanceTimersByTimeAsync(149);
+
+      expect(repository.runInTransaction).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await promise;
+
+      expect(repository.runInTransaction).toHaveBeenCalledTimes(2);
+      expect(randomSpy).toHaveBeenCalledTimes(1);
+
+      randomSpy.mockRestore();
+    });
   });
 });

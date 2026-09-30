@@ -1,126 +1,93 @@
-import { describe, it, expect, vi } from "vitest";
-import { CheckoutService } from "../../src/modules/checkout/checkout.service";
-import { ICheckoutRepository } from "../../src/modules/checkout/application/ports/checkout.repository.port";
-import { PricingService } from "../../src/modules/checkout/services/pricing.service";
-import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
+import { describe, expect, it } from "vitest";
+import prisma from "@core/database/prisma";
+import { PrismaCheckoutRepository } from "@modules/checkout/infrastructure/repositories/prisma-checkout.repository";
 import { ConflictError } from "@shared/utils/errors";
+import type { Prisma } from "@prisma/client";
+import type { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
 
-vi.mock("@core/redis/client", () => ({
-  default: {
-    get: vi.fn().mockResolvedValue(null),
-    setex: vi.fn().mockResolvedValue("OK"),
-  },
-}));
+function toPrismaTx(tx: CheckoutTransaction): Prisma.TransactionClient {
+  return tx as unknown as Prisma.TransactionClient;
+}
 
-vi.mock("@core/queue/bull", () => ({
-  emailQueue: {
-    add: vi.fn().mockResolvedValue({}),
-  },
-}));
+describe("Checkout transaction contention (integration, real DB)", () => {
+  const repository = new PrismaCheckoutRepository();
 
-describe("Checkout Concurrency", () => {
-  it("should prevent overselling with concurrent requests", async () => {
-    const orderId = "order-1";
-    const mockOrder = { id: orderId, items: [] };
+  it("translates a real SERIALIZABLE write conflict into ConflictError", async () => {
+    const suffix = `${Date.now()}-${Math.random()}`;
 
-    const repository = {
-      findOrderByIdempotencyKey: vi.fn().mockResolvedValue(null),
-      findCachedOrderId: vi.fn().mockResolvedValue(null),
-      cacheOrderId: vi.fn().mockResolvedValue(undefined),
-      findOrderWithItems: vi.fn().mockResolvedValue(mockOrder),
-      findUserCartForCheckout: vi.fn().mockImplementation(async (userId) => ({
-        id: userId,
-        email: `${userId}@test.com`,
-        firstName: "Test",
-        lastName: "User",
-        phone: "0123456789",
-        cart: {
-          id: `cart-${userId}`,
-          userId,
-          items: [
-            {
-              productId: "test-product",
-              quantity: 1,
-              product: {
-                id: "test-product",
-                name: "Test Product",
-                price: 100000,
-                stock: 1,
-                version: 0,
-              },
-            },
-          ],
-        },
-      })),
-      runInTransaction: vi.fn().mockResolvedValue({}),
-      findDiscountByCode: vi.fn().mockResolvedValue(null),
-      incrementDiscountUsage: vi.fn().mockResolvedValue(true),
-      saveNewOrder: vi.fn().mockResolvedValue({ id: orderId }),
-      clearCartItems: vi.fn().mockResolvedValue(undefined),
-      createOrder: vi.fn(),
-      createOrderItems: vi.fn(),
-      findOrdersByUser: vi.fn(),
-      countOrdersByUser: vi.fn(),
-      findOrderByUserAndId: vi.fn(),
-    } as unknown as ICheckoutRepository;
-
-    const pricingService = {
-      calculatePricing: vi.fn().mockResolvedValue({
-        tax: { getValue: () => 0 },
-        shippingFee: { getValue: () => 0 },
-        discountAmount: { getValue: () => 0 },
-        discountCode: undefined,
-      }),
-    } as unknown as PricingService;
-
-    const stockService = {
-      reserveStock: vi.fn().mockResolvedValue(undefined),
-    } as unknown as StockReservationService;
-
-    const checkoutService = new CheckoutService(
-      repository,
-      pricingService,
-      stockService,
-      {
-        isEnabled: () => false,
+    const product = await prisma.product.create({
+      data: {
+        name: `Contention Product ${suffix}`,
+        description: "Serializable contention test",
+        price: 100,
+        stock: 10,
+        category: "test",
+        slug: `contention-${suffix}`,
+        images: [],
       },
-      {
-        generate: vi.fn().mockReturnValue("ORD-CONCURRENT-TEST"),
-      },
-    );
+    });
 
-    const mockOrderEntity = {
-      id: orderId,
-      orderNumber: "ORD-1",
-      total: { getValue: () => 100_000 },
+    let bothTransactionsHaveRead = 0;
+    let releaseReads!: () => void;
+
+    const readsCompleted = new Promise<void>((resolve) => {
+      releaseReads = resolve;
+    });
+
+    const waitUntilBothHaveRead = async () => {
+      bothTransactionsHaveRead += 1;
+
+      if (bothTransactionsHaveRead === 2) {
+        releaseReads();
+      }
+
+      await readsCompleted;
     };
 
-    (checkoutService as any).executeWithRetry = vi
-      .fn()
-      .mockResolvedValueOnce(mockOrderEntity)
-      .mockRejectedValueOnce(new ConflictError("Stock conflict"));
+    const competingWrite = (amount: number) =>
+      repository.runInTransaction(async (tx) => {
+        const prismaTx = toPrismaTx(tx);
 
-    const requests = [
-      checkoutService.checkout("user-a", {
-        idempotencyKey: "idem-a",
-        paymentMethod: "COD",
-        address: "Address A",
-        phone: "0123456789",
-      }),
-      checkoutService.checkout("user-b", {
-        idempotencyKey: "idem-b",
-        paymentMethod: "COD",
-        address: "Address B",
-        phone: "0987654321",
-      }),
-    ];
+        const current = await prismaTx.product.findUniqueOrThrow({
+          where: { id: product.id },
+          select: {
+            stock: true,
+            version: true,
+          },
+        });
 
-    const results = await Promise.allSettled(requests);
+        await waitUntilBothHaveRead();
 
-    const successCount = results.filter((r) => r.status === "fulfilled").length;
-    const failCount = results.filter((r) => r.status === "rejected").length;
+        return prismaTx.product.update({
+          where: { id: product.id },
+          data: {
+            stock: current.stock - amount,
+            version: current.version + 1,
+          },
+        });
+      });
 
-    expect(successCount).toBe(1);
-    expect(failCount).toBe(1);
+    const results = await Promise.allSettled([
+      competingWrite(1),
+      competingWrite(2),
+    ]);
+
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+
+    const rejected = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    expect(rejected[0].reason).toBeInstanceOf(ConflictError);
+
+    const updated = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+
+    expect([8, 9]).toContain(updated.stock);
+    expect(updated.version).toBe(1);
   });
 });

@@ -51,6 +51,7 @@ const configSchema = z
     FACEBOOK_CALLBACK_URL: z.string().url().optional(),
 
     FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+    COOKIE_DOMAIN: z.string().min(1).optional(),
 
     CORS_ORIGIN: z
       .string()

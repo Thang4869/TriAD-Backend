@@ -28,7 +28,9 @@ const cookieOptions = (maxAge: number) => ({
   sameSite: (config.isProduction ? "none" : "lax") as "none" | "lax",
   path: "/",
   maxAge,
-  ...(process.env.COOKIE_DOMAIN && { domain: process.env.COOKIE_DOMAIN }),
+  ...(config.COOKIE_DOMAIN && {
+    domain: config.COOKIE_DOMAIN,
+  }),
 });
 
 function is2FAResult(result: unknown): result is TwoFactorRequired {
@@ -62,8 +64,16 @@ export class AuthController {
     const token = req.query.token as string;
     if (!token) throw new BadRequestError("Verification token is required");
     const result = await this.service.verifyEmail(token);
-    this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    sendSuccess(res, { user: result.user }, "Email verified successfully");
+    const csrfToken = this.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+    );
+    sendSuccess(
+      res,
+      { user: result.user, csrfToken },
+      "Email verified successfully",
+    );
   });
 
   resendVerification = asyncHandler(async (req: Request, res: Response) => {
@@ -87,16 +97,24 @@ export class AuthController {
     if (!isAuthTokens(result))
       throw new BadRequestError("Unexpected result from login");
 
-    this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    sendSuccess(res, { user: result.user });
+    const csrfToken = this.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+    );
+    sendSuccess(res, { user: result.user, csrfToken });
   });
 
   refresh = asyncHandler(async (req: Request, res: Response) => {
     const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
     if (!refreshToken) throw new BadRequestError("Refresh token required");
     const result = await this.service.refreshToken(refreshToken);
-    this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    sendSuccess(res, { user: result.user });
+    const csrfToken = this.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+    );
+    sendSuccess(res, { user: result.user, csrfToken });
   });
 
   logout = asyncHandler(async (req: Request, res: Response) => {
@@ -111,6 +129,18 @@ export class AuthController {
     res.clearCookie("refreshToken", cookieOptions(0));
     res.clearCookie(CSRF_COOKIE_NAME, csrfCookieOptions(0));
     sendMessage(res, "Logged out successfully");
+  });
+
+  csrf = asyncHandler(async (_req: Request, res: Response) => {
+    const csrfToken = generateCsrfToken();
+
+    res.cookie(
+      CSRF_COOKIE_NAME,
+      csrfToken,
+      csrfCookieOptions(7 * 24 * 60 * 60 * 1000),
+    );
+
+    sendSuccess(res, { csrfToken });
   });
 
   enable2FA = asyncHandler(async (req: Request, res: Response) => {
@@ -134,8 +164,12 @@ export class AuthController {
     const result = await this.service.verifyTOTP(preAuthToken, token);
     if (!isAuthTokens(result))
       throw new BadRequestError("Unexpected result from TOTP verification");
-    this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    sendSuccess(res, { user: result.user });
+    const csrfToken = this.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+    );
+    sendSuccess(res, { user: result.user, csrfToken });
   });
 
   googleCallback = async (req: Request, res: Response) => {
@@ -164,7 +198,9 @@ export class AuthController {
     res: Response,
     accessToken: string,
     refreshToken: string,
-  ) {
+  ): string {
+    const csrfToken = generateCsrfToken();
+
     res.cookie("accessToken", accessToken, cookieOptions(15 * 60 * 1000));
     res.cookie(
       "refreshToken",
@@ -173,8 +209,10 @@ export class AuthController {
     );
     res.cookie(
       CSRF_COOKIE_NAME,
-      generateCsrfToken(),
+      csrfToken,
       csrfCookieOptions(7 * 24 * 60 * 60 * 1000),
     );
+
+    return csrfToken;
   }
 }

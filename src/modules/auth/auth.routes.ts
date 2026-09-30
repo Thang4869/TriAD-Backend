@@ -50,6 +50,7 @@ router.post(
   authController.refresh,
 );
 router.post("/logout", authMiddleware, csrfProtection, authController.logout);
+router.get("/csrf", authMiddleware, authController.csrf);
 router.post("/2fa/enable", authMiddleware, authController.enable2FA);
 router.post("/2fa/verify", authMiddleware, authController.verify2FA);
 router.post(

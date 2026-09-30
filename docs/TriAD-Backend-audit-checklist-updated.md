@@ -19,8 +19,8 @@ Quy ước: **BE** = backend; **FE** = frontend. Các đường dẫn dưới đ
 | 7   | Tạo `orderNumber` bảo đảm không trùng; giá trị hiện dựa vào `Date.now()` và DB có ràng buộc unique.                                                                                                     | BE: [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), [schema.prisma](https://github.com/Thang4869/TriAD-Backend/blob/main/prisma/schema.prisma)                                                                                                                               | ✅ CLOSED  |
 | 8   | Sửa luồng đổi giá: service phát sự kiện trước khi lưu giá mới. Đưa thao tác lưu và ghi outbox vào cùng transaction.                                                                                     | BE: [admin-product.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/services/admin-product.service.ts)                                                                                                                                                                                                        | ✅ CLOSED  |
 | 9   | Đưa sự kiện đổi trạng thái đơn vào outbox và kiểm tra trạng thái bằng cập nhật có điều kiện; hiện cập nhật DB rồi publish trực tiếp, có thể mất sự kiện hoặc gặp hai cập nhật tranh chấp.               | BE: [orders.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/orders.service.ts), [prisma-orders.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/infrastructure/repositories/prisma-orders.repository.ts)                                                                 | ⏭️ NEXT    |
-| 10  | Không báo outbox thành công khi kiểm tra hoặc ghi kết quả handler thất bại. `recordResult` hiện nuốt lỗi; `EventBus` dùng `Promise.allSettled` nhưng không xử lý mọi promise bị reject.                 | BE: [outbox-handler-tracker.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-handler-tracker.ts), [event-bus.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/event-bus/event-bus.ts)                                                                                                     | ⬜ TODO    |
-| 11  | Hoàn thiện cấu hình production: compose tham chiếu `otel-collector-config.yml` nhưng file này không có trong repo; chưa truyền đủ biến SMTP/Cloudinary mà cấu hình production yêu cầu.                  | BE: [docker-compose.prod.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/docker-compose.prod.yml), [src/config/index.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/config/index.ts)                                                                                                                                       | ⬜ TODO    |
+| 10  | Không báo outbox thành công khi kiểm tra hoặc ghi kết quả handler thất bại. `recordResult` hiện nuốt lỗi; `EventBus` dùng `Promise.allSettled` nhưng không xử lý mọi promise bị reject.                 | BE: [outbox-handler-tracker.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-handler-tracker.ts), [event-bus.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/event-bus/event-bus.ts)                                                                                                     | ✅ CLOSED    |
+| 11  | Hoàn thiện cấu hình production: compose tham chiếu `otel-collector-config.yml` nhưng file này không có trong repo; chưa truyền đủ biến SMTP/Cloudinary mà cấu hình production yêu cầu.                  | BE: [docker-compose.prod.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/docker-compose.prod.yml), [src/config/index.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/config/index.ts)                                                                                                                                       | ✅ CLOSED    |
 | 12  | Kiểm chứng cookie và CSRF trên đúng hai domain triển khai. Frontend đọc `csrfToken` qua `document.cookie`; nếu FE ở `vercel.app` còn API ở `onrender.com`, JavaScript FE không đọc được cookie của API. | FE: [api.service.js](https://github.com/Thang4869/TriAD-12/blob/main/src/shared/services/api.service.js); BE: [csrf.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/csrf.middleware.ts), [auth.controller.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/auth.controller.ts) | ⬜ TODO    |
 
 ## P1 — Đúng dữ liệu, độ tin cậy và ranh giới kiến trúc
@@ -57,16 +57,30 @@ Quy ước: **BE** = backend; **FE** = frontend. Các đường dẫn dưới đ
 
 ## Tiến độ cập nhật 30/09/2026
 
-- **P0 đã CLOSED chắc chắn:** #1, #2, #3, #4, #5, #6, #7, #8 và #41.
+- **P0 đã CLOSED chắc chắn:** #1, #2, #3, #4, #5, #6, #7, #8, #10, #11 và #41.
 - **P0 đang thực hiện tiếp theo:** #9 — đưa sự kiện đổi trạng thái đơn vào outbox và dùng conditional update.
 - **P0 đã làm một phần, chưa được phép CLOSED:** #35 và #36.
-- **P0 còn TODO:** #10, #11, #12, #37, #38, #39 và #40.
+- **P0 còn TODO:** #12, #37, #38, #39 và #40.
 - Một mục chỉ được chuyển sang **CLOSED** khi thay đổi mã nguồn, regression/integration test liên quan và quality gates cần thiết đều PASS.
 - #8 đã có integration evidence cho cả hai nhánh: cập nhật giá + outbox cùng commit; nếu persistence outbox thất bại thì transaction rollback và giá cũ được giữ nguyên.
 
+### Bằng chứng bổ sung — P0 #10 và #11 (30/09/2026)
+
+- **#10 — CLOSED:** `recordResult()` ném lại lỗi ghi tracker; `EventBus.publish()` tổng hợp mọi promise bị reject thành `failedHandlers`, bao gồm lỗi kiểm tra và ghi kết quả handler. Đã bổ sung ba trường hợp lỗi tracker và kiểm tra handler khác vẫn chạy. Người dùng xác nhận typecheck, lint và các test EventBus/tracker/relay PASS.
+- **#11 — CLOSED trong phạm vi cấu hình và khởi động Docker production trên máy local:**
+  - Compose truyền các biến frontend/CORS, SMTP và Cloudinary bắt buộc; file secret không đưa vào commit.
+  - Tạo `otel-collector-config.yml`, mount read-only; Collector validate thành công, không publish cổng nhận trace ra host.
+  - Dockerfile dùng Node 22 trên Debian bookworm-slim, cài OpenSSL và cấp quyền `/app/logs` cho user không phải root. Image build thành công.
+  - Tạo database kiểm tra riêng `triad_prod_check` trên PostgreSQL hiện có; cả 8 migration đã áp dụng thành công.
+  - Tách Redis bằng service `redis-prod-check` và volume riêng, tránh xử lý lại hàng đợi thử nghiệm cũ.
+  - Container API `healthy`, `/health/ready` trả `up`; log xác nhận PostgreSQL, Redis, BullMQ và OutboxRelay khởi động. Log sau khi tách môi trường không còn xử lý đơn thử nghiệm cũ.
+  - Phạm vi giới hạn: kiểm chứng trên Docker Desktop, vẫn sử dụng PostgreSQL đã có trong cùng project; chưa chứng minh compose khởi động độc lập trên máy sạch, triển khai public, luồng upload Cloudinary hoặc email end-to-end có kiểm soát. OTEL dùng debug exporter, chưa có nơi lưu/tra cứu trace lâu dài và chưa xác minh trace end-to-end.
+  - Lần chạy trước khi tách môi trường đã xử lý outbox thử nghiệm bằng SMTP thật; không coi đó là kiểm thử email có kiểm soát.
+- **#9:** giữ nguyên trạng thái trong bản đính kèm; cần đồng bộ riêng với bằng chứng hoàn tất của mục này.
+
 ## Thứ tự thực hiện
 
-1. Hoàn tất P0 còn lại theo thứ tự: **#9 → #10 → #11 → #12 → rà lại #35 → hoàn tất #36 → #37 → #38 → #39 → #40**.
+1. Hoàn tất P0 còn lại theo thứ tự: **#9 → #12 → rà lại #35 → hoàn tất #36 → #37 → #38 → #39 → #40**.
 2. Sau khi toàn bộ P0 có bằng chứng kiểm thử, chuyển sang các mục P1 theo mức độ phụ thuộc, ưu tiên #14 và #42–#55 cùng các mục liên quan.
 3. Thực hiện P2 và các diễn tập runtime/E2E để chứng minh hành vi production, recovery và CI.
 4. Đánh giá lại OOP, Clean Code, Tech Lead và production readiness dựa trên code + test + deploy evidence; không suy ra điểm tuyệt đối chỉ từ số checkbox đã đóng.

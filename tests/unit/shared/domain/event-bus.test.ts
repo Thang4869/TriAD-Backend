@@ -186,4 +186,76 @@ describe("EventBus", () => {
     expect(tracker.hasSucceeded).not.toHaveBeenCalled();
     expect(tracker.recordResult).not.toHaveBeenCalled();
   });
+
+  it.each(["hasSucceeded", "recordSuccess", "recordFailure"] as const)(
+    "trả thất bại khi tracker lỗi tại %s, vẫn chạy handler khác",
+    async (failurePoint) => {
+      const eventName = uniqueEventName("TrackerFailure");
+      const trackerError = new Error("tracker unavailable");
+      const handlerError = new Error("handler failed");
+
+      const failingHandler = vi.fn().mockResolvedValue(undefined);
+      const healthyHandler = vi.fn().mockResolvedValue(undefined);
+
+      if (failurePoint === "recordFailure") {
+        failingHandler.mockRejectedValue(handlerError);
+      }
+
+      const hasSucceeded = vi.fn(
+        async (_eventId: string, handlerName: string) => {
+          if (
+            handlerName === "FailingHandler" &&
+            failurePoint === "hasSucceeded"
+          ) {
+            throw trackerError;
+          }
+          return false;
+        },
+      );
+
+      const recordResult = vi.fn<HandlerExecutionTracker["recordResult"]>(
+        async (_eventId, handlerName) => {
+          if (handlerName === "FailingHandler") {
+            throw trackerError;
+          }
+        },
+      );
+
+      const tracker = createTracker({ hasSucceeded, recordResult });
+
+      bus.subscribe(eventName, "FailingHandler", failingHandler);
+      bus.subscribe(eventName, "HealthyHandler", healthyHandler);
+
+      const result = await bus.publish(new TestEvent(eventName), {
+        eventId: "evt-tracker-failure",
+        tracker,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        failedHandlers: ["FailingHandler"],
+      });
+      expect(healthyHandler).toHaveBeenCalledTimes(1);
+      expect(recordResult).toHaveBeenCalledWith(
+        "evt-tracker-failure",
+        "HealthyHandler",
+        { success: true },
+      );
+
+      if (failurePoint === "hasSucceeded") {
+        expect(failingHandler).not.toHaveBeenCalled();
+        expect(recordResult).toHaveBeenCalledTimes(1);
+      } else {
+        expect(failingHandler).toHaveBeenCalledTimes(1);
+        expect(recordResult).toHaveBeenCalledTimes(2);
+        expect(recordResult).toHaveBeenCalledWith(
+          "evt-tracker-failure",
+          "FailingHandler",
+          failurePoint === "recordSuccess"
+            ? { success: true }
+            : { success: false, error: handlerError.message },
+        );
+      }
+    },
+  );
 });

@@ -16,6 +16,17 @@ services:
       - JWT_PREAUTH_SECRET=${JWT_PREAUTH_SECRET}
       - TOTP_ISSUER=${TOTP_ISSUER:-TriAD}
       - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}
+      
+      - FRONTEND_URL=${FRONTEND_URL:?FRONTEND_URL is required}
+      - CORS_ORIGIN=${CORS_ORIGIN:?CORS_ORIGIN is required}
+      - SMTP_HOST=${SMTP_HOST:?SMTP_HOST is required}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:?SMTP_USER is required}
+      - SMTP_PASS=${SMTP_PASS:?SMTP_PASS is required}
+      - SMTP_FROM=${SMTP_FROM:?SMTP_FROM is required}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:?CLOUDINARY_CLOUD_NAME is required}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:?CLOUDINARY_API_KEY is required}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:?CLOUDINARY_API_SECRET is required}
       - ENABLE_TRACING=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
     depends_on:
@@ -23,10 +34,17 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.110.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
-      - ./otel-collector-config.yml:/etc/otelcol-contrib/config.yaml
-    ports:
-      - "4318:4318"
+      - ./otel-collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
 
+  redis-prod-check:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-prod-check-data:/data
 volumes:
   product-images:
+  redis-prod-check-data:

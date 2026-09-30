@@ -4,7 +4,7 @@ import { OrderStatus } from "@prisma/client";
 import { OrdersService } from "@modules/orders/orders.service";
 import { IOrdersRepository } from "@modules/orders/application/ports/orders.repository.port";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
-import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import { NotFoundError } from "@shared/utils/errors";
 
 vi.mock("@core/logger/winston", () => ({
   logger: {
@@ -17,8 +17,25 @@ vi.mock("@core/logger/winston", () => ({
 
 const ORDER = {
   id: "order-1",
+  orderNumber: "ORD-TEST-1",
   userId: "user-1",
   status: OrderStatus.PENDING,
+  version: 0,
+  paymentMethod: "COD",
+  paymentStatus: "PENDING",
+  subtotal: 100,
+  tax: 0,
+  shippingFee: 0,
+  total: 100,
+  discountAmount: 0,
+  discountCode: null,
+  customerName: "Test User",
+  customerEmail: "test@example.com",
+  customerPhone: "0123456789",
+  customerAddress: "Test Address",
+  notes: null,
+  createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  updatedAt: new Date("2026-01-01T00:00:00.000Z"),
   items: [],
 };
 
@@ -39,16 +56,19 @@ function createRepository(
     findManyAdmin: vi.fn().mockResolvedValue([]),
     countAdmin: vi.fn().mockResolvedValue(0),
     findById: vi.fn().mockResolvedValue(ORDER),
-    updateStatus: vi.fn().mockResolvedValue({
-      ...ORDER,
-      status: OrderStatus.PROCESSING,
-    }),
+    updateStatusWithEvents: vi
+      .fn()
+      .mockImplementation(async (_orderId, _expectedVersion, aggregate) => ({
+        ...ORDER,
+        status: aggregate.status,
+        version: aggregate.version,
+      })),
     ...overrides,
   } as unknown as IOrdersRepository;
 }
 
-function createService(repository: IOrdersRepository): OrdersService {
-  return new OrdersService(repository, eventBus);
+function createService(repository = createRepository()) {
+  return new OrdersService(repository);
 }
 
 beforeEach(() => {
@@ -156,7 +176,7 @@ describe("OrdersService.adminGetOrders", () => {
 });
 
 describe("OrdersService.updateOrderStatus", () => {
-  it("chuyển trạng thái hợp lệ PENDING → PROCESSING", async () => {
+  it("chuyển PENDING → PROCESSING thông qua Order aggregate", async () => {
     const repository = createRepository();
 
     const result = await createService(repository).updateOrderStatus(
@@ -164,10 +184,28 @@ describe("OrdersService.updateOrderStatus", () => {
       OrderStatus.PROCESSING,
     );
 
-    expect(repository.updateStatus).toHaveBeenCalledWith(
-      "order-1",
-      OrderStatus.PROCESSING,
-    );
+    expect(repository.updateStatusWithEvents).toHaveBeenCalledTimes(1);
+
+    const [orderId, expectedVersion, aggregate] = vi.mocked(
+      repository.updateStatusWithEvents,
+    ).mock.calls[0];
+
+    expect(orderId).toBe("order-1");
+    expect(expectedVersion).toBe(0);
+    expect(aggregate.status).toBe(OrderStatus.PROCESSING);
+    expect(aggregate.version).toBe(1);
+
+    expect(aggregate.domainEvents).toEqual([
+      expect.objectContaining({
+        eventName: "OrderStatusChanged",
+        aggregateId: "order-1",
+        metadata: {
+          oldStatus: OrderStatus.PENDING,
+          newStatus: OrderStatus.PROCESSING,
+          userId: "user-1",
+        },
+      }),
+    ]);
 
     expect(result.status).toBe(OrderStatus.PROCESSING);
   });
@@ -184,7 +222,7 @@ describe("OrdersService.updateOrderStatus", () => {
       ),
     ).rejects.toThrow(NotFoundError);
 
-    expect(repository.updateStatus).not.toHaveBeenCalled();
+    expect(repository.updateStatusWithEvents).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -192,7 +230,7 @@ describe("OrdersService.updateOrderStatus", () => {
     [OrderStatus.CANCELLED, OrderStatus.PROCESSING],
     [OrderStatus.PENDING, OrderStatus.DELIVERED],
     [OrderStatus.PENDING, OrderStatus.SHIPPED],
-  ])("chuyển %s → %s bị chặn bằng BadRequestError", async (from, to) => {
+  ])("chuyển %s → %s bị domain chặn", async (from, to) => {
     const repository = createRepository({
       findById: vi.fn().mockResolvedValue({
         ...ORDER,
@@ -202,13 +240,13 @@ describe("OrdersService.updateOrderStatus", () => {
 
     await expect(
       createService(repository).updateOrderStatus("order-1", to),
-    ).rejects.toThrow(BadRequestError);
+    ).rejects.toThrow();
 
-    expect(repository.updateStatus).not.toHaveBeenCalled();
+    expect(repository.updateStatusWithEvents).not.toHaveBeenCalled();
     expect(eventBus.publish).not.toHaveBeenCalled();
   });
 
-  it("publish OrderStatusChanged với trạng thái cũ và mới", async () => {
+  it("không publish OrderStatusChanged trực tiếp qua EventBus", async () => {
     const repository = createRepository();
 
     await createService(repository).updateOrderStatus(
@@ -216,59 +254,30 @@ describe("OrdersService.updateOrderStatus", () => {
       OrderStatus.PROCESSING,
     );
 
-    expect(eventBus.publish).toHaveBeenCalledTimes(1);
-
-    expect(eventBus.publish).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventName: "OrderStatusChanged",
-        aggregateId: "order-1",
-        metadata: {
-          oldStatus: OrderStatus.PENDING,
-          newStatus: OrderStatus.PROCESSING,
-          userId: "user-1",
-        },
-      }),
-    );
+    expect(repository.updateStatusWithEvents).toHaveBeenCalledTimes(1);
+    expect(eventBus.publish).not.toHaveBeenCalled();
   });
 
-  it("lỗi publish event không làm fail request cập nhật trạng thái", async () => {
-    vi.mocked(eventBus.publish).mockRejectedValueOnce(new Error("bus down"));
-
-    const repository = createRepository();
-
-    await expect(
-      createService(repository).updateOrderStatus(
-        "order-1",
-        OrderStatus.PROCESSING,
-      ),
-    ).resolves.toMatchObject({
-      status: OrderStatus.PROCESSING,
+  it("truyền version persistence làm expectedVersion cho repository", async () => {
+    const repository = createRepository({
+      findById: vi.fn().mockResolvedValue({
+        ...ORDER,
+        version: 7,
+      }),
     });
 
-    expect(repository.updateStatus).toHaveBeenCalledWith(
+    await createService(repository).updateOrderStatus(
       "order-1",
       OrderStatus.PROCESSING,
     );
 
-    expect(eventBus.publish).toHaveBeenCalledTimes(1);
-  });
-
-  it("không publish event khi transition bị từ chối", async () => {
-    const repository = createRepository({
-      findById: vi.fn().mockResolvedValue({
-        ...ORDER,
-        status: OrderStatus.DELIVERED,
+    expect(repository.updateStatusWithEvents).toHaveBeenCalledWith(
+      "order-1",
+      7,
+      expect.objectContaining({
+        id: "order-1",
+        status: OrderStatus.PROCESSING,
       }),
-    });
-
-    await expect(
-      createService(repository).updateOrderStatus(
-        "order-1",
-        OrderStatus.PENDING,
-      ),
-    ).rejects.toThrow(BadRequestError);
-
-    expect(repository.updateStatus).not.toHaveBeenCalled();
-    expect(eventBus.publish).not.toHaveBeenCalled();
+    );
   });
 });

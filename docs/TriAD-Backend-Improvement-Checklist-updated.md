@@ -1,15 +1,25 @@
-# TriAD-Backend: Checklist hoàn thiện dự án
+# TriAD Backend — Improvement Roadmap
 
-> Đánh giá lần đầu 28/09/2026; cập nhật tiến độ 30/09/2026 sau khi tiếp
+> Đánh giá lần đầu 28/09/2026; cập nhật tiến độ 01/10/2026 sau khi tiếp
 > tục refactor, chạy unit/integration tests và đối chiếu với
 > `TriAD-Backend-audit-checklist.md`. Điểm hiện tại: **\~7/10**. Mục
 > tiêu: **9--10/10** sau khi hoàn thành danh sách này.
 
-## Cập nhật 01/10 --- trạng thái sau các vòng refactor gần nhất
+## Quy ước trạng thái
 
-**Đã xác nhận hoàn thành:**
+| Ký hiệu | Trạng thái                                                                 |
+| ------- | -------------------------------------------------------------------------- |
+| ✅      | **CLOSED** — đã có code + test/evidence cần thiết                          |
+| 🟡      | **PARTIAL / PENDING** — còn phần việc hoặc runtime/deployment verification |
+| ⬜      | **TODO** — chưa triển khai / chưa xác minh                                 |
 
+## Executive status — 01/10/2026
+
+### ✅ Đã xác nhận hoàn thành
+
+- **B1 --- CLOSED.** Refresh-token rotation đã atomic: conditional revoke theo `revokedAt IS NULL`, revoke token cũ + tạo token mới cùng Prisma transaction, concurrent refresh race chỉ một request thành công, rollback giữ token cũ active nếu create token mới lỗi và refresh JWT mới có `jti` để bảo đảm uniqueness trong cùng một giây.
 - **A3 --- CLOSED.** `PrismaCheckoutRepository.runInTransaction()` dịch Prisma `P2034` thành `ConflictError` ngay tại adapter; `CheckoutService` retry bằng exponential backoff + jitter. Có unit test retry/jitter, adapter test `P2034` → `ConflictError` và integration test contention thật trên PostgreSQL `Serializable`.
+- **A6 --- CLOSED.** `IN_PROGRESS` dùng TTL tối đa 60 giây; Redis failures trước response được chuyển qua `next(error)`; lỗi `setex()`/`del()` sau response được log để quan sát. Regression tests, typecheck và lint PASS.
 - **A4 --- CLOSED.** `orderNumber` không còn dựa vào `Date.now()`.
   Checkout dùng `OrderNumberGenerator` với implementation
   `CryptoOrderNumberGenerator`; có unit test kiểm tra format/VO và tạo
@@ -36,20 +46,14 @@
   đã hỗ trợ.
 - Frontend checkout đã đồng bộ validator/controller và retry cùng một
   logical checkout attempt giữ nguyên idempotency key.
-
-**Đã làm một phần, chưa được phép CLOSED:**
-
-- **A6 --- PARTIAL.** `IN_PROGRESS` đã dùng TTL ngắn (60 giây) và
-  recovery đã được cải thiện; vẫn cần xác minh toàn bộ Redis failure
-  path của async Express middleware chuyển lỗi đúng sang error
-  middleware.
 - **A1/A2 --- CLOSED.** `OrdersService.updateOrderStatus` đã dùng
   conditional update theo `version`, tăng version khi cập nhật và ghi
   `OrderStatusChanged` vào outbox trong cùng Prisma transaction. Stale
   request bị conflict; lỗi ghi outbox rollback cả status/version.
   Unit/integration tests, typecheck và lint PASS.
-- **B1 --- TODO.** Refresh-token rotation race chưa được xác nhận hoàn
-  tất.
+
+### 🟡 Còn mở / cần tiếp tục
+
 - **P0 #12 --- IMPLEMENTATION COMPLETE / PRODUCTION VERIFICATION PENDING.**
   Cross-origin CSRF flow không còn phụ thuộc frontend đọc cookie API bằng
   `document.cookie`; backend trả/khôi phục token qua response và
@@ -57,7 +61,7 @@
   `COOKIE_DOMAIN` đã vào validated config. FE/BE tests và quality gates PASS;
   còn chờ Vercel + Render deployment verification.
 
-**Bước tiếp theo:** **A3 / P0 #35 đã CLOSED**. Implementation của **P0 #12** đã hoàn tất nhưng còn production verification trên Vercel + Render. Tiếp theo hoàn tất **A6 / P0 #36**, rồi B1 và các P0 còn lại.
+**Bước tiếp theo:** **A3 / P0 #35, A6 / P0 #36 và B1 / P0 #37 đã CLOSED**. P0 #12 còn production verification trên Vercel + Render. Tiếp theo thực hiện **B4 / P0 #38**, rồi #39 → #40.
 
 ## Phạm vi và giới hạn của đánh giá
 
@@ -81,84 +85,61 @@ dù ADR-003 viết "Query adapters read those tables".
 
 ## Điểm theo từng mảng (hiện tại)
 
-Mảng Điểm
-
----
-
-Kiến trúc / DDD 7
-OOP / Clean Code 7
-Độ tin cậy (outbox, concurrency) 6.5
-Testing 8
-Bảo mật 7
-Tài liệu 6
+| Mảng                             | Điểm |
+| -------------------------------- | ---: |
+| Kiến trúc / DDD                  |    7 |
+| OOP / Clean Code                 |    7 |
+| Độ tin cậy (outbox, concurrency) |  6.5 |
+| Testing                          |    8 |
+| Bảo mật                          |    7 |
+| Tài liệu                         |    6 |
 
 ## README mâu thuẫn với code
 
----
+| README nói                                   | Thực tế trong code / docs                                                        |
+| -------------------------------------------- | -------------------------------------------------------------------------------- |
+| “Production factories wire both Sagas”       | `OPERATIONS.md` và `ARCHITECTURE.md` cho thấy production path chưa nối Saga      |
+| “Unit of Work pattern”                       | `core/unit-of-work` rỗng                                                         |
+| “Strategy pattern cho Payment”               | Chưa thấy implementation tương ứng trong code                                    |
+| “Mapper Entity ↔ Persistence ↔ DTO”          | Chủ yếu thấy ở auth/products; nhiều repository khác còn trả Prisma model/ép kiểu |
+| “Domain events publish qua Outbox”           | Hiện không phải mọi domain event đều đi qua outbox                               |
+| “Query adapters read those tables” (ADR-003) | Chưa có projection read adapter được nối vào composition root                    |
+| Swagger ở `/api-docs`                        | Code dùng `/api/docs`                                                            |
+| “Internal / Private”                         | Repository public và chưa có LICENSE                                             |
 
-README nói Thực tế
-
----
-
-"Production factories wire `OPERATIONS.md` và `ARCHITECTURE.md` nói
-both Sagas" rõ chưa nối
-
-"Unit of Work pattern" Thư mục `core/unit-of-work` rỗng
-
-"Strategy pattern cho Không thấy trong code
-Payment"
-
-"Mapper Entity ↔ Persistence Chỉ có ở auth và products, còn lại repo
-↔ DTO" trả model Prisma ép kiểu
-
-"Domain events publish qua Chỉ `OrderPlaced` đi qua outbox
-Outbox"
-
-"Query adapters read those Không có adapter đọc projection nào được
-tables" (ADR-003) nối
-
-Swagger ở `/api-docs` Code là `/api/docs`
-
-"Internal / Private" Repo public, không có LICENSE
------------------------------------------------------------------------
-
----
-
-## P0. Lỗi đúng/sai và bảo mật (làm trước)
+## P0 — Correctness & security blockers
 
 ### Outbox và luồng nghiệp vụ
 
-- [x] **A1. \[CLOSED\]** Các luồng P0 đã xử lý gồm
+- [x] **A1. [CLOSED]** Các luồng P0 đã xử lý gồm
       `ProductPriceChanged` và `OrderStatusChanged`: thay đổi dữ liệu và
       ghi outbox nằm trong cùng transaction. Order-status có conditional
       update theo `version`; stale request conflict và lỗi outbox rollback
       status/version.
-- [x] **A2. \[CLOSED\]** `OrdersService.updateOrderStatus` áp dụng
+- [x] **A2. [CLOSED]** `OrdersService.updateOrderStatus` áp dụng
       domain transition, conditional/optimistic update theo `version` và
       ghi order-status event vào outbox trong cùng transaction. Đã có
       unit/integration evidence cho stale-version conflict và rollback khi
       outbox persistence thất bại.
-- [x] **A3. \[CLOSED\]** Checkout dùng transaction `Serializable`.
+- [x] **A3. [CLOSED]** Checkout dùng transaction `Serializable`.
       `PrismaCheckoutRepository.runInTransaction()` dịch Prisma `P2034`
       thành `ConflictError` ngay tại adapter để `CheckoutService`
       `executeWithRetry()` bắt được. Retry dùng exponential backoff +
       jitter. Có unit test cho retry/jitter, adapter test cho
       `P2034` → `ConflictError` và contention integration test thật trên
       PostgreSQL `Serializable`.
-- [x] **A4. \[CLOSED\]** Order number đã chuyển khỏi `Date.now()` sang
+- [x] **A4. [CLOSED]** Order number đã chuyển khỏi `Date.now()` sang
       injected `OrderNumberGenerator` với `CryptoOrderNumberGenerator`; có
       regression/unit test kiểm tra format và uniqueness.
-- [x] **A5. \[CLOSED\]** Checkout dùng giá authoritative từ sản phẩm
+- [x] **A5. [CLOSED]** Checkout dùng giá authoritative từ sản phẩm
       được lock/đọc trong transaction để tạo order; không còn chốt giá từ
       cart snapshot đọc trước transaction.
-- [ ] **A6. \[PARTIAL\]** Idempotency, phần Redis:
-  - Bọc `try/catch` cho Redis. Middleware async hiện không có
-    try/catch, mà Express 4 không bắt rejection nên request có thể
-    treo.
-  - [x] `IN_PROGRESS` dùng TTL ngắn 60 giây và đã có recovery path;
-        không còn dùng TTL kết quả hoàn thành 24h cho trạng thái đang xử
-        lý.
-- [x] **A7. \[CLOSED\]** DB là lớp bảo vệ cuối cho idempotency: có
+- [x] **A6. [CLOSED]** Idempotency Redis đã được harden:
+  - `IN_PROGRESS` dùng TTL tối đa 60 giây và tự recovery khi process chết.
+  - Redis failures trước response được bắt và chuyển qua `next(error)`.
+  - Lỗi `setex()` / `del()` sau response được log thay vì bị nuốt im lặng.
+  - Regression tests, typecheck và lint PASS.
+- [x] **A7. [CLOSED]** DB là lớp bảo vệ cuối cho idempotency: có
       lookup theo idempotency key, unique scope
       `(userId, idempotencyKey)`, xử lý race/unique conflict và recovery
       trả order cũ thay vì tạo order thứ hai.
@@ -168,9 +149,12 @@ Swagger ở `/api-docs` Code là `/api/docs`
 
 ### Auth và bảo mật
 
-- [ ] **B1.** Xoay refresh token phải atomic:
-      `UPDATE ... WHERE revokedAt IS NULL` rồi kiểm tra `count`. Hiện hai
-      request refresh đồng thời có thể cùng thành công. Thêm test race.
+- [x] **B1. [CLOSED]** Refresh-token rotation đã atomic:
+      conditional revoke theo `revokedAt IS NULL`; revoke token cũ và tạo
+      token mới nằm trong cùng Prisma transaction. Concurrent refresh cùng
+      token chỉ một request thành công; rollback giữ token cũ active nếu tạo
+      token mới lỗi. Refresh JWT mới có `jti` để bảo đảm uniqueness khi rotate
+      trong cùng một giây. Unit/integration tests, typecheck và lint PASS.
 - [ ] **B2.** Blacklist đang dùng cả chuỗi JWT làm key Redis. Băm
       SHA-256 và dùng `jti`. `blacklistAccessToken` đang nuốt lỗi: cần log
       và quy định fail-open hay fail-closed khi Redis chết.
@@ -204,9 +188,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
 - [ ] **B10.** Chạy `npm audit`, nâng `multer 1.x` lên bản đã vá _(cần
       kiểm tra advisory hiện hành)_.
 
----
-
-## P1. Kiến trúc: làm cho các tuyên bố trong README thành sự thật
+## P1 — Architecture alignment
 
 ### CQRS và outbox
 
@@ -215,7 +197,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
       vào adapter đọc bảng projection ở composition root. **Bỏ:** xoá
       projection và `refreshDashboard` (hiện chạy 6 query cho mỗi event mà
       không ai đọc).
-- [x] **C2. \[CLOSED\]** ~~Nếu giữ, sửa dữ liệu projection~~ --- **Đã
+- [x] **C2. [CLOSED]** ~~Nếu giữ, sửa dữ liệu projection~~ --- **Đã
       xong và đã có rebuild verification.** `paymentStatus`, `subtotal`,
       `tax`, `shippingFee`, `placedAt` giờ lấy thật từ `OrderPlacedEvent`
       (được `Order.place()` tính đúng từ aggregate), không còn gán cứng.
@@ -302,9 +284,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
       gỡ Saga khỏi README và ADR. Hiện README nói "Production factories
       wire both Sagas" còn `OPERATIONS.md` nói ngược lại.
 
----
-
-## P2. Mô hình domain và OOP (phần quyết định chữ "10")
+## P2 — Domain model & OOP maturity
 
 - [ ] **G1.** `Order.total` bóc `Money` ra số rồi tính. Dùng
       `subtotal.add(tax).add(shipping).subtract(discount)` trong `Money`.
@@ -356,9 +336,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
       map (không dùng chuỗi tên tự do); đăng ký handler theo module thay
       vì một khối `subscribe` dài trong `container.ts`.
 
----
-
-## P3. Clean code và dọn dẹp
+## P3 — Clean code & cleanup
 
 - [ ] **H1.** Xoá code chết:
   - `createOrder` và `createOrderItems` trong
@@ -409,9 +387,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
 - [ ] **H13.** Xác nhận `passport-*` và các package khác có thực sự
       được dùng (`npm ls` / `depcheck`).
 
----
-
-## P4. Kiểm thử
+## P4 — Testing
 
 - [ ] **T1.** Thêm test end-to-end bằng `supertest` cho luồng chính:
       register → login → cart → checkout → đổi trạng thái đơn. Hiện
@@ -423,7 +399,6 @@ Swagger ở `/api-docs` Code là `/api/docs`
     lease hết hạn, dead-letter, thứ tự).
   - `idempotencyMiddleware` với Redis thật.
   - Orders repository.
-  - Refresh token race.
   - Đổi giá song song với checkout.
 - [ ] **T3.** Contract test OpenAPI hiện chỉ 621B, gần như tượng
       trưng. Kiểm tra response thật so với schema; cân nhắc sinh OpenAPI
@@ -442,9 +417,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
 - [ ] **T9.** Kiểm tra kiến trúc như test (`dependency-cruiser` trong
       CI, xem D1).
 
----
-
-## P5. Đóng gói, CI/CD và vận hành production
+## P5 — Packaging, CI/CD & production operations
 
 - [ ] **I1.** `docker-compose.prod.yml` sẽ **không khởi động được**
       nếu không sửa: `config` bắt buộc `SMTP_*` và `CLOUDINARY_*` ở
@@ -483,9 +456,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
       trường thuần; xác nhận `.env.example` đầy đủ và không chứa giá trị
       thật _(cần kiểm tra)_.
 
----
-
-## P6. Quan sát và API
+## P6 — Observability & API
 
 - [ ] **J1.** Log có `trace_id` liên kết với OpenTelemetry; metric
       HTTP dùng route pattern (không dùng URL thô để tránh cardinality
@@ -497,9 +468,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
 - [ ] **J4.** Versioning API (`/api/v1`), cursor pagination cho danh
       sách lớn, mã lỗi được liệt kê trong tài liệu.
 
----
-
-## P7. Tài liệu và cách trình bày trong CV
+## P7 — Documentation & CV presentation
 
 - [ ] **K1.** Viết lại README cho khớp code:
   - Một hệ đánh số duy nhất (hiện có ba mục "10").
@@ -522,8 +491,6 @@ Swagger ở `/api-docs` Code là `/api/docs`
       coverage, mutation score. Ví dụ: "chống oversell bằng khoá dòng +
       optimistic version, kiểm chứng bằng test đồng thời".
 
----
-
 ## Tiêu chí "xong" để tự tin nói 9--10/10
 
 - [ ] Mọi domain event cần độ bền/side effect sau commit đi qua
@@ -545,7 +512,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
 > được người khác review. Làm hết danh sách này thì 9/10 là mục tiêu hợp
 > lý.
 
-## P8. Phát hiện mới (từ đối chiếu với checklist AI khác, đã tự xác minh trong code)
+## P8 — Newly verified findings
 
 - [ ] **L1. Định nghĩa "doanh thu" sai và không nhất quán giữa hai
       nơi.** `PrismaDashboardRepository.getTotalRevenue` tính tổng `total`
@@ -574,10 +541,9 @@ Swagger ở `/api-docs` Code là `/api/docs`
 
 ## Tiến độ đồng bộ với audit checklist --- 01/10/2026
 
-- **CLOSED chắc chắn liên quan checklist này:** A1, A2, A3, A4, A5,
-  A7, C2.
-- **PARTIAL:** A6.
-- **NEXT:** hoàn tất A6 / audit #36; sau đó B1 và các P0 còn lại.
+- **CLOSED chắc chắn liên quan checklist này:** A1, A2, A3, A4, A5, A6, A7, C2.
+- **PARTIAL:** Không còn mục A6; xem các mục P0/P1 còn mở bên dưới.
+- **NEXT:** B1 / audit #37; sau đó #38 → #39 → #40.
 - **Chưa đánh dấu CLOSED nếu chưa có đủ code + regression/integration
   evidence + quality gates.**
 - Mapping chính: audit #9 ↔ A1/A2; #35 ↔ A3; #7 ↔ A4; #6 ↔ A5; #36 ↔
@@ -587,9 +553,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
 
 1.  Hoàn tất phần P0 còn mở, bắt đầu bằng **A1/A2 (order-status +
     outbox + conditional update)**.
-2.  **A3 đã CLOSED**; hoàn tất phần còn lại của **A6**, sau đó
-    **B1--B4** và các P0 security/production tương ứng trong audit
-    checklist.
+2.  **A3 và A6 đã CLOSED**; tiếp tục **B1--B4** và các P0 security/production tương ứng trong audit checklist.
 3.  Quyết định **C1**, rồi xử lý các mục outbox/concurrency và boundary
     liên quan trước khi mở rộng abstraction.
 4.  Thực hiện P4/P5 bằng integration/E2E/runtime evidence.

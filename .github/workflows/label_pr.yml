@@ -7,6 +7,9 @@ on:
 jobs:
   label:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
       - name: Add Needs Review Label
         uses: actions/github-script@v6

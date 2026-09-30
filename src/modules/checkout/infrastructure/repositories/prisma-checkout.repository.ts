@@ -13,6 +13,7 @@ import type {
 } from "../../application/ports/checkout-models";
 import type { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import { IdempotencyConflictError } from "../../application/errors/idempotency-conflict.error";
+import { ConflictError } from "@/shared/utils/errors";
 
 const TRANSACTION_TIMEOUT_MS = 10_000;
 
@@ -93,13 +94,24 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
   async runInTransaction<T>(
     fn: (tx: CheckoutTransaction) => Promise<T>,
   ): Promise<T> {
-    return prisma.$transaction(
-      (tx) => fn(tx as unknown as CheckoutTransaction),
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        timeout: TRANSACTION_TIMEOUT_MS,
-      },
-    );
+    try {
+      return await prisma.$transaction(
+        (tx) => fn(tx as unknown as CheckoutTransaction),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: TRANSACTION_TIMEOUT_MS,
+        },
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2034"
+      ) {
+        throw new ConflictError("Transaction conflict. Please retry.");
+      }
+
+      throw error;
+    }
   }
 
   async lockProductsForUpdate(

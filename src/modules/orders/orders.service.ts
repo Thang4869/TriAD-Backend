@@ -1,4 +1,4 @@
-import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import { NotFoundError } from "@shared/utils/errors";
 import { OrderStatus } from "./domain/order-status";
 import {
   IOrdersRepository,
@@ -7,9 +7,6 @@ import {
   AdminOrderView,
 } from "./application/ports/orders.repository.port";
 import { Order } from "./domain/order.entity";
-import { EventBus } from "@shared/domain/event-bus/event-bus";
-import { OrderStatusChangedEvent } from "@shared/domain/events/order-events";
-import { logger } from "@core/logger/winston";
 import { OrderHistoryReadPort } from "./application/order-history-read.port";
 
 export interface IOrdersService {
@@ -44,7 +41,6 @@ export class OrdersService implements IOrdersService {
 
   constructor(
     private readonly repository: IOrdersRepository,
-    private readonly eventBus: EventBus,
     readPort: OrderHistoryReadPort = repository,
   ) {
     this.readPort = readPort;
@@ -85,30 +81,64 @@ export class OrdersService implements IOrdersService {
   }
 
   async updateOrderStatus(orderId: string, status: OrderStatus) {
-    const order = await this.repository.findById(orderId);
-    if (!order) {
+    const persisted = await this.repository.findById(orderId);
+
+    if (!persisted) {
       throw new NotFoundError("Order not found");
     }
-    if (!Order.canTransition(order.status, status)) {
-      throw new BadRequestError(
-        `Cannot transition order from ${order.status} to ${status}`,
-      );
+
+    const order = Order.hydrate({
+      id: persisted.id,
+      userId: persisted.userId,
+      orderNumber: persisted.orderNumber,
+      status: persisted.status,
+      createdAt: persisted.createdAt,
+      customerName: persisted.customerName,
+      customerEmail: persisted.customerEmail,
+      customerPhone: persisted.customerPhone,
+      customerAddress: persisted.customerAddress,
+      paymentMethod: persisted.paymentMethod,
+      paymentStatus: persisted.paymentStatus as
+        "PENDING" | "PAID" | "FAILED" | "REFUNDED",
+      discountAmount: persisted.discountAmount,
+      shippingFee: persisted.shippingFee,
+      tax: persisted.tax,
+      notes: persisted.notes ?? undefined,
+      discountCode: persisted.discountCode ?? undefined,
+      items: persisted.items.map((item) => ({
+        productId: item.productId,
+        productName: item.product.name,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      version: persisted.version,
+    });
+
+    const expectedVersion = order.version;
+
+    switch (status) {
+      case OrderStatus.PROCESSING:
+        order.confirm();
+        break;
+      case OrderStatus.SHIPPED:
+        order.ship();
+        break;
+      case OrderStatus.DELIVERED:
+        order.deliver();
+        break;
+      case OrderStatus.CANCELLED:
+        order.cancel();
+        break;
+      default:
+        throw new Error(
+          `Unsupported order status transition target: ${status}`,
+        );
     }
-    const updated = await this.repository.updateStatus(orderId, status);
 
-    await this.eventBus
-      .publish(
-        new OrderStatusChangedEvent(
-          orderId,
-          order.status,
-          status,
-          order.userId,
-        ),
-      )
-      .catch((error) =>
-        logger.error("Failed to publish OrderStatusChanged", { error }),
-      );
-
-    return updated;
+    return this.repository.updateStatusWithEvents(
+      orderId,
+      expectedVersion,
+      order,
+    );
   }
 }

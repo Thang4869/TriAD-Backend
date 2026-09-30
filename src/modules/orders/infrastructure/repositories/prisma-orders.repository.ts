@@ -7,8 +7,15 @@ import {
   OrderView,
 } from "../../application/ports/orders.repository.port";
 import { OrderStatus } from "../../domain/order-status";
+import { Order } from "../../domain/order.entity";
+import { persistDomainEvents } from "@core/outbox/persist-domain-events";
+import { ConflictError } from "@shared/utils/errors";
+type PersistDomainEvents = typeof persistDomainEvents;
 
 export class PrismaOrdersRepository implements IOrdersRepository {
+  constructor(
+    private readonly persistEvents: PersistDomainEvents = persistDomainEvents,
+  ) {}
   private static readonly ITEM_INCLUDE = {
     include: {
       product: {
@@ -129,20 +136,48 @@ export class PrismaOrdersRepository implements IOrdersRepository {
     return order ? this.toOrderView(order) : null;
   }
 
-  async updateStatus(orderId: string, status: OrderStatus): Promise<OrderView> {
-    const order = await prisma.order.update({
-      where: {
-        id: orderId,
-      },
-      data: {
-        status: status as PrismaOrderStatus,
-      },
-      include: {
-        items: PrismaOrdersRepository.ITEM_INCLUDE,
-      },
-    });
+  async updateStatusWithEvents(
+    orderId: string,
+    expectedVersion: number,
+    aggregate: Order,
+  ): Promise<OrderView> {
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          version: expectedVersion,
+        },
+        data: {
+          status: aggregate.status as PrismaOrderStatus,
+          version: {
+            increment: 1,
+          },
+        },
+      });
 
-    return this.toOrderView(order);
+      if (result.count !== 1) {
+        throw new ConflictError(
+          "Order was modified by another request. Please retry.",
+        );
+      }
+
+      await this.persistEvents(tx, [aggregate]);
+
+      const updated = await tx.order.findUnique({
+        where: {
+          id: orderId,
+        },
+        include: {
+          items: PrismaOrdersRepository.ITEM_INCLUDE,
+        },
+      });
+
+      if (!updated) {
+        throw new ConflictError("Order disappeared during status update.");
+      }
+
+      return this.toOrderView(updated);
+    });
   }
 
   private toOrderView(
@@ -168,6 +203,7 @@ export class PrismaOrdersRepository implements IOrdersRepository {
       orderNumber: order.orderNumber,
       userId: order.userId,
       status: order.status as OrderStatus,
+      version: order.version,
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,
       subtotal: order.subtotal,

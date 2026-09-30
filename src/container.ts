@@ -239,11 +239,7 @@ container.register(
 );
 container.register(
   TOKENS.OrdersService,
-  (c) =>
-    new OrdersService(
-      c.resolve(TOKENS.OrdersRepository),
-      c.resolve(TOKENS.EventBus),
-    ),
+  (c) => new OrdersService(c.resolve(TOKENS.OrdersRepository)),
 );
 container.register(
   TOKENS.ReviewsService,

@@ -1,4 +1,5 @@
 import { OrderStatus } from "../../domain/order-status";
+import type { Order } from "../../domain/order.entity";
 
 export interface OrderProductView {
   id: string;
@@ -22,6 +23,7 @@ export interface OrderView {
   orderNumber: string;
   userId: string;
   status: OrderStatus;
+  version: number;
   paymentMethod: string;
   paymentStatus: string;
   subtotal: number;
@@ -73,5 +75,9 @@ export interface IOrdersRepository {
 
   findById(orderId: string): Promise<OrderView | null>;
 
-  updateStatus(orderId: string, status: OrderStatus): Promise<OrderView>;
+  updateStatusWithEvents(
+    orderId: string,
+    expectedVersion: number,
+    aggregate: Order,
+  ): Promise<OrderView>;
 }

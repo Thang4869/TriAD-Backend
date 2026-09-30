@@ -47,6 +47,7 @@ export class PrismaOutboxHandlerTracker implements HandlerExecutionTracker {
         handlerName,
         error,
       });
+      throw error;
     }
   }
 }

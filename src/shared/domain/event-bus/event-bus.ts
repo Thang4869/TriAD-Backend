@@ -57,40 +57,40 @@ export class EventBus {
     options: PublishOptions = {},
   ): Promise<PublishResult> {
     const handlers = this.handlers.get(event.eventName) || [];
-    if (handlers.length === 0) {
-      return { success: true, failedHandlers: [] };
-    }
-
     const { eventId, tracker } = options;
-    const failedHandlers: string[] = [];
 
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       handlers.map(async ({ name, fn }) => {
         if (eventId && tracker) {
           const alreadyDone = await tracker.hasSucceeded(eventId, name);
-          if (alreadyDone) {
-            return;
-          }
+          if (alreadyDone) return;
         }
+
         try {
           await fn(event);
-          if (eventId && tracker) {
-            await tracker.recordResult(eventId, name, { success: true });
-          }
         } catch (error) {
-          failedHandlers.push(name);
-          const message =
-            error instanceof Error ? error.message : String(error);
           if (eventId && tracker) {
             await tracker.recordResult(eventId, name, {
               success: false,
-              error: message,
+              error: error instanceof Error ? error.message : String(error),
             });
           }
+          throw error;
+        }
+
+        if (eventId && tracker) {
+          await tracker.recordResult(eventId, name, { success: true });
         }
       }),
     );
 
-    return { success: failedHandlers.length === 0, failedHandlers };
+    const failedHandlers = handlers
+      .filter((_, index) => results[index].status === "rejected")
+      .map(({ name }) => name);
+
+    return {
+      success: failedHandlers.length === 0,
+      failedHandlers,
+    };
   }
 }

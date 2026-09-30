@@ -105,7 +105,7 @@ describe("PrismaOutboxHandlerTracker.recordResult", () => {
 
     await expect(
       tracker.recordResult("evt-1", "H", { success: true }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("db down");
     expect(logger.error).toHaveBeenCalledWith(
       "Failed to record outbox handler result",
       expect.objectContaining({ eventId: "evt-1", handlerName: "H" }),

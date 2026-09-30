@@ -11,7 +11,10 @@ import { ForbiddenError } from "@shared/utils/errors";
 // vi.mock() được Vitest hoist lên ĐẦU file, TRƯỚC khi `const configMock = ...` chạy.
 // vi.hoisted() đảm bảo object này tồn tại sẵn ngay khi factory được gọi (fix TDZ).
 const { configMock } = vi.hoisted(() => ({
-  configMock: { isProduction: false },
+  configMock: {
+    isProduction: false,
+    COOKIE_DOMAIN: undefined as string | undefined,
+  },
 }));
 
 vi.mock("@config", () => ({
@@ -48,7 +51,7 @@ describe("generateCsrfToken", () => {
 describe("csrfCookieOptions", () => {
   beforeEach(() => {
     configMock.isProduction = false;
-    delete process.env.COOKIE_DOMAIN;
+    configMock.COOKIE_DOMAIN = undefined;
   });
 
   it("httpOnly = false để frontend đọc được token và gửi lại qua header", () => {
@@ -76,8 +79,11 @@ describe("csrfCookieOptions", () => {
   it("chỉ gắn domain khi COOKIE_DOMAIN được cấu hình", () => {
     expect("domain" in csrfCookieOptions(1000)).toBe(false);
 
-    process.env.COOKIE_DOMAIN = ".example.com";
-    expect(csrfCookieOptions(1000)).toMatchObject({ domain: ".example.com" });
+    configMock.COOKIE_DOMAIN = ".example.com";
+
+    expect(csrfCookieOptions(1000)).toMatchObject({
+      domain: ".example.com",
+    });
   });
 });
 

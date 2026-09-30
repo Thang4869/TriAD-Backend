@@ -17,7 +17,9 @@ export function csrfCookieOptions(maxAge: number) {
     sameSite: (config.isProduction ? "none" : "lax") as "none" | "lax",
     path: "/",
     maxAge,
-    ...(process.env.COOKIE_DOMAIN && { domain: process.env.COOKIE_DOMAIN }),
+    ...(config.COOKIE_DOMAIN && {
+      domain: config.COOKIE_DOMAIN,
+    }),
   };
 }
 

@@ -266,12 +266,12 @@ tại, cách chạy đầy đủ FE+BE
 và bằng chứng test/deploy.
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## Tiến độ cập nhật 30/09/2026
+## Tiến độ cập nhật 01/10/2026
 
 - **P0 đã CLOSED chắc chắn:** #1, #2, #3, #4, #5, #6, #7, #8, #9, #10,
-  #11 và #41.
+  #11, #35 và #41.
 - **P0 #12:** 🟡 **IMPLEMENTATION COMPLETE / PRODUCTION VERIFICATION PENDING** --- code, regression tests và quality gates đã hoàn tất; còn chờ kiểm chứng trên đúng hai domain Vercel + Render sau khi deploy.
-- **P0 đã làm một phần, chưa được phép CLOSED:** #35 và #36.
+- **P0 đã làm một phần, chưa được phép CLOSED:** #36.
 - **P0 còn TODO:** #37, #38, #39 và #40.
 - Một mục chỉ được chuyển sang **CLOSED** khi thay đổi mã nguồn,
   regression/integration test liên quan và quality gates cần thiết đều
@@ -319,6 +319,15 @@ và bằng chứng test/deploy.
   thất bại thì status/version rollback. Unit/integration tests,
   typecheck và lint đều PASS; thay đổi đã được commit.
 
+### Bằng chứng bổ sung --- P0 #35 / A3 (01/10/2026)
+
+- **#35 / A3 --- CLOSED:**
+  - `PrismaCheckoutRepository.runInTransaction()` bắt Prisma `P2034` tại adapter và dịch thành `ConflictError` trước khi trả lỗi về `CheckoutService`.
+  - `CheckoutService.executeWithRetry()` giữ exponential backoff và đã bổ sung jitter để giảm retry đồng nhịp khi có contention.
+  - Unit test xác minh retry + jitter; adapter test xác minh `P2034` → `ConflictError`.
+  - `tests/integration/checkout.concurrent.test.ts` không còn mock `executeWithRetry()`; test tạo hai transaction PostgreSQL `Serializable` cùng đọc rồi cạnh tranh ghi, xác minh một transaction thành công và transaction còn lại được dịch thành `ConflictError`.
+  - Người dùng xác nhận các bước kiểm thử liên quan PASS.
+
 ### Bằng chứng bổ sung --- P0 #12 (01/10/2026)
 
 - **#12 --- IMPLEMENTATION COMPLETE / PRODUCTION VERIFICATION PENDING:**
@@ -332,7 +341,7 @@ và bằng chứng test/deploy.
 
 ## Thứ tự thực hiện
 
-1.  Implementation của **#12** đã hoàn tất; production verification giữ lại cho giai đoạn deploy Vercel + Render. Tiếp tục P0 theo thứ tự: **rà lại #35 → hoàn tất #36 → #37 → #38 → #39 → #40**.
+1.  Implementation của **#12** đã hoàn tất; production verification giữ lại cho giai đoạn deploy Vercel + Render. **#35 đã CLOSED**; tiếp tục P0 theo thứ tự: **hoàn tất #36 → #37 → #38 → #39 → #40**.
 2.  Sau khi toàn bộ P0 có bằng chứng kiểm thử, chuyển sang các mục P1
     theo mức độ phụ thuộc, ưu tiên #14 và #42--#55 cùng các mục liên
     quan.
@@ -365,18 +374,16 @@ là **kiểm chứng**.
 
 ---
 
-35 Dịch `P2034`/serialization BE: [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), 🟡 PARTIAL ---
-conflict từ Prisma thành [prisma-checkout.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/infrastructure/repositories/prisma-checkout.repository.ts), cần đối chiếu
-lỗi retry được **trong [prisma-error-classifier.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/database/prisma-error-classifier.ts) lại
-adapter trước khi thoát P2034/jitter +
-khỏi `CheckoutService`**. contention test
-Hiện classifier chỉ đổi  
-lỗi thành HTTP 409 ở error  
-handler, quá muộn để  
-`executeWithRetry()` bắt  
-`ConflictError`. Thêm  
-jitter và test tranh chấp  
-thật.
+35 Dịch `P2034`/serialization BE: [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), ✅ CLOSED ---
+conflict từ Prisma thành [prisma-checkout.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/infrastructure/repositories/prisma-checkout.repository.ts), adapter dịch
+lỗi retry được **trong [prisma-error-classifier.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/database/prisma-error-classifier.ts) `P2034` thành
+adapter trước khi thoát `ConflictError`;
+khỏi `CheckoutService`**. `CheckoutService`
+Retry dùng exponential backoff + jitter;
+contention test chạy transaction
+`Serializable` thật trên PostgreSQL và
+xác minh conflict được dịch thành lỗi
+retryable.
 
 36 Bắt lỗi Redis trong BE: [idempotency.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/idempotency.middleware.ts), 🟡 PARTIAL ---
 middleware async của [src/config/index.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/config/index.ts) TTL/recovery đã

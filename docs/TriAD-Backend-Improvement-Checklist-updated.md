@@ -5,10 +5,11 @@
 > `TriAD-Backend-audit-checklist.md`. Điểm hiện tại: **\~7/10**. Mục
 > tiêu: **9--10/10** sau khi hoàn thành danh sách này.
 
-## Cập nhật 30/09 --- trạng thái sau các vòng refactor gần nhất
+## Cập nhật 01/10 --- trạng thái sau các vòng refactor gần nhất
 
 **Đã xác nhận hoàn thành:**
 
+- **A3 --- CLOSED.** `PrismaCheckoutRepository.runInTransaction()` dịch Prisma `P2034` thành `ConflictError` ngay tại adapter; `CheckoutService` retry bằng exponential backoff + jitter. Có unit test retry/jitter, adapter test `P2034` → `ConflictError` và integration test contention thật trên PostgreSQL `Serializable`.
 - **A4 --- CLOSED.** `orderNumber` không còn dựa vào `Date.now()`.
   Checkout dùng `OrderNumberGenerator` với implementation
   `CryptoOrderNumberGenerator`; có unit test kiểm tra format/VO và tạo
@@ -38,9 +39,6 @@
 
 **Đã làm một phần, chưa được phép CLOSED:**
 
-- **A3 --- PARTIAL.** Checkout đã dùng Serializable và codebase có
-  classifier cho `P2034`, nhưng cần đối chiếu lại adapter/retry path,
-  jitter và contention integration test trước khi đóng.
 - **A6 --- PARTIAL.** `IN_PROGRESS` đã dùng TTL ngắn (60 giây) và
   recovery đã được cải thiện; vẫn cần xác minh toàn bộ Redis failure
   path của async Express middleware chuyển lỗi đúng sang error
@@ -59,7 +57,7 @@
   `COOKIE_DOMAIN` đã vào validated config. FE/BE tests và quality gates PASS;
   còn chờ Vercel + Render deployment verification.
 
-**Bước tiếp theo:** implementation của **P0 #12** đã hoàn tất; giữ production verification cho giai đoạn deploy Vercel + Render. Tiếp theo rà lại **A3 / P0 #35**.
+**Bước tiếp theo:** **A3 / P0 #35 đã CLOSED**. Implementation của **P0 #12** đã hoàn tất nhưng còn production verification trên Vercel + Render. Tiếp theo hoàn tất **A6 / P0 #36**, rồi B1 và các P0 còn lại.
 
 ## Phạm vi và giới hạn của đánh giá
 
@@ -140,10 +138,13 @@ Swagger ở `/api-docs` Code là `/api/docs`
       ghi order-status event vào outbox trong cùng transaction. Đã có
       unit/integration evidence cho stale-version conflict và rollback khi
       outbox persistence thất bại.
-- [ ] **A3. \[PARTIAL\]** Checkout đã dùng Serializable và codebase có
-      Prisma conflict classifier. Cần xác minh `P2034`/`40001`/`40P01`
-      được dịch thành lỗi retryable **trước khi rời adapter**, thêm/kiểm
-      tra jitter và contention integration test trước khi CLOSED.
+- [x] **A3. \[CLOSED\]** Checkout dùng transaction `Serializable`.
+      `PrismaCheckoutRepository.runInTransaction()` dịch Prisma `P2034`
+      thành `ConflictError` ngay tại adapter để `CheckoutService`
+      `executeWithRetry()` bắt được. Retry dùng exponential backoff +
+      jitter. Có unit test cho retry/jitter, adapter test cho
+      `P2034` → `ConflictError` và contention integration test thật trên
+      PostgreSQL `Serializable`.
 - [x] **A4. \[CLOSED\]** Order number đã chuyển khỏi `Date.now()` sang
       injected `OrderNumberGenerator` với `CryptoOrderNumberGenerator`; có
       regression/unit test kiểm tra format và uniqueness.
@@ -423,7 +424,6 @@ Swagger ở `/api-docs` Code là `/api/docs`
   - `idempotencyMiddleware` với Redis thật.
   - Orders repository.
   - Refresh token race.
-  - Retry `P2034`.
   - Đổi giá song song với checkout.
 - [ ] **T3.** Contract test OpenAPI hiện chỉ 621B, gần như tượng
       trưng. Kiểm tra response thật so với schema; cân nhắc sinh OpenAPI
@@ -572,12 +572,12 @@ Swagger ở `/api-docs` Code là `/api/docs`
       và frontend chỉ hiển thị lại kết quả server trả về, không tự tính
       lại (xem cả mục C-tương-đương ở phần độ tin cậy).
 
-## Tiến độ đồng bộ với audit checklist --- 30/09/2026
+## Tiến độ đồng bộ với audit checklist --- 01/10/2026
 
-- **CLOSED chắc chắn liên quan checklist này:** A1, A2, A4, A5, A7,
-  C2.
-- **PARTIAL:** A3, A6.
-- **NEXT:** audit P0 #12; sau đó A3 / audit #35.
+- **CLOSED chắc chắn liên quan checklist này:** A1, A2, A3, A4, A5,
+  A7, C2.
+- **PARTIAL:** A6.
+- **NEXT:** hoàn tất A6 / audit #36; sau đó B1 và các P0 còn lại.
 - **Chưa đánh dấu CLOSED nếu chưa có đủ code + regression/integration
   evidence + quality gates.**
 - Mapping chính: audit #9 ↔ A1/A2; #35 ↔ A3; #7 ↔ A4; #6 ↔ A5; #36 ↔
@@ -587,7 +587,7 @@ Swagger ở `/api-docs` Code là `/api/docs`
 
 1.  Hoàn tất phần P0 còn mở, bắt đầu bằng **A1/A2 (order-status +
     outbox + conditional update)**.
-2.  Rà và đóng bằng evidence cho **A3**, phần còn lại của **A6**, sau đó
+2.  **A3 đã CLOSED**; hoàn tất phần còn lại của **A6**, sau đó
     **B1--B4** và các P0 security/production tương ứng trong audit
     checklist.
 3.  Quyết định **C1**, rồi xử lý các mục outbox/concurrency và boundary

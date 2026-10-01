@@ -27,7 +27,15 @@ export async function rebuildOrderHistoryProjection(
         : {}),
       orderBy: { id: "asc" },
       include: {
-        items: true,
+        items: {
+          include: {
+            product: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -53,6 +61,7 @@ export async function rebuildOrderHistoryProjection(
           total: order.total,
           items: order.items.map((item) => ({
             productId: item.productId,
+            productName: item.product.name,
             quantity: item.quantity,
             unitPrice: item.price,
           })) as Prisma.InputJsonValue,
@@ -69,6 +78,7 @@ export async function rebuildOrderHistoryProjection(
           total: order.total,
           items: order.items.map((item) => ({
             productId: item.productId,
+            productName: item.product.name,
             quantity: item.quantity,
             unitPrice: item.price,
           })) as Prisma.InputJsonValue,

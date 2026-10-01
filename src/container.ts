@@ -33,7 +33,7 @@ import { PrismaWishlistRepository } from "@modules/wishlist/infrastructure/repos
 import { WishlistService } from "@modules/wishlist/wishlist.service";
 import { WishlistController } from "@modules/wishlist/wishlist.controller";
 
-import { PrismaDashboardRepository } from "@modules/admin/dashboard/infrastructure/repositories/prisma-dashboard.repository";
+import { PrismaDashboardReadRepository } from "@modules/admin/dashboard/infrastructure/repositories/prisma-dashboard-read.repository";
 import { DashboardService } from "@modules/admin/dashboard/dashboard.service";
 import { DashboardController } from "@modules/admin/dashboard/dashboard.controller";
 
@@ -88,6 +88,7 @@ import {
   ReviewCreatedEvent,
   ReviewDeletedEvent,
 } from "@shared/domain/events/review-events";
+import { UserRegisteredEvent } from "@shared/domain/events/user-events";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -149,8 +150,8 @@ container.register(
   () => new PrismaWishlistRepository(),
 );
 container.register(
-  TOKENS.DashboardRepository,
-  () => new PrismaDashboardRepository(),
+  TOKENS.DashboardRead,
+  () => new PrismaDashboardReadRepository(),
 );
 container.register(
   TOKENS.NotificationsRepository,
@@ -282,7 +283,7 @@ container.register(
 );
 container.register(
   TOKENS.DashboardService,
-  (c) => new DashboardService(c.resolve(TOKENS.DashboardRepository)),
+  (c) => new DashboardService(c.resolve(TOKENS.DashboardRead)),
 );
 container.register(
   TOKENS.NotificationsService,
@@ -404,6 +405,11 @@ for (const eventName of [
     projectionHandler.handleProductEvent.bind(projectionHandler),
   );
 }
+eventBus.subscribe(
+  UserRegisteredEvent.eventName,
+  "DashboardProjectionHandler:UserRegistered",
+  projectionHandler.handleUserRegistered.bind(projectionHandler),
+);
 for (const eventName of [
   ReviewCreatedEvent.eventName,
   ReviewDeletedEvent.eventName,

@@ -43,7 +43,7 @@
 - B1 (refresh token race): `revokeRefreshToken` vẫn là `update` vô điều kiện theo `id`, không phải `updateMany` có điều kiện `revokedAt: null` kèm kiểm tra `count`.
 
 **Phát hiện mới từ checklist AI khác, đã tự xác minh đúng trong code — bổ sung vào danh sách dưới:**
-- Định nghĩa "doanh thu" không nhất quán và có thể sai (xem **L1**).
+- L1 về dashboard revenue semantics đã được xử lý: metric được xác định rõ là `grossOrderValue`/GMV, không phải realized revenue (xem **L1**).
 - `existsAndActive` không kiểm tra `isActive` (xem **L2**).
 - Ngưỡng miễn phí vận chuyển dùng `>` ở backend, cần đối chiếu với frontend dùng `>=` (xem **L3**, phần backend đã xác minh, phần frontend chưa).
 
@@ -128,7 +128,7 @@ Không có đoạn code nào ngoài `PrismaProjectionStore` đọc các bảng p
   - Script chưa được khai báo thành lệnh `npm run` trong `package.json`.
   - `OPERATIONS.md` chưa có hướng dẫn cụ thể khi nào/cách nào chạy lệnh backfill này.
   - `sourceVersion` để xử lý event sai thứ tự vẫn chưa có cho `orderHistoryProjection` (chỉ `productCatalogProjection` có `sourceVersion`); `updateOrderStatus` vẫn dùng `updateMany` im lặng khi không tìm thấy row.
-  - Dashboard (`refreshDashboard`) vẫn tính lại toàn bộ từ đầu mỗi lần, chưa theo delta — xem thêm L1 ở P8 về định nghĩa doanh thu sai trong chính hàm này.
+  - Dashboard (`refreshDashboard`) vẫn tính lại toàn bộ từ đầu mỗi lần, chưa theo delta; đây là vấn đề hiệu năng/read-model còn lại, không còn là vấn đề revenue semantics của L1.
 - [ ] **C3.** Outbox đảm bảo thứ tự theo aggregate (không claim event nếu còn event cũ chưa publish của cùng aggregate). Với nhiều relay instance, thứ tự hiện không được bảo đảm.
 - [ ] **C4.** `outboxLagSeconds` đang tính trên row vừa claim, nên khi mọi event đang backoff nó hiện 0. Đổi thành `now - min(occurredAt)` của các event chưa publish (truy vấn riêng), thêm gauge cho số dead-letter.
 - [ ] **C5.** Lease 60 giây cho batch 50 row xử lý tuần tự có thể hết hạn giữa chừng. Đặt lease theo từng row, hoặc heartbeat, hoặc giảm batch.

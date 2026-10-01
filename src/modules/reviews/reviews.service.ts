@@ -1,6 +1,10 @@
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
 import type { IReviewsRepository } from "./application/ports/reviews.repository.port";
-
+import { EventBus } from "@shared/domain/event-bus/event-bus";
+import {
+  ReviewCreatedEvent,
+  ReviewDeletedEvent,
+} from "@shared/domain/events/review-events";
 export interface IReviewsService {
   getReviewsByProduct(
     productId: string,
@@ -22,7 +26,10 @@ export interface IReviewsService {
 }
 
 export class ReviewsService implements IReviewsService {
-  constructor(private readonly repository: IReviewsRepository) {}
+  constructor(
+    private readonly repository: IReviewsRepository,
+    private readonly eventBus: EventBus,
+  ) {}
 
   async getReviewsByProduct(productId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
@@ -59,12 +66,16 @@ export class ReviewsService implements IReviewsService {
       throw new BadRequestError("You have already reviewed this product");
     }
 
-    return this.repository.create({
+    const review = await this.repository.create({
       userId,
       productId,
       rating,
       comment: content,
     });
+
+    await this.eventBus.publish(new ReviewCreatedEvent(productId));
+
+    return review;
   }
 
   async deleteReview(reviewId: string, userId: string, isAdmin = false) {
@@ -78,6 +89,8 @@ export class ReviewsService implements IReviewsService {
     }
 
     await this.repository.delete(reviewId);
+    await this.eventBus.publish(new ReviewDeletedEvent(review.productId));
+
     return { deleted: true } as const;
   }
 

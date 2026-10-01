@@ -53,6 +53,7 @@ export class PrismaReviewsRepository implements IReviewsRepository {
       select: {
         id: true,
         userId: true,
+        productId: true,
       },
     });
   }
@@ -70,6 +71,7 @@ export class PrismaReviewsRepository implements IReviewsRepository {
       select: {
         id: true,
         userId: true,
+        productId: true,
       },
     });
   }

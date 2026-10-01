@@ -3,7 +3,7 @@ import { ReviewRecord } from "@modules/reviews/application/ports/review-models";
 import { ReviewsService } from "@modules/reviews/reviews.service";
 import type { IReviewsRepository } from "@modules/reviews/application/ports/reviews.repository.port";
 import { NotFoundError, BadRequestError } from "@shared/utils/errors";
-
+import type { EventBus } from "@shared/domain/event-bus/event-bus";
 function createFakeRepository(
   overrides: Partial<IReviewsRepository> = {},
 ): IReviewsRepository {
@@ -20,10 +20,21 @@ function createFakeRepository(
     ...overrides,
   };
 }
+function createFakeEventBus(): EventBus {
+  return {
+    publish: vi.fn().mockResolvedValue(undefined),
+    subscribe: vi.fn(),
+  } as unknown as EventBus;
+}
+
+function createService(repository: IReviewsRepository) {
+  return new ReviewsService(repository, createFakeEventBus());
+}
 
 const baseReview: ReviewRecord = {
   id: "review-1",
   userId: "user-1",
+  productId: "product-1",
 };
 
 describe("ReviewsService", () => {
@@ -34,7 +45,7 @@ describe("ReviewsService", () => {
       const repository = createFakeRepository({
         productExists: vi.fn().mockResolvedValue(false),
       });
-      const service = new ReviewsService(repository);
+      const service = createService(repository);
 
       await expect(
         service.createReview("user-1", "product-x", 5, "Great"),
@@ -47,7 +58,7 @@ describe("ReviewsService", () => {
         productExists: vi.fn().mockResolvedValue(true),
         findByUserAndProduct: vi.fn().mockResolvedValue(baseReview),
       });
-      const service = new ReviewsService(repository);
+      const service = createService(repository);
 
       await expect(
         service.createReview("user-1", "product-1", 4, "Ok"),
@@ -61,7 +72,7 @@ describe("ReviewsService", () => {
         findByUserAndProduct: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockResolvedValue({ ...baseReview, user: {} }),
       });
-      const service = new ReviewsService(repository);
+      const service = createService(repository);
 
       await service.createReview("user-1", "product-1", 5, "Great product");
 
@@ -79,7 +90,7 @@ describe("ReviewsService", () => {
       const repository = createFakeRepository({
         findById: vi.fn().mockResolvedValue(null),
       });
-      const service = new ReviewsService(repository);
+      const service = createService(repository);
 
       await expect(
         service.deleteReview("review-x", "user-1"),
@@ -92,7 +103,7 @@ describe("ReviewsService", () => {
           .fn()
           .mockResolvedValue({ ...baseReview, userId: "another-user" }),
       });
-      const service = new ReviewsService(repository);
+      const service = createService(repository);
 
       await expect(
         service.deleteReview("review-1", "user-1"),
@@ -106,7 +117,7 @@ describe("ReviewsService", () => {
           .fn()
           .mockResolvedValue({ ...baseReview, userId: "another-user" }),
       });
-      const service = new ReviewsService(repository);
+      const service = createService(repository);
 
       const result = await service.deleteReview("review-1", "admin-user", true);
 
@@ -118,7 +129,7 @@ describe("ReviewsService", () => {
       const repository = createFakeRepository({
         findById: vi.fn().mockResolvedValue(baseReview),
       });
-      const service = new ReviewsService(repository);
+      const service = createService(repository);
 
       await service.deleteReview("review-1", "user-1");
 
@@ -131,7 +142,7 @@ describe("ReviewsService", () => {
       const repository = createFakeRepository({
         countByProduct: vi.fn().mockResolvedValue(23),
       });
-      const service = new ReviewsService(repository);
+      const service = createService(repository);
 
       const result = await service.getReviewsByProduct("product-1", 3, 10);
 
@@ -147,7 +158,7 @@ describe("ReviewsService", () => {
       const repository = createFakeRepository({
         count: vi.fn().mockResolvedValue(50),
       });
-      const service = new ReviewsService(repository);
+      const service = createService(repository);
 
       const result = await service.adminGetAll(1, 10);
 

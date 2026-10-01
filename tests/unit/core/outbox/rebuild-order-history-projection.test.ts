@@ -44,6 +44,9 @@ describe("rebuildOrderHistoryProjection", () => {
               productId: "product-1",
               quantity: 2,
               price: 100,
+              product: {
+                name: "Product 1",
+              },
             },
           ],
         },
@@ -72,6 +75,7 @@ describe("rebuildOrderHistoryProjection", () => {
         items: [
           {
             productId: "product-1",
+            productName: "Product 1",
             quantity: 2,
             unitPrice: 100,
           },
@@ -90,6 +94,7 @@ describe("rebuildOrderHistoryProjection", () => {
         items: [
           {
             productId: "product-1",
+            productName: "Product 1",
             quantity: 2,
             unitPrice: 100,
           },
@@ -132,7 +137,15 @@ describe("rebuildOrderHistoryProjection", () => {
       take: 2,
       orderBy: { id: "asc" },
       include: {
-        items: true,
+        items: {
+          include: {
+            product: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -144,7 +157,15 @@ describe("rebuildOrderHistoryProjection", () => {
       },
       orderBy: { id: "asc" },
       include: {
-        items: true,
+        items: {
+          include: {
+            product: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -156,7 +177,15 @@ describe("rebuildOrderHistoryProjection", () => {
       },
       orderBy: { id: "asc" },
       include: {
-        items: true,
+        items: {
+          include: {
+            product: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
   });

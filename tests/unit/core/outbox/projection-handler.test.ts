@@ -4,6 +4,7 @@ import { ProductPriceChangedEvent } from "@shared/domain/events/product-events";
 import { ProjectionHandler } from "@core/outbox/projection-handler";
 import type { ProjectionStore } from "@core/outbox/projection-store.port";
 import { ReviewCreatedEvent } from "@shared/domain/events/review-events";
+import { UserRegisteredEvent } from "@shared/domain/events/user-events";
 describe("ProjectionHandler", () => {
   let store: ProjectionStore;
 
@@ -53,6 +54,7 @@ describe("ProjectionHandler", () => {
     expect(store.upsertProduct).toHaveBeenCalledTimes(2);
     expect(store.upsertProduct).toHaveBeenNthCalledWith(1, event);
     expect(store.upsertProduct).toHaveBeenNthCalledWith(2, event);
+    expect(store.refreshDashboard).toHaveBeenCalledTimes(2);
   });
 
   it("refreshes product rating when a review changes", async () => {
@@ -63,5 +65,14 @@ describe("ProjectionHandler", () => {
 
     expect(store.refreshProductRating).toHaveBeenCalledOnce();
     expect(store.refreshProductRating).toHaveBeenCalledWith("product-1");
+  });
+
+  it("refreshes the dashboard when a user registers", async () => {
+    const handler = new ProjectionHandler(store);
+    const event = new UserRegisteredEvent("user-1", "u@example.com");
+
+    await handler.handleUserRegistered(event);
+
+    expect(store.refreshDashboard).toHaveBeenCalledOnce();
   });
 });

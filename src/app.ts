@@ -122,7 +122,9 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+if (!config.isProduction) {
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", authMiddleware, userRoutes);
@@ -135,7 +137,9 @@ app.use("/api/notifications", authMiddleware, notificationRoutes);
 app.use("/api/wishlist", authMiddleware, wishlistRoutes);
 app.use("/api/admin/dashboard", dashboardRoutes);
 app.use("/health", healthRoutes);
-app.use("/metrics", metricsRoutes);
+if (!config.isProduction) {
+  app.use("/metrics", metricsRoutes);
+}
 
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 

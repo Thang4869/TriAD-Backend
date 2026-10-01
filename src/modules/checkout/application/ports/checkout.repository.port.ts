@@ -1,4 +1,5 @@
 import type { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
+import type { DomainEvent } from "@shared/domain/events/domain-event";
 import type { CheckoutTransaction } from "./checkout-transaction";
 import type {
   OrderWithItems,
@@ -47,6 +48,11 @@ export interface ICheckoutRepository {
     expectedVersion: number,
     quantity: number,
   ): Promise<boolean>;
+
+  persistProductEvent(
+    tx: CheckoutTransaction,
+    event: DomainEvent,
+  ): Promise<void>;
 
   findDiscountByCode(
     tx: CheckoutTransaction,

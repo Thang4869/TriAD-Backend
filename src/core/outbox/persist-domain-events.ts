@@ -1,13 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { AggregateRoot } from "@shared/domain/aggregate-root";
+import type { DomainEvent } from "@shared/domain/events/domain-event";
 import { logger } from "@core/logger/winston";
 
-export async function persistDomainEvents(
+export async function persistEvents(
   tx: Prisma.TransactionClient,
-  aggregates: AggregateRoot[],
+  events: DomainEvent[],
 ): Promise<void> {
-  const events = aggregates.flatMap((aggregate) => aggregate.domainEvents);
-
   if (events.length === 0) return;
 
   try {
@@ -19,9 +18,6 @@ export async function persistDomainEvents(
         occurredAt: event.occurredAt,
       })),
     });
-    for (const aggregate of aggregates) {
-      aggregate.pullEvents();
-    }
   } catch (error) {
     logger.error(
       "Failed to write domain events to outbox - see prisma/schema.additions.prisma",
@@ -32,5 +28,19 @@ export async function persistDomainEvents(
     );
 
     throw error;
+  }
+}
+
+export async function persistDomainEvents(
+  tx: Prisma.TransactionClient,
+  aggregates: AggregateRoot[],
+): Promise<void> {
+  const events = aggregates.flatMap((aggregate) => aggregate.domainEvents);
+  await persistEvents(tx, events);
+
+  if (events.length > 0) {
+    for (const aggregate of aggregates) {
+      aggregate.pullEvents();
+    }
   }
 }

@@ -210,7 +210,6 @@ container.register(
     new AdminProductService(
       c.resolve(TOKENS.ProductsRepository),
       c.resolve(TOKENS.ProductImageService),
-      c.resolve(TOKENS.EventBus),
     ),
 );
 container.register(
@@ -454,5 +453,4 @@ export const imageJobProcessor = (job: Parameters<typeof processImage>[0]) =>
     job,
     container.resolve(TOKENS.ProductsRepository),
     container.resolve(TOKENS.ImageStorage),
-    eventBus,
   );

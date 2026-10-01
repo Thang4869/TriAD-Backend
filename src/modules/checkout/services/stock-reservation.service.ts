@@ -14,6 +14,7 @@ import {
   stockReservationFailed,
   stockReservationSucceeded,
 } from "@core/metrics/metrics.registry";
+import { ProductUpdatedEvent } from "@shared/domain/events/product-events";
 
 export class StockReservationService {
   constructor(private readonly repository: ICheckoutRepository) {}
@@ -77,6 +78,10 @@ export class StockReservationService {
           `Stock conflict for product ${item.productId}. Please retry.`,
         );
       }
+      await this.repository.persistProductEvent(
+        tx,
+        new ProductUpdatedEvent(item.productId),
+      );
     }
     return lockedProducts;
   }

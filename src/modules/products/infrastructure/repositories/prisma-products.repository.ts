@@ -129,6 +129,25 @@ export class PrismaProductsRepository implements IProductsRepository {
     });
   }
 
+  async createWithEvents(
+    data: CreateProductData,
+    aggregate: Product,
+  ): Promise<ProductRecord> {
+    return prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          id: aggregate.id,
+          ...data,
+          isActive: true,
+        },
+      });
+
+      await this.persistEvents(tx, [aggregate]);
+
+      return created;
+    });
+  }
+
   async update(id: string, data: UpdateProductData): Promise<ProductRecord> {
     return prisma.product.update({ where: { id }, data });
   }

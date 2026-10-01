@@ -66,6 +66,10 @@ export interface IProductsRepository {
   findManyAdmin(query: ProductListQuery): Promise<ProductRecord[]>;
   findById(id: string): Promise<ProductRecord | null>;
   create(data: CreateProductData): Promise<ProductRecord>;
+  createWithEvents(
+    data: CreateProductData,
+    aggregate: Product,
+  ): Promise<ProductRecord>;
   update(id: string, data: UpdateProductData): Promise<ProductRecord>;
   updateWithEvents(
     id: string,

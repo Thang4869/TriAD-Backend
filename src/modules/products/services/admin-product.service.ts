@@ -7,10 +7,8 @@ import type {
 } from "../application/ports/products.repository.port";
 import { Product } from "../domain/product.entity";
 import { ProductImageService } from "./product-image.service";
-import { EventBus } from "@shared/domain/event-bus/event-bus";
-import { logger } from "@core/logger/winston";
 import { ProductSpecificationBuilder } from "../domain/specifications/product-specification";
-import { ProductCatalogSort } from "../application/product-catalog-read.port";
+import type { ProductCatalogSort } from "../application/product-catalog-read.port";
 
 const DEFAULT_ADMIN_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
@@ -19,7 +17,6 @@ export class AdminProductService {
   constructor(
     private readonly repository: IProductsRepository,
     private readonly imageService: ProductImageService,
-    private readonly eventBus: EventBus,
   ) {}
 
   async adminFindAll(params: {
@@ -71,13 +68,13 @@ export class AdminProductService {
   async create(data: CreateProductData) {
     const existing = await this.repository.findBySlugId(data.slug);
     if (existing) throw new BadRequestError("Slug already exists");
-    const created = await this.repository.create(data);
-
-    const entity = Product.hydrate(created);
+    const entity = Product.hydrate({
+      id: crypto.randomUUID(),
+      ...data,
+      isActive: true,
+    });
     entity.markCreated();
-    await this.publishEvents(entity);
-
-    return created;
+    return this.repository.createWithEvents(data, entity);
   }
 
   async update(id: string, data: UpdateProductData) {
@@ -99,10 +96,7 @@ export class AdminProductService {
     const entity = Product.hydrate(product);
     entity.markUpdated();
 
-    const result = await this.repository.update(id, data);
-    await this.publishEvents(entity);
-
-    return result;
+    return this.repository.updateWithEvents(id, data, entity);
   }
 
   async delete(id: string) {
@@ -123,16 +117,5 @@ export class AdminProductService {
 
   async uploadImage(productId: string, buffer: Buffer) {
     return this.imageService.upload(productId, buffer);
-  }
-
-  private async publishEvents(entity: Product) {
-    const events = entity.pullEvents();
-    for (const event of events) {
-      try {
-        await this.eventBus.publish(event);
-      } catch (error) {
-        logger.error(`Failed to publish ${event.eventName}`, { error });
-      }
-    }
   }
 }

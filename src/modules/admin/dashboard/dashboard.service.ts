@@ -5,7 +5,7 @@ const DEFAULT_TOP_PRODUCTS_LIMIT = 5;
 const DEFAULT_REVENUE_WINDOW_DAYS = 30;
 
 export interface DashboardStats {
-  revenue: { total30Days: number; byDay: unknown };
+  grossOrderValue: { total30Days: number; byDay: unknown };
   orders: { statusBreakdown: unknown };
   products: { total: number; lowStock: unknown; topSelling: unknown };
   users: { total: number; new30Days: number };
@@ -22,18 +22,18 @@ export class DashboardService implements IDashboardService {
     const since30Days = this.daysAgo(DEFAULT_REVENUE_WINDOW_DAYS);
 
     const [
-      totalRevenue,
+      grossOrderValue,
       statusBreakdown,
-      revenueByDay,
+      grossOrderValueByDay,
       topSelling,
       lowStock,
       newUsers,
       totalUsers,
       totalProducts,
     ] = await Promise.all([
-      this.repository.getTotalRevenue(since30Days),
+      this.repository.getGrossOrderValue(since30Days),
       this.repository.getOrderStatusBreakdown(),
-      this.repository.getRevenueByDay(DEFAULT_REVENUE_WINDOW_DAYS),
+      this.repository.getGrossOrderValueByDay(since30Days),
       this.repository.getTopSellingProducts(
         DEFAULT_TOP_PRODUCTS_LIMIT,
         since30Days,
@@ -45,7 +45,10 @@ export class DashboardService implements IDashboardService {
     ]);
 
     return {
-      revenue: { total30Days: totalRevenue, byDay: revenueByDay },
+      grossOrderValue: {
+        total30Days: grossOrderValue,
+        byDay: grossOrderValueByDay,
+      },
       orders: { statusBreakdown },
       products: { total: totalProducts, lowStock, topSelling },
       users: { total: totalUsers, new30Days: newUsers },

@@ -105,14 +105,17 @@ export class PrismaProjectionStore implements ProjectionStore {
   async refreshDashboard(): Promise<void> {
     const [
       orders,
-      revenue,
+      grossOrderValue,
       pendingOrders,
       completedOrders,
       totalUsers,
       totalProducts,
     ] = await Promise.all([
       prisma.orderHistoryProjection.count(),
-      prisma.orderHistoryProjection.aggregate({ _sum: { total: true } }),
+      prisma.orderHistoryProjection.aggregate({
+        where: { status: { not: "CANCELLED" } },
+        _sum: { total: true },
+      }),
       prisma.orderHistoryProjection.count({ where: { status: "PENDING" } }),
       prisma.orderHistoryProjection.count({
         where: { status: { in: ["DELIVERED", "REFUNDED"] } },
@@ -126,7 +129,7 @@ export class PrismaProjectionStore implements ProjectionStore {
       create: {
         id: "singleton",
         totalOrders: orders,
-        totalRevenue: revenue._sum.total ?? 0,
+        totalGrossOrderValue: grossOrderValue._sum.total ?? 0,
         pendingOrders,
         completedOrders,
         totalUsers,
@@ -134,7 +137,7 @@ export class PrismaProjectionStore implements ProjectionStore {
       },
       update: {
         totalOrders: orders,
-        totalRevenue: revenue._sum.total ?? 0,
+        totalGrossOrderValue: grossOrderValue._sum.total ?? 0,
         pendingOrders,
         completedOrders,
         totalUsers,

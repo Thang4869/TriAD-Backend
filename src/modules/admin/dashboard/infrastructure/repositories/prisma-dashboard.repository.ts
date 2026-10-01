@@ -3,16 +3,16 @@ import { OrderStatus } from "@modules/orders/domain/order-status";
 
 import type {
   IDashboardRepository,
+  GrossOrderValueByDay,
   LowStockProduct,
   OrderStatusCount,
-  RevenueByDay,
   TopSellingProduct,
 } from "../../application/ports/dashboard.repository.port";
 
 // ---------- Prisma implementation ----------
 
 export class PrismaDashboardRepository implements IDashboardRepository {
-  async getTotalRevenue(sinceDate: Date): Promise<number> {
+  async getGrossOrderValue(sinceDate: Date): Promise<number> {
     const result = await prisma.order.aggregate({
       where: {
         createdAt: { gte: sinceDate },
@@ -31,14 +31,16 @@ export class PrismaDashboardRepository implements IDashboardRepository {
     return groups.map((g) => ({ status: g.status, count: g._count.status }));
   }
 
-  async getRevenueByDay(days: number): Promise<RevenueByDay[]> {
-    return prisma.$queryRaw<RevenueByDay[]>`
+  async getGrossOrderValueByDay(
+    sinceDate: Date,
+  ): Promise<GrossOrderValueByDay[]> {
+    return prisma.$queryRaw<GrossOrderValueByDay[]>`
       SELECT
         TO_CHAR(DATE_TRUNC('day', "createdAt"), 'YYYY-MM-DD') AS date,
-        COALESCE(SUM("total"), 0)::float AS revenue,
+        COALESCE(SUM("total"), 0)::float AS "grossOrderValue",
         COUNT(*)::int AS "orderCount"
       FROM "orders"
-      WHERE "createdAt" >= NOW() - (${days} || ' days')::interval
+      WHERE "createdAt" >= ${sinceDate}
         AND "status" != 'CANCELLED'
       GROUP BY DATE_TRUNC('day', "createdAt")
       ORDER BY DATE_TRUNC('day', "createdAt") ASC
@@ -54,7 +56,7 @@ export class PrismaDashboardRepository implements IDashboardRepository {
         oi."productId" AS "productId",
         p."name" AS "name",
         SUM(oi."quantity")::int AS "totalQuantitySold",
-        SUM(oi."total")::float AS "totalRevenue"
+        SUM(oi."total")::float AS "totalOrderValue"
       FROM "order_items" oi
       INNER JOIN "orders" o ON o."id" = oi."orderId"
       INNER JOIN "products" p ON p."id" = oi."productId"

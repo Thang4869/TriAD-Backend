@@ -21,9 +21,9 @@
  *                 data:
  *                   type: object
  *                   properties:
- *                     totalRevenue: { type: number }
+ *                     grossOrderValue: { type: number, description: "Tổng giá trị đơn hàng chưa bị huỷ, không phải doanh thu đã thu tiền" }
  *                     statusBreakdown: { type: object }
- *                     revenueByDay: { type: array, items: { type: object } }
+ *                     grossOrderValueByDay: { type: array, items: { type: object } }
  *                     topSelling: { type: array, items: { type: object } }
  *                     lowStock: { type: array, items: { type: object } }
  *                     newUsers: { type: integer }

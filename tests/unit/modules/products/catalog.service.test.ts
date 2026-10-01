@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CatalogService } from "@modules/products/services/catalog.service";
 import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
 import { NotFoundError } from "@shared/utils/errors";
-
+import type { ProductCatalogReadPort } from "@modules/products/application/product-catalog-read.port";
 function productRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "prod-1",
@@ -43,15 +43,35 @@ function createRepository(
   } as unknown as IProductsRepository;
 }
 
+function createCatalogRead(
+  overrides: Partial<ProductCatalogReadPort> = {},
+): ProductCatalogReadPort {
+  return {
+    findMany: vi.fn().mockResolvedValue([]),
+    count: vi.fn().mockResolvedValue(0),
+    groupByCategory: vi.fn().mockResolvedValue([]),
+    search: vi.fn().mockResolvedValue([]),
+    countSearch: vi.fn().mockResolvedValue(0),
+    ...overrides,
+  };
+}
+
+function createService(
+  catalogRead = createCatalogRead(),
+  detailRead = createRepository(),
+) {
+  return new CatalogService(catalogRead, detailRead);
+}
+
 describe("CatalogService.findAll", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("dùng page 1 và limit mặc định 12 khi không truyền tham số", async () => {
-    const repository = createRepository();
+    const repository = createCatalogRead();
 
-    const result = await new CatalogService(repository).findAll({});
+    const result = await createService(repository).findAll({});
 
-    expect(repository.findManyWithRatings).toHaveBeenCalledWith(
+    expect(repository.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 0, take: 12 }),
     );
     expect(result.page).toBe(1);
@@ -59,39 +79,39 @@ describe("CatalogService.findAll", () => {
   });
 
   it("giới hạn limit tối đa 50 để tránh truy vấn quá tải", async () => {
-    const repository = createRepository();
+    const repository = createCatalogRead();
 
-    const result = await new CatalogService(repository).findAll({ limit: 999 });
+    const result = await createService(repository).findAll({ limit: 999 });
 
-    expect(repository.findManyWithRatings).toHaveBeenCalledWith(
+    expect(repository.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 50 }),
     );
     expect(result.limit).toBe(50);
   });
 
   it("tính skip đúng theo trang", async () => {
-    const repository = createRepository();
+    const repository = createCatalogRead();
 
-    await new CatalogService(repository).findAll({ page: 3, limit: 10 });
+    await createService(repository).findAll({ page: 3, limit: 10 });
 
-    expect(repository.findManyWithRatings).toHaveBeenCalledWith(
+    expect(repository.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 20, take: 10 }),
     );
   });
 
   it("luôn chỉ trả sản phẩm đang active cho trang public", async () => {
-    const repository = createRepository();
+    const repository = createCatalogRead();
 
-    await new CatalogService(repository).findAll({});
+    await createService(repository).findAll({});
 
-    const query = vi.mocked(repository.findManyWithRatings).mock.calls[0][0];
+    const query = vi.mocked(repository.findMany).mock.calls[0][0];
     expect(JSON.stringify(query.where)).toContain('"isActive":true');
   });
 
   it("áp dụng filter category, khoảng giá và từ khoá vào where", async () => {
-    const repository = createRepository();
+    const repository = createCatalogRead();
 
-    await new CatalogService(repository).findAll({
+    await createService(repository).findAll({
       category: "ao",
       minPrice: 10,
       maxPrice: 200,
@@ -99,7 +119,7 @@ describe("CatalogService.findAll", () => {
     });
 
     const where = JSON.stringify(
-      vi.mocked(repository.findManyWithRatings).mock.calls[0][0].where,
+      vi.mocked(repository.findMany).mock.calls[0][0].where,
     );
     expect(where).toContain('"category":"ao"');
     expect(where).toContain('"gte":10');
@@ -108,39 +128,41 @@ describe("CatalogService.findAll", () => {
   });
 
   it("sắp xếp mặc định theo createdAt desc", async () => {
-    const repository = createRepository();
+    const repository = createCatalogRead();
 
-    await new CatalogService(repository).findAll({});
+    await createService(repository).findAll({});
 
-    expect(repository.findManyWithRatings).toHaveBeenCalledWith(
+    expect(repository.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: { createdAt: "desc" } }),
     );
   });
 
   it("dùng sortBy/sortOrder do client chỉ định", async () => {
-    const repository = createRepository();
+    const repository = createCatalogRead();
 
-    await new CatalogService(repository).findAll({
+    await createService(repository).findAll({
       sortBy: "price",
       sortOrder: "asc",
     });
 
-    expect(repository.findManyWithRatings).toHaveBeenCalledWith(
+    expect(repository.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: { price: "asc" } }),
     );
   });
 
-  it("tính avgRating/reviewCount từ reviews và loại bỏ mảng reviews khỏi list item", async () => {
-    const repository = createRepository({
-      findManyWithRatings: vi
-        .fn()
-        .mockResolvedValue([
-          productRow({ reviews: [{ rating: 5 }, { rating: 4 }] }),
-        ]),
+  it("trả avgRating/reviewCount từ catalog projection", async () => {
+    const repository = createCatalogRead({
+      findMany: vi.fn().mockResolvedValue([
+        productRow({
+          avgRating: 4.5,
+          reviewCount: 2,
+          reviews: undefined,
+        }),
+      ]),
       count: vi.fn().mockResolvedValue(1),
     });
 
-    const result = await new CatalogService(repository).findAll({});
+    const result = await createService(repository).findAll({});
 
     expect(result.products[0]).toMatchObject({
       avgRating: 4.5,
@@ -149,33 +171,42 @@ describe("CatalogService.findAll", () => {
     expect("reviews" in result.products[0]).toBe(false);
   });
 
-  it("sản phẩm chưa có review có avgRating = 0", async () => {
-    const repository = createRepository({
-      findManyWithRatings: vi.fn().mockResolvedValue([productRow()]),
+  it("projection chưa có review có avgRating = 0", async () => {
+    const repository = createCatalogRead({
+      findMany: vi.fn().mockResolvedValue([
+        productRow({
+          avgRating: 0,
+          reviewCount: 0,
+          reviews: undefined,
+        }),
+      ]),
       count: vi.fn().mockResolvedValue(1),
     });
 
-    const result = await new CatalogService(repository).findAll({});
+    const result = await createService(repository).findAll({});
 
-    expect(result.products[0]).toMatchObject({ avgRating: 0, reviewCount: 0 });
+    expect(result.products[0]).toMatchObject({
+      avgRating: 0,
+      reviewCount: 0,
+    });
   });
 
   it("totalPages làm tròn lên", async () => {
-    const repository = createRepository({
+    const repository = createCatalogRead({
       count: vi.fn().mockResolvedValue(25),
     });
 
-    const result = await new CatalogService(repository).findAll({ limit: 10 });
+    const result = await createService(repository).findAll({ limit: 10 });
 
     expect(result.totalPages).toBe(3);
   });
 
   it("không có sản phẩm nào thì totalPages = 0", async () => {
-    const repository = createRepository({
+    const repository = createCatalogRead({
       count: vi.fn().mockResolvedValue(0),
     });
 
-    const result = await new CatalogService(repository).findAll({});
+    const result = await createService(repository).findAll({});
 
     expect(result.totalPages).toBe(0);
     expect(result.products).toEqual([]);
@@ -202,7 +233,10 @@ describe("CatalogService.findById", () => {
       ),
     });
 
-    const result = await new CatalogService(repository).findById("prod-1");
+    const result = await createService(
+      createCatalogRead(),
+      repository,
+    ).findById("prod-1");
 
     expect(repository.findByIdWithReviews).toHaveBeenCalledWith("prod-1");
     expect(result.avgRating).toBe(4);
@@ -211,10 +245,12 @@ describe("CatalogService.findById", () => {
   });
 
   it("ném NotFoundError khi không tìm thấy sản phẩm", async () => {
-    const repository = createRepository();
+    const detailRead = createRepository({
+      findByIdWithReviews: vi.fn().mockResolvedValue(null),
+    });
 
     await expect(
-      new CatalogService(repository).findById("missing"),
+      createService(createCatalogRead(), detailRead).findById("missing"),
     ).rejects.toThrow(NotFoundError);
   });
 });
@@ -227,36 +263,41 @@ describe("CatalogService.getBySlug", () => {
       findBySlugWithReviews: vi.fn().mockResolvedValue(productRow()),
     });
 
-    const result = await new CatalogService(repository).getBySlug("ao-thun");
+    const result = await createService(
+      createCatalogRead(),
+      repository,
+    ).getBySlug("ao-thun");
 
     expect(repository.findBySlugWithReviews).toHaveBeenCalledWith("ao-thun");
     expect(result.slug).toBe("ao-thun");
   });
 
   it("slug không tồn tại ném NotFoundError", async () => {
-    const repository = createRepository();
+    const detailRead = createRepository({
+      findBySlugWithReviews: vi.fn().mockResolvedValue(null),
+    });
 
     await expect(
-      new CatalogService(repository).getBySlug("khong-co"),
+      createService(createCatalogRead(), detailRead).getBySlug("khong-co"),
     ).rejects.toThrow(NotFoundError);
   });
 });
 
 describe("CatalogService.getCategories", () => {
   it("đổi tên field category → name cho response", async () => {
-    const repository = createRepository({
+    const repository = createCatalogRead({
       groupByCategory: vi
         .fn()
         .mockResolvedValue([{ category: "ao", count: 5 }]),
     });
 
-    const result = await new CatalogService(repository).getCategories();
+    const result = await createService(repository).getCategories();
 
     expect(result).toEqual([{ name: "ao", count: 5 }]);
   });
 
   it("danh sách rỗng trả mảng rỗng", async () => {
-    const result = await new CatalogService(createRepository()).getCategories();
+    const result = await createService(createCatalogRead()).getCategories();
 
     expect(result).toEqual([]);
   });
@@ -266,30 +307,36 @@ describe("CatalogService.search", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("truyền skip/take đúng cho full-text search", async () => {
-    const repository = createRepository();
+    const repository = createCatalogRead();
 
-    await new CatalogService(repository).search("áo", 2, 10);
+    await createService(repository).search("áo", 2, 10);
 
-    expect(repository.searchFullText).toHaveBeenCalledWith("áo", 10, 10);
-    expect(repository.countFullTextSearch).toHaveBeenCalledWith("áo");
+    expect(repository.search).toHaveBeenCalledWith("áo", 10, 10);
+    expect(repository.countSearch).toHaveBeenCalledWith("áo");
   });
 
   it("áp trần limit 50 cho search", async () => {
-    const repository = createRepository();
+    const repository = createCatalogRead();
 
-    const result = await new CatalogService(repository).search("áo", 1, 999);
+    const result = await createService(repository).search("áo", 1, 999);
 
-    expect(repository.searchFullText).toHaveBeenCalledWith("áo", 0, 50);
+    expect(repository.search).toHaveBeenCalledWith("áo", 0, 50);
     expect(result.limit).toBe(50);
   });
 
   it("trả metadata phân trang đầy đủ", async () => {
-    const repository = createRepository({
-      searchFullText: vi.fn().mockResolvedValue([{ id: "prod-1" }]),
-      countFullTextSearch: vi.fn().mockResolvedValue(11),
+    const repository = createCatalogRead({
+      search: vi.fn().mockResolvedValue([
+        productRow({
+          avgRating: 0,
+          reviewCount: 0,
+          reviews: undefined,
+        }),
+      ]),
+      countSearch: vi.fn().mockResolvedValue(11),
     });
 
-    const result = await new CatalogService(repository).search("áo");
+    const result = await createService(repository).search("áo");
 
     expect(result).toMatchObject({
       total: 11,

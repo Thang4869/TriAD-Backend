@@ -13,12 +13,19 @@ import {
   ProductPriceChangedEvent,
   ProductActivatedEvent,
   ProductDeactivatedEvent,
+  ProductUpdatedEvent,
+  ProductCreatedEvent,
 } from "@shared/domain/events/product-events";
 
 export class Product extends AggregateRoot {
   private _stock: number;
   private _isActive: boolean;
-
+  markUpdated(): void {
+    this.raise(new ProductUpdatedEvent(this.id));
+  }
+  markCreated(): void {
+    this.raise(new ProductCreatedEvent(this.id));
+  }
   private constructor(
     id: string,
     public readonly name: string,

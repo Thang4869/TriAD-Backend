@@ -7,7 +7,10 @@ import {
   AdminOrderView,
 } from "./application/ports/orders.repository.port";
 import { Order } from "./domain/order.entity";
-import { OrderHistoryReadPort } from "./application/order-history-read.port";
+import {
+  OrderHistoryReadPort,
+  OrderHistoryView,
+} from "./application/order-history-read.port";
 
 export interface IOrdersService {
   getOrders(
@@ -15,13 +18,13 @@ export interface IOrdersService {
     page?: number,
     limit?: number,
   ): Promise<{
-    orders: OrderView[];
+    orders: OrderHistoryView[];
     total: number;
     page: number;
     limit: number;
     totalPages: number;
   }>;
-  getOrderById(orderId: string, userId: string): Promise<OrderView>;
+  getOrderById(orderId: string, userId: string): Promise<OrderHistoryView>;
   adminGetOrders(
     filters: AdminOrderFilters,
     page?: number,
@@ -41,7 +44,7 @@ export class OrdersService implements IOrdersService {
 
   constructor(
     private readonly repository: IOrdersRepository,
-    readPort: OrderHistoryReadPort = repository,
+    readPort: OrderHistoryReadPort,
   ) {
     this.readPort = readPort;
   }

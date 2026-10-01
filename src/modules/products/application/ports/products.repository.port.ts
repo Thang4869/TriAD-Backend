@@ -73,6 +73,11 @@ export interface IProductsRepository {
     aggregate: Product,
   ): Promise<ProductRecord>;
   setActive(id: string, isActive: boolean): Promise<ProductRecord>;
+  setActiveWithEvents(
+    id: string,
+    isActive: boolean,
+    aggregate: Product,
+  ): Promise<ProductRecord>;
   existsAndActive(id: string): Promise<boolean>;
 
   searchFullText(

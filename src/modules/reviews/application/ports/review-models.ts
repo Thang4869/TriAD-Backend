@@ -1,6 +1,7 @@
 export interface ReviewRecord {
   id: string;
   userId: string;
+  productId: string;
 }
 
 export interface ReviewUserSummary {

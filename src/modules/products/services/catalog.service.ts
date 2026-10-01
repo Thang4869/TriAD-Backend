@@ -9,12 +9,16 @@ import {
   toProductListResponse,
   toProductDetailResponse,
 } from "../products.mapper";
+import { ProductDetailReadPort } from "../application/product-detail-read.port";
 
 const MAX_PAGE_LIMIT = 50;
 const DEFAULT_PUBLIC_LIMIT = 12;
 
 export class CatalogService {
-  constructor(private readonly repository: ProductCatalogReadPort) {}
+  constructor(
+    private readonly catalogRead: ProductCatalogReadPort,
+    private readonly detailRead: ProductDetailReadPort,
+  ) {}
 
   async findAll(params: {
     page?: number;
@@ -53,26 +57,17 @@ export class CatalogService {
     };
 
     const [products, total] = await Promise.all([
-      this.repository.findManyWithRatings({
+      this.catalogRead.findMany({
         where,
         orderBy,
         skip,
         take: safeLimit,
       }),
-      this.repository.count(where),
+      this.catalogRead.count(where),
     ]);
 
-    const productsWithRating = products.map((product) => {
-      const rating = Rating.fromReviews(product.reviews);
-      return {
-        ...product,
-        avgRating: rating.getAverage(),
-        reviewCount: rating.getCount(),
-      };
-    });
-
     return {
-      products: toProductListResponse(productsWithRating),
+      products: toProductListResponse(products),
       total,
       page,
       limit: safeLimit,
@@ -81,7 +76,7 @@ export class CatalogService {
   }
 
   async findById(id: string) {
-    const product = await this.repository.findByIdWithReviews(id);
+    const product = await this.detailRead.findByIdWithReviews(id);
     if (!product) throw new NotFoundError("Product not found");
     const rating = Rating.fromReviews(product.reviews);
     return toProductDetailResponse({
@@ -92,7 +87,7 @@ export class CatalogService {
   }
 
   async getBySlug(slug: string) {
-    const product = await this.repository.findBySlugWithReviews(slug);
+    const product = await this.detailRead.findBySlugWithReviews(slug);
     if (!product) throw new NotFoundError("Product not found");
     const rating = Rating.fromReviews(product.reviews);
     return toProductDetailResponse({
@@ -103,7 +98,7 @@ export class CatalogService {
   }
 
   async getCategories() {
-    const categories = await this.repository.groupByCategory();
+    const categories = await this.catalogRead.groupByCategory();
     return categories.map((c) => ({ name: c.category, count: c.count }));
   }
 
@@ -111,8 +106,8 @@ export class CatalogService {
     const safeLimit = Math.min(limit, MAX_PAGE_LIMIT);
     const skip = (page - 1) * safeLimit;
     const [results, total] = await Promise.all([
-      this.repository.searchFullText(query, skip, safeLimit),
-      this.repository.countFullTextSearch(query),
+      this.catalogRead.search(query, skip, safeLimit),
+      this.catalogRead.countSearch(query),
     ]);
     return {
       products: results,

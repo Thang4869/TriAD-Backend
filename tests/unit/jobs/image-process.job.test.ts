@@ -3,6 +3,7 @@ import { processImage } from "@/jobs/image-process.job";
 import sharp from "sharp";
 import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
 import type { IImageStorage } from "@core/storage/cloudinary";
+import type { EventBus } from "@shared/domain/event-bus/event-bus";
 
 vi.mock("sharp", () => ({
   default: vi.fn().mockReturnValue({
@@ -24,6 +25,11 @@ describe("image-process.job", () => {
     upload: vi.fn(),
   } as unknown as IImageStorage;
 
+  const eventBus = {
+    publish: vi.fn().mockResolvedValue(undefined),
+    subscribe: vi.fn(),
+  } as unknown as EventBus;
+
   it("should process and upload image, update product", async () => {
     vi.mocked(storage.upload).mockResolvedValue({
       url: "https://cdn.com/processed.jpg",
@@ -44,7 +50,21 @@ describe("image-process.job", () => {
       },
     };
 
-    const result = await processImage(job, productsRepository, storage);
+    const result = await processImage(
+      job,
+      productsRepository,
+      storage,
+      eventBus,
+    );
+
+    expect(eventBus.publish).toHaveBeenCalledOnce();
+
+    expect(eventBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productId: "prod-1",
+        eventName: "ProductUpdated",
+      }),
+    );
 
     expect(sharp).toHaveBeenCalled();
 
@@ -79,7 +99,7 @@ describe("image-process.job", () => {
     };
 
     await expect(
-      processImage(job, productsRepository, storage),
+      processImage(job, productsRepository, storage, eventBus),
     ).rejects.toThrow("Product prod-1 not found");
   });
 
@@ -91,7 +111,7 @@ describe("image-process.job", () => {
     };
 
     await expect(
-      processImage(job, productsRepository, storage),
+      processImage(job, productsRepository, storage, eventBus),
     ).rejects.toThrow("No image buffer provided");
   });
 });

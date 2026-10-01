@@ -3,7 +3,7 @@ import { OrderPlacedEvent } from "@shared/domain/events/order-events";
 import { ProductPriceChangedEvent } from "@shared/domain/events/product-events";
 import { ProjectionHandler } from "@core/outbox/projection-handler";
 import type { ProjectionStore } from "@core/outbox/projection-store.port";
-
+import { ReviewCreatedEvent } from "@shared/domain/events/review-events";
 describe("ProjectionHandler", () => {
   let store: ProjectionStore;
 
@@ -13,6 +13,7 @@ describe("ProjectionHandler", () => {
       updateOrderStatus: vi.fn().mockResolvedValue(undefined),
       upsertProduct: vi.fn().mockResolvedValue(undefined),
       refreshDashboard: vi.fn().mockResolvedValue(undefined),
+      refreshProductRating: vi.fn().mockResolvedValue(undefined),
     };
   });
 
@@ -52,5 +53,15 @@ describe("ProjectionHandler", () => {
     expect(store.upsertProduct).toHaveBeenCalledTimes(2);
     expect(store.upsertProduct).toHaveBeenNthCalledWith(1, event);
     expect(store.upsertProduct).toHaveBeenNthCalledWith(2, event);
+  });
+
+  it("refreshes product rating when a review changes", async () => {
+    const handler = new ProjectionHandler(store);
+    const event = new ReviewCreatedEvent("product-1");
+
+    await handler.handleProductRatingChanged(event);
+
+    expect(store.refreshProductRating).toHaveBeenCalledOnce();
+    expect(store.refreshProductRating).toHaveBeenCalledWith("product-1");
   });
 });

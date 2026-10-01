@@ -2,7 +2,6 @@ import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import path from "path";
 import { json, urlencoded } from "body-parser";
 import { Request } from "express";
 
@@ -96,8 +95,8 @@ app.use(cookieParser());
 app.use(csrfProtection);
 app.use(metricsMiddleware);
 
-app.use(json({ limit: "10mb" }));
-app.use(urlencoded({ extended: true, limit: "10mb" }));
+app.use(json({ limit: "100kb" }));
+app.use(urlencoded({ extended: true, limit: "100kb" }));
 
 type AppRequest = Request & { requestId?: string };
 
@@ -140,8 +139,6 @@ app.use("/health", healthRoutes);
 if (!config.isProduction) {
   app.use("/metrics", metricsRoutes);
 }
-
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.use(notFoundHandler);
 app.use(errorHandler);

@@ -14,7 +14,11 @@ vi.mock("@core/database/prisma", () => ({
     },
     productCatalogProjection: {
       upsert: vi.fn(),
+      updateMany: vi.fn(),
       count: vi.fn(),
+    },
+    review: {
+      aggregate: vi.fn(),
     },
     adminDashboardProjection: {
       upsert: vi.fn(),
@@ -37,7 +41,11 @@ const mockedPrisma = prisma as unknown as {
   };
   productCatalogProjection: {
     upsert: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
     count: ReturnType<typeof vi.fn>;
+  };
+  review: {
+    aggregate: ReturnType<typeof vi.fn>;
   };
   adminDashboardProjection: {
     upsert: ReturnType<typeof vi.fn>;
@@ -151,6 +159,34 @@ describe("PrismaProjectionStore", () => {
     await store.upsertProduct(event);
 
     expect(mockedPrisma.productCatalogProjection.upsert).not.toHaveBeenCalled();
+  });
+
+  it("refreshes product catalog rating aggregates", async () => {
+    mockedPrisma.review.aggregate.mockResolvedValue({
+      _avg: { rating: 4.5 },
+      _count: { rating: 2 },
+    });
+    mockedPrisma.productCatalogProjection.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
+    await store.refreshProductRating("product-1");
+
+    expect(mockedPrisma.review.aggregate).toHaveBeenCalledWith({
+      where: { productId: "product-1" },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+
+    expect(
+      mockedPrisma.productCatalogProjection.updateMany,
+    ).toHaveBeenCalledWith({
+      where: { productId: "product-1" },
+      data: {
+        avgRating: 4.5,
+        reviewCount: 2,
+      },
+    });
   });
 
   it("refreshes the admin dashboard projection", async () => {

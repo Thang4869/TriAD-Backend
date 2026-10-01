@@ -3,6 +3,10 @@ import { OrderStatus } from "@prisma/client";
 
 import { OrdersService } from "@modules/orders/orders.service";
 import { IOrdersRepository } from "@modules/orders/application/ports/orders.repository.port";
+import type {
+  OrderHistoryReadPort,
+  OrderHistoryView,
+} from "@modules/orders/application/order-history-read.port";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { NotFoundError } from "@shared/utils/errors";
 
@@ -39,6 +43,21 @@ const ORDER = {
   items: [],
 };
 
+const ORDER_HISTORY: OrderHistoryView = {
+  orderId: "order-1",
+  userId: "user-1",
+  orderNumber: "ORD-TEST-1",
+  status: OrderStatus.PENDING,
+  paymentStatus: "PENDING",
+  subtotal: 100,
+  tax: 0,
+  shippingFee: 0,
+  total: 100,
+  items: [],
+  placedAt: new Date("2026-01-01T00:00:00.000Z"),
+  updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+};
+
 const eventBus = {
   publish: vi.fn().mockResolvedValue({
     success: true,
@@ -67,8 +86,22 @@ function createRepository(
   } as unknown as IOrdersRepository;
 }
 
-function createService(repository = createRepository()) {
-  return new OrdersService(repository);
+function createReadPort(
+  overrides: Partial<OrderHistoryReadPort> = {},
+): OrderHistoryReadPort {
+  return {
+    findByUser: vi.fn().mockResolvedValue([]),
+    countByUser: vi.fn().mockResolvedValue(0),
+    findByIdAndUser: vi.fn().mockResolvedValue(ORDER_HISTORY),
+    ...overrides,
+  };
+}
+
+function createService(
+  repository = createRepository(),
+  readPort = createReadPort(),
+) {
+  return new OrdersService(repository, readPort);
 }
 
 beforeEach(() => {
@@ -83,10 +116,13 @@ beforeEach(() => {
 describe("OrdersService.getOrders", () => {
   it("mặc định page 1, limit 10", async () => {
     const repository = createRepository();
+    const readPort = createReadPort();
 
-    const result = await createService(repository).getOrders("user-1");
+    const result = await createService(repository, readPort).getOrders(
+      "user-1",
+    );
 
-    expect(repository.findByUser).toHaveBeenCalledWith("user-1", 0, 10);
+    expect(readPort.findByUser).toHaveBeenCalledWith("user-1", 0, 10);
     expect(result).toMatchObject({
       page: 1,
       limit: 10,
@@ -95,18 +131,24 @@ describe("OrdersService.getOrders", () => {
 
   it("tính skip theo trang", async () => {
     const repository = createRepository();
+    const readPort = createReadPort();
 
-    await createService(repository).getOrders("user-1", 3, 5);
+    await createService(repository, readPort).getOrders("user-1", 3, 5);
 
-    expect(repository.findByUser).toHaveBeenCalledWith("user-1", 10, 5);
+    expect(readPort.findByUser).toHaveBeenCalledWith("user-1", 10, 5);
   });
 
   it("totalPages làm tròn lên theo tổng số đơn", async () => {
-    const repository = createRepository({
+    const repository = createRepository();
+    const readPort = createReadPort({
       countByUser: vi.fn().mockResolvedValue(21),
     });
 
-    const result = await createService(repository).getOrders("user-1", 1, 10);
+    const result = await createService(repository, readPort).getOrders(
+      "user-1",
+      1,
+      10,
+    );
 
     expect(result.totalPages).toBe(3);
     expect(result.total).toBe(21);
@@ -125,22 +167,21 @@ describe("OrdersService.getOrders", () => {
 describe("OrdersService.getOrderById", () => {
   it("tra cứu theo cả orderId lẫn userId để tránh xem trộm đơn người khác", async () => {
     const repository = createRepository();
+    const readPort = createReadPort();
 
-    await createService(repository).getOrderById("order-1", "user-1");
+    await createService(repository, readPort).getOrderById("order-1", "user-1");
 
-    expect(repository.findByIdAndUser).toHaveBeenCalledWith(
-      "order-1",
-      "user-1",
-    );
+    expect(readPort.findByIdAndUser).toHaveBeenCalledWith("order-1", "user-1");
   });
 
   it("không tìm thấy (hoặc không thuộc về user) → NotFoundError", async () => {
-    const repository = createRepository({
+    const repository = createRepository();
+    const readPort = createReadPort({
       findByIdAndUser: vi.fn().mockResolvedValue(null),
     });
 
     await expect(
-      createService(repository).getOrderById("order-1", "user-2"),
+      createService(repository, readPort).getOrderById("order-1", "user-2"),
     ).rejects.toThrow(new NotFoundError("Order not found"));
   });
 });

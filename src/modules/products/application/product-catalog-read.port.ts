@@ -1,25 +1,34 @@
-import type {
-  IProductsRepository,
-  ProductCatalogSort,
-} from "./ports/products.repository.port";
-import { ProductFilter } from "../domain/specifications/product-specification";
+import type { ProductListItemResponse } from "../products.mapper";
+import type { ProductFilter } from "../domain/specifications/product-specification";
 
-export type { ProductCatalogSort };
+export type ProductCatalogSortOrder = "asc" | "desc";
 
-export type ProductCatalogReadPort = Pick<
-  IProductsRepository,
-  | "findManyWithRatings"
-  | "count"
-  | "findByIdWithReviews"
-  | "findBySlugWithReviews"
-  | "groupByCategory"
-  | "searchFullText"
-  | "countFullTextSearch"
->;
+export type ProductCatalogSort = Record<string, ProductCatalogSortOrder>;
 
-export type ProductCatalogQuery = {
+export interface ProductCatalogQuery {
   where?: ProductFilter;
   orderBy?: ProductCatalogSort;
   skip?: number;
   take?: number;
-};
+}
+
+export interface ProductCategoryCount {
+  category: string;
+  count: number;
+}
+
+export interface ProductCatalogReadPort {
+  findMany(query: ProductCatalogQuery): Promise<ProductListItemResponse[]>;
+
+  count(where?: ProductFilter): Promise<number>;
+
+  groupByCategory(): Promise<ProductCategoryCount[]>;
+
+  search(
+    query: string,
+    skip: number,
+    take: number,
+  ): Promise<ProductListItemResponse[]>;
+
+  countSearch(query: string): Promise<number>;
+}

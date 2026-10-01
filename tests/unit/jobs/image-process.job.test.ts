@@ -3,7 +3,6 @@ import { processImage } from "@/jobs/image-process.job";
 import sharp from "sharp";
 import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
 import type { IImageStorage } from "@core/storage/cloudinary";
-import type { EventBus } from "@shared/domain/event-bus/event-bus";
 
 vi.mock("sharp", () => ({
   default: vi.fn().mockReturnValue({
@@ -18,17 +17,12 @@ describe("image-process.job", () => {
 
   const productsRepository = {
     findById: vi.fn(),
-    update: vi.fn(),
+    updateWithEvents: vi.fn(),
   } as unknown as IProductsRepository;
 
   const storage = {
     upload: vi.fn(),
   } as unknown as IImageStorage;
-
-  const eventBus = {
-    publish: vi.fn().mockResolvedValue(undefined),
-    subscribe: vi.fn(),
-  } as unknown as EventBus;
 
   it("should process and upload image, update product", async () => {
     vi.mocked(storage.upload).mockResolvedValue({
@@ -41,7 +35,7 @@ describe("image-process.job", () => {
       images: ["old.jpg"],
     } as any);
 
-    vi.mocked(productsRepository.update).mockResolvedValue({} as any);
+    vi.mocked(productsRepository.updateWithEvents).mockResolvedValue({} as any);
 
     const job = {
       data: {
@@ -50,21 +44,7 @@ describe("image-process.job", () => {
       },
     };
 
-    const result = await processImage(
-      job,
-      productsRepository,
-      storage,
-      eventBus,
-    );
-
-    expect(eventBus.publish).toHaveBeenCalledOnce();
-
-    expect(eventBus.publish).toHaveBeenCalledWith(
-      expect.objectContaining({
-        productId: "prod-1",
-        eventName: "ProductUpdated",
-      }),
-    );
+    const result = await processImage(job, productsRepository, storage);
 
     expect(sharp).toHaveBeenCalled();
 
@@ -73,9 +53,11 @@ describe("image-process.job", () => {
       "products/prod-1",
     );
 
-    expect(productsRepository.update).toHaveBeenCalledWith("prod-1", {
-      images: ["old.jpg", "https://cdn.com/processed.jpg"],
-    });
+    expect(productsRepository.updateWithEvents).toHaveBeenCalledWith(
+      "prod-1",
+      { images: ["old.jpg", "https://cdn.com/processed.jpg"] },
+      expect.objectContaining({ id: "prod-1" }),
+    );
 
     expect(result).toEqual({
       processed: true,
@@ -99,8 +81,38 @@ describe("image-process.job", () => {
     };
 
     await expect(
-      processImage(job, productsRepository, storage, eventBus),
+      processImage(job, productsRepository, storage),
     ).rejects.toThrow("Product prod-1 not found");
+  });
+
+  it("should propagate atomic product update failure for worker retry", async () => {
+    vi.mocked(storage.upload).mockResolvedValue({
+      url: "https://cdn.com/processed.jpg",
+      publicId: "products/prod-1",
+    });
+    vi.mocked(productsRepository.findById).mockResolvedValue({
+      id: "prod-1",
+      name: "Product",
+      description: null,
+      price: 100,
+      stock: 1,
+      category: "category",
+      images: [],
+      slug: "product",
+      isActive: true,
+      version: 0,
+    } as any);
+    vi.mocked(productsRepository.updateWithEvents).mockRejectedValue(
+      new Error("outbox persistence failed"),
+    );
+
+    await expect(
+      processImage(
+        { data: { productId: "prod-1", imageBuffer: bufferBase64 } },
+        productsRepository,
+        storage,
+      ),
+    ).rejects.toThrow("outbox persistence failed");
   });
 
   it("should throw if no imageBuffer", async () => {
@@ -111,7 +123,7 @@ describe("image-process.job", () => {
     };
 
     await expect(
-      processImage(job, productsRepository, storage, eventBus),
+      processImage(job, productsRepository, storage),
     ).rejects.toThrow("No image buffer provided");
   });
 });

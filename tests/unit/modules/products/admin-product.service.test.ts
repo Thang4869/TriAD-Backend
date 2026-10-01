@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AdminProductService } from "@modules/products/services/admin-product.service";
 import { ProductImageService } from "@modules/products/services/product-image.service";
 import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
-import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { BadRequestError, NotFoundError } from "@shared/utils/errors";
 import { ProductAlreadyActiveError } from "@shared/domain/errors/domain-error";
 import { ImageProcessingQueuePort } from "@modules/products/application/ports/image-processing-queue.port";
@@ -11,12 +10,6 @@ import { Product } from "@/modules/products/domain/product.entity";
 vi.mock("@core/logger/winston", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
-const eventBus = {
-  publish: vi.fn().mockResolvedValue({
-    success: true,
-    failedHandlers: [],
-  }),
-} as unknown as EventBus;
 const PRODUCT = {
   id: "prod-1",
   name: "Áo thun",
@@ -45,6 +38,7 @@ function createRepository(
     findManyAdmin: vi.fn().mockResolvedValue([]),
     findById: vi.fn().mockResolvedValue(PRODUCT),
     create: vi.fn().mockResolvedValue(PRODUCT),
+    createWithEvents: vi.fn().mockResolvedValue(PRODUCT),
     update: vi.fn().mockResolvedValue(PRODUCT),
     updateWithEvents: vi.fn().mockResolvedValue(PRODUCT),
     setActive: vi.fn().mockResolvedValue(PRODUCT),
@@ -67,20 +61,14 @@ function createService(repository: IProductsRepository) {
   );
 
   return {
-    service: new AdminProductService(repository, imageService, eventBus),
+    service: new AdminProductService(repository, imageService),
     imageService,
     imageProcessingQueue,
-    eventBus,
   };
 }
 
-let publishSpy: ReturnType<typeof vi.spyOn>;
-
 beforeEach(() => {
   vi.clearAllMocks();
-  publishSpy = vi
-    .spyOn(eventBus, "publish")
-    .mockResolvedValue({ success: true, failedHandlers: [] });
 });
 
 describe("AdminProductService.adminFindAll", () => {
@@ -145,7 +133,16 @@ describe("AdminProductService.create", () => {
     await createService(repository).service.create(data);
 
     expect(repository.findBySlugId).toHaveBeenCalledWith("ao-moi");
-    expect(repository.create).toHaveBeenCalledWith(data);
+    expect(repository.createWithEvents).toHaveBeenCalledWith(
+      data,
+      expect.objectContaining({ id: expect.any(String) }),
+    );
+    const aggregate = vi.mocked(repository.createWithEvents).mock.calls[0][1];
+    expect(aggregate.domainEvents).toHaveLength(1);
+    expect(aggregate.domainEvents[0]).toMatchObject({
+      eventName: "ProductCreated",
+      aggregateId: aggregate.id,
+    });
   });
 
   it("từ chối khi slug đã tồn tại", async () => {
@@ -156,7 +153,7 @@ describe("AdminProductService.create", () => {
     await expect(
       createService(repository).service.create({ slug: "ao-thun" } as never),
     ).rejects.toThrow(new BadRequestError("Slug already exists"));
-    expect(repository.create).not.toHaveBeenCalled();
+    expect(repository.createWithEvents).not.toHaveBeenCalled();
   });
 });
 
@@ -193,7 +190,7 @@ describe("AdminProductService.update", () => {
     } as never);
 
     expect(repository.findBySlugId).toHaveBeenCalledWith("slug-moi-con-trong");
-    expect(repository.update).toHaveBeenCalled();
+    expect(repository.updateWithEvents).toHaveBeenCalled();
   });
 
   it("giữ nguyên slug cũ thì không cần kiểm tra trùng", async () => {
@@ -204,7 +201,7 @@ describe("AdminProductService.update", () => {
     } as never);
 
     expect(repository.findBySlugId).not.toHaveBeenCalled();
-    expect(repository.update).toHaveBeenCalled();
+    expect(repository.updateWithEvents).toHaveBeenCalled();
   });
 
   it("đổi giá thì lưu product và domain event qua atomic repository path", async () => {
@@ -234,35 +231,34 @@ describe("AdminProductService.update", () => {
     });
 
     expect(repository.update).not.toHaveBeenCalled();
-    expect(publishSpy).not.toHaveBeenCalled();
   });
 
-  it("giá không đổi thì không publish event", async () => {
+  it("giá không đổi thì ghi ProductUpdated qua atomic path", async () => {
     const repository = createRepository();
 
     await createService(repository).service.update("prod-1", {
       price: 100_000,
     } as never);
 
-    expect(publishSpy).toHaveBeenCalledOnce();
-    expect(publishSpy.mock.calls[0][0]).toMatchObject({
-      eventName: "ProductUpdated",
-      productId: "prod-1",
-    });
+    expect(repository.updateWithEvents).toHaveBeenCalledWith(
+      "prod-1",
+      { price: 100_000 },
+      expect.any(Product),
+    );
   });
 
-  it("không truyền price thì không publish event", async () => {
+  it("không truyền price thì ghi ProductUpdated qua atomic path", async () => {
     const repository = createRepository();
 
     await createService(repository).service.update("prod-1", {
       name: "Tên mới",
     } as never);
 
-    expect(publishSpy).toHaveBeenCalledOnce();
-    expect(publishSpy.mock.calls[0][0]).toMatchObject({
-      eventName: "ProductUpdated",
-      productId: "prod-1",
-    });
+    expect(repository.updateWithEvents).toHaveBeenCalledWith(
+      "prod-1",
+      { name: "Tên mới" },
+      expect.any(Product),
+    );
   });
 
   it("lỗi atomic update với outbox thì update bị fail", async () => {
@@ -278,7 +274,6 @@ describe("AdminProductService.update", () => {
 
     expect(repository.updateWithEvents).toHaveBeenCalledTimes(1);
     expect(repository.update).not.toHaveBeenCalled();
-    expect(publishSpy).not.toHaveBeenCalled();
   });
 });
 

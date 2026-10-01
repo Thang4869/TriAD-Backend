@@ -1,8 +1,8 @@
 import type { OrderStatus } from "@modules/orders/domain/order-status";
 
-export interface RevenueByDay {
+export interface GrossOrderValueByDay {
   date: string;
-  revenue: number;
+  grossOrderValue: number;
   orderCount: number;
 }
 
@@ -15,7 +15,7 @@ export interface TopSellingProduct {
   productId: string;
   name: string;
   totalQuantitySold: number;
-  totalRevenue: number;
+  totalOrderValue: number;
 }
 
 export interface LowStockProduct {
@@ -26,9 +26,9 @@ export interface LowStockProduct {
 }
 
 export interface IDashboardRepository {
-  getTotalRevenue(sinceDate: Date): Promise<number>;
+  getGrossOrderValue(sinceDate: Date): Promise<number>;
   getOrderStatusBreakdown(): Promise<OrderStatusCount[]>;
-  getRevenueByDay(days: number): Promise<RevenueByDay[]>;
+  getGrossOrderValueByDay(sinceDate: Date): Promise<GrossOrderValueByDay[]>;
 
   getTopSellingProducts(
     limit: number,

@@ -22,7 +22,7 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
     userId = user.id;
   });
 
-  it("getTotalRevenue() cộng đúng total các order chưa bị huỷ, bỏ qua CANCELLED", async () => {
+  it("getGrossOrderValue() cộng GMV của order chưa bị huỷ, kể cả COD/PENDING, bỏ qua CANCELLED", async () => {
     const _product = await prisma.product.create({
       data: {
         name: "Dashboard Product",
@@ -36,7 +36,7 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
     });
 
     const sinceDate = new Date();
-    const before = await repository.getTotalRevenue(sinceDate);
+    const before = await repository.getGrossOrderValue(sinceDate);
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -80,15 +80,62 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
       },
     });
 
-    const total = await repository.getTotalRevenue(sinceDate);
+    const total = await repository.getGrossOrderValue(sinceDate);
 
     expect(total - before).toBe(500);
   });
 
-  it("getTotalRevenue() trả về 0 khi không có order nào trong khoảng thời gian", async () => {
+  it("getGrossOrderValue() trả về 0 khi không có order nào trong khoảng thời gian", async () => {
     const sinceDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const total = await repository.getTotalRevenue(sinceDate);
+    const total = await repository.getGrossOrderValue(sinceDate);
     expect(total).toBe(0);
+  });
+
+  it("getGrossOrderValue() và getGrossOrderValueByDay() dùng cùng semantics, boundary và không double count", async () => {
+    const sinceDate = new Date(Date.now() - 60 * 60 * 1000);
+    const createdAt = new Date(sinceDate);
+    const orders = [
+      { status: OrderStatus.DELIVERED, total: 100 },
+      { status: OrderStatus.PENDING, total: 200 },
+      { status: OrderStatus.REFUNDED, total: 300 },
+      { status: OrderStatus.CANCELLED, total: 9_999 },
+    ];
+
+    for (const [index, order] of orders.entries()) {
+      await prisma.order.create({
+        data: {
+          userId,
+          status: order.status,
+          total: order.total,
+          customerAddress: "addr",
+          customerPhone: "0123456789",
+          customerName: "Test User",
+          customerEmail: "test@test.com",
+          paymentMethod: "COD",
+          orderNumber: `ORD-gmv-${Date.now()}-${index}`,
+          subtotal: order.total,
+          tax: 0,
+          shippingFee: 0,
+          discountAmount: 0,
+          paymentStatus: "PENDING",
+          idempotencyKey: `dash-gmv-${suffix}-${index}`,
+          createdAt,
+        },
+      });
+    }
+
+    const total = await repository.getGrossOrderValue(sinceDate);
+    const byDay = await repository.getGrossOrderValueByDay(sinceDate);
+    const ownDay = byDay.find(
+      (entry) => entry.date === createdAt.toISOString().slice(0, 10),
+    );
+
+    expect(total).toBe(600);
+    expect(ownDay).toEqual({
+      date: createdAt.toISOString().slice(0, 10),
+      grossOrderValue: 600,
+      orderCount: 3,
+    });
   });
 
   it("getLowStockProducts() chỉ trả sản phẩm active có stock <= threshold, sắp xếp tăng dần", async () => {
@@ -243,7 +290,7 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
     expect(noNewUsers).toBe(0);
   });
 
-  it("getRevenueByDay returns correct data", async () => {
+  it("getGrossOrderValueByDay groups non-cancelled orders using the supplied date boundary", async () => {
     const _product = await prisma.product.create({
       data: {
         name: "Dash Product",
@@ -281,10 +328,12 @@ describe("PrismaDashboardRepository (integration, real DB)", () => {
       });
     }
 
-    const result = await repository.getRevenueByDay(30);
+    const result = await repository.getGrossOrderValueByDay(
+      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    );
     expect(result.length).toBeGreaterThanOrEqual(3);
     expect(result[0]).toHaveProperty("date");
-    expect(result[0]).toHaveProperty("revenue");
+    expect(result[0]).toHaveProperty("grossOrderValue");
     expect(result[0]).toHaveProperty("orderCount");
   });
 

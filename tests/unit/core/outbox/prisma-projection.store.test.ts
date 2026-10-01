@@ -204,12 +204,17 @@ describe("PrismaProjectionStore", () => {
 
     await store.refreshDashboard();
 
+    expect(mockedPrisma.orderHistoryProjection.aggregate).toHaveBeenCalledWith({
+      where: { status: { not: "CANCELLED" } },
+      _sum: { total: true },
+    });
+
     expect(mockedPrisma.adminDashboardProjection.upsert).toHaveBeenCalledWith({
       where: { id: "singleton" },
       create: {
         id: "singleton",
         totalOrders: 10,
-        totalRevenue: 1000,
+        totalGrossOrderValue: 1000,
         pendingOrders: 3,
         completedOrders: 6,
         totalUsers: 20,
@@ -217,7 +222,7 @@ describe("PrismaProjectionStore", () => {
       },
       update: {
         totalOrders: 10,
-        totalRevenue: 1000,
+        totalGrossOrderValue: 1000,
         pendingOrders: 3,
         completedOrders: 6,
         totalUsers: 20,

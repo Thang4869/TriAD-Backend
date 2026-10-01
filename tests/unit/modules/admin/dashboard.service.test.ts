@@ -7,9 +7,9 @@ function createFakeRepository(
   overrides: Partial<IDashboardRepository> = {},
 ): IDashboardRepository {
   return {
-    getTotalRevenue: vi.fn().mockResolvedValue(0),
+    getGrossOrderValue: vi.fn().mockResolvedValue(0),
     getOrderStatusBreakdown: vi.fn().mockResolvedValue([]),
-    getRevenueByDay: vi.fn().mockResolvedValue([]),
+    getGrossOrderValueByDay: vi.fn().mockResolvedValue([]),
     getTopSellingProducts: vi.fn().mockResolvedValue([]),
     getLowStockProducts: vi.fn().mockResolvedValue([]),
     getNewUsersCount: vi.fn().mockResolvedValue(0),
@@ -29,7 +29,7 @@ describe("DashboardService", () => {
 
   it("tính đúng mốc 30 ngày trước và truyền cho các repository call phụ thuộc thời gian", async () => {
     const repository = createFakeRepository({
-      getTotalRevenue: vi.fn().mockResolvedValue(15_000_000),
+      getGrossOrderValue: vi.fn().mockResolvedValue(15_000_000),
       getOrderStatusBreakdown: vi
         .fn()
         .mockResolvedValue([{ status: OrderStatus.DELIVERED, count: 10 }]),
@@ -42,10 +42,15 @@ describe("DashboardService", () => {
     const stats = await service.getStats();
 
     const expectedSinceDate = new Date("2026-07-31T00:00:00Z");
-    expect(repository.getTotalRevenue).toHaveBeenCalledWith(expectedSinceDate);
+    expect(repository.getGrossOrderValue).toHaveBeenCalledWith(
+      expectedSinceDate,
+    );
+    expect(repository.getGrossOrderValueByDay).toHaveBeenCalledWith(
+      expectedSinceDate,
+    );
     expect(repository.getNewUsersCount).toHaveBeenCalledWith(expectedSinceDate);
     expect(stats).toMatchObject({
-      revenue: { total30Days: 15_000_000 },
+      grossOrderValue: { total30Days: 15_000_000 },
       users: { total: 120, new30Days: 5 },
       products: { total: 40 },
     });

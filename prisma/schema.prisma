@@ -293,7 +293,7 @@ model OrderHistoryProjection {
 
 model AdminDashboardProjection {
   id              String   @id
-  totalRevenue    Float    @default(0)
+  totalGrossOrderValue Float  @default(0)
   totalOrders     Int      @default(0)
   pendingOrders   Int      @default(0)
   completedOrders Int      @default(0)

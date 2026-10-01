@@ -1,6 +1,8 @@
 import multer from "multer";
 import { Request } from "express";
 import { BadRequestError } from "@shared/utils/errors";
+import sharp from "sharp";
+import { NextFunction, Response } from "express";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -25,3 +27,30 @@ export const uploadProductImage = multer({
   fileFilter,
   limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
 }).single("image");
+
+export const validateUploadedImage = async (
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  if (!req.file) {
+    next();
+    return;
+  }
+
+  try {
+    const metadata = await sharp(req.file.buffer).metadata();
+
+    if (
+      !metadata.format ||
+      !["jpeg", "png", "webp"].includes(metadata.format)
+    ) {
+      next(new BadRequestError("Invalid image content"));
+      return;
+    }
+
+    next();
+  } catch {
+    next(new BadRequestError("Invalid image content"));
+  }
+};

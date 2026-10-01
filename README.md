@@ -100,6 +100,12 @@ src/
 - **Circuit Breaker** (Opossum) bảo vệ external services.
 - **Optimistic Concurrency Control** (`version` field trên Product & Order).
 
+Dashboard, catalog và order history dùng query-side adapters riêng. Catalog đọc
+`product_catalog_projection`, order history đọc `order_history_projection`, còn
+dashboard kết hợp `admin_dashboard_projection` cho summary với hai read model
+trên cho analytics. `newUsers30Days` là query hẹp trên `users` vì hiện chưa có
+user projection; dashboard không fallback về write repository.
+
 ### 2.4 Cross-cutting Concerns
 
 - Structured logging với request correlation.

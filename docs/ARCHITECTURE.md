@@ -39,7 +39,7 @@ flowchart TB
 flowchart LR
   Catalog[Catalog query] --> CatalogRead[Product catalog projection]
   Orders[Order history query] --> OrderRead[Order history projection]
-  Dashboard[Admin dashboard query] --> DashboardRead[Dashboard projection]
+  Dashboard[Admin dashboard query] --> DashboardRead[Dashboard read adapter]
   Events[Domain events] --> Handler[Projection handler]
   Handler --> CatalogRead
   Handler --> OrderRead
@@ -58,7 +58,7 @@ Aggregate changes and event records commit in one database transaction. The rela
 
 ### ADR-003: CQRS projections
 
-Catalog, order history and dashboard have dedicated projection tables. Query adapters read those tables; write repositories remain responsible for commands. Projections are eventually consistent, which is preferred over coupling frontend reads to aggregate joins.
+Catalog, order history and dashboard have dedicated projection tables. Query adapters read those tables; write repositories remain responsible for commands. The dashboard adapter composes `admin_dashboard_projection` for summary totals, `order_history_projection` for order analytics, and `product_catalog_projection` for catalog analytics. `newUsers30Days` remains a narrow query-side count over `users` because no user read model exists yet. Projections are eventually consistent, which is preferred over coupling frontend reads to aggregate joins.
 
 ### ADR-004: Saga orchestration
 

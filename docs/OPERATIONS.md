@@ -26,6 +26,11 @@ Do not treat Saga state as active production recovery state until the payment an
 - If outbox lag is high, scale relay capacity or resolve the database/downstream bottleneck.
 - If only one projection is lagging, inspect its handler logs and recent event payloads.
 - Never rebuild by truncating a read model in production without a backup and a replay window.
+- Dashboard reads `admin_dashboard_projection`, `order_history_projection` and
+  `product_catalog_projection` through `PrismaDashboardReadRepository`. The
+  `newUsers30Days` metric is intentionally counted from `users` because no user
+  projection exists yet. If dashboard summary totals lag after product or user
+  events, inspect the corresponding projection handler logs before rebuilding.
 
 ## Database migration
 

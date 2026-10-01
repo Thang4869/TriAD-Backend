@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { DashboardService } from "@modules/admin/dashboard/dashboard.service";
-import type { IDashboardRepository } from "@modules/admin/dashboard/application/ports/dashboard.repository.port";
+import type { DashboardReadPort } from "@modules/admin/dashboard/application/dashboard-read.port";
 import { OrderStatus } from "@prisma/client";
 
 function createFakeRepository(
-  overrides: Partial<IDashboardRepository> = {},
-): IDashboardRepository {
+  overrides: Partial<DashboardReadPort> = {},
+): DashboardReadPort {
   return {
     getGrossOrderValue: vi.fn().mockResolvedValue(0),
     getOrderStatusBreakdown: vi.fn().mockResolvedValue([]),
@@ -72,9 +72,7 @@ describe("DashboardService", () => {
   it("gọi toàn bộ 8 repository method song song (Promise.all), không tuần tự", async () => {
     const callOrder: string[] = [];
     const repository = createFakeRepository();
-    for (const key of Object.keys(
-      repository,
-    ) as (keyof IDashboardRepository)[]) {
+    for (const key of Object.keys(repository) as (keyof DashboardReadPort)[]) {
       const original = repository[key] as (...args: any[]) => any;
       (repository[key] as any) = vi.fn(async (...args: unknown[]) => {
         callOrder.push(key);

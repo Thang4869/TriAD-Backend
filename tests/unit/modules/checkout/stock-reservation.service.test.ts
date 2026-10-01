@@ -35,6 +35,7 @@ function createRepository(
   return {
     lockProductsForUpdate: vi.fn().mockResolvedValue([lockedProduct()]),
     decrementProductStock: vi.fn().mockResolvedValue(true),
+    persistProductEvent: vi.fn().mockResolvedValue(undefined),
     findCachedOrderId: vi.fn().mockResolvedValue(null),
     cacheOrderId: vi.fn().mockResolvedValue(undefined),
     findOrderWithItems: vi.fn().mockResolvedValue(null),
@@ -91,6 +92,13 @@ describe("StockReservationService.reserveStock", () => {
       "prod-1",
       7,
       3,
+    );
+    expect(repository.persistProductEvent).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        eventName: "ProductUpdated",
+        aggregateId: "prod-1",
+      }),
     );
   });
 

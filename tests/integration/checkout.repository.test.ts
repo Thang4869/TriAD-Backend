@@ -4,6 +4,7 @@ import { PrismaCheckoutRepository } from "@modules/checkout/infrastructure/repos
 import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import { Money } from "@shared/value-objects/money";
 import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
+import { StockReservationService } from "@modules/checkout/services/stock-reservation.service";
 
 describe("PrismaCheckoutRepository (integration)", () => {
   const repository = new PrismaCheckoutRepository();
@@ -78,6 +79,65 @@ describe("PrismaCheckoutRepository (integration)", () => {
       where: { id: productId },
     });
     expect(product?.stock).toBe(10);
+  });
+
+  it("stock reservation ghi ProductUpdated outbox cùng transaction với decrement", async () => {
+    const stockService = new StockReservationService(repository);
+
+    await repository.runInTransaction(async (tx) => {
+      await stockService.reserveStock(tx, [{ productId, quantity: 3 }]);
+    });
+
+    await expect(
+      prisma.product.findUnique({ where: { id: productId } }),
+    ).resolves.toMatchObject({ stock: 7, version: 1 });
+    await expect(
+      prisma.outboxEvent.findFirst({
+        where: { aggregateId: productId, eventName: "ProductUpdated" },
+      }),
+    ).resolves.toMatchObject({ aggregateId: productId });
+  });
+
+  it("stock event failure rollback stock and order transaction", async () => {
+    const failingRepository = new PrismaCheckoutRepository(async () => {
+      throw new Error("product event persistence failed");
+    });
+    const stockService = new StockReservationService(failingRepository);
+    const orderNumber = `ORD-stock-rollback-${Date.now()}`;
+
+    await expect(
+      failingRepository.runInTransaction(async (tx) => {
+        await failingRepository.createOrder(tx, {
+          orderNumber,
+          userId,
+          status: "PENDING",
+          paymentMethod: "COD",
+          paymentStatus: "PENDING",
+          subtotal: 100,
+          tax: 0,
+          shippingFee: 0,
+          total: 100,
+          discountAmount: 0,
+          customerName: "A",
+          customerEmail: "a@test.com",
+          customerPhone: "012",
+          customerAddress: "addr",
+        });
+        await stockService.reserveStock(tx, [{ productId, quantity: 3 }]);
+      }),
+    ).rejects.toThrow("product event persistence failed");
+
+    await expect(
+      prisma.product.findUnique({ where: { id: productId } }),
+    ).resolves.toMatchObject({ stock: 10, version: 0 });
+    await expect(
+      prisma.order.findUnique({ where: { orderNumber } }),
+    ).resolves.toBeNull();
+    await expect(
+      prisma.outboxEvent.findFirst({
+        where: { aggregateId: productId, eventName: "ProductUpdated" },
+      }),
+    ).resolves.toBeNull();
   });
 
   it("findUserCartForCheckout trả về user kèm cart + items + product", async () => {

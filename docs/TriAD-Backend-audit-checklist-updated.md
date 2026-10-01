@@ -113,25 +113,25 @@ kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật t
 
 **File liên quan:** [prisma-dashboard.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/admin/dashboard/infrastructure/repositories/prisma-dashboard.repository.ts), [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts)
 
-### #14 — 🟡 PARTIAL / PENDING
+### #14 — ✅ CLOSED
 
-**Việc cần làm:** Chốt hướng **giữ projection/read-model**. Quyết định hiện tại là **GIỮ**. Export `DNEK-output(5).md` xác nhận đã có `ProductCatalogReadPort` + `PrismaProductCatalogReadRepository`, và `CatalogService` đọc catalog projection; đồng thời có `OrderHistoryReadPort` + `PrismaOrderHistoryReadRepository`, và `OrdersService` được inject read port trong composition root. Tuy nhiên `DashboardService` vẫn đọc `DashboardReadPort`/`PrismaDashboardRepository`, chưa có adapter đọc `adminDashboardProjection` được nối vào composition root. Vì vậy C1 đã được triển khai một phần nhưng chưa thể CLOSED.
+**Quyết định:** **GIỮ projection/read-model.** Catalog dùng `ProductCatalogReadPort`/`PrismaProductCatalogReadRepository`; Orders dùng `OrderHistoryReadPort`/`PrismaOrderHistoryReadRepository`; Dashboard dùng `DashboardReadPort`/`PrismaDashboardReadRepository` mới, được bind qua `TOKENS.DashboardRead` trong composition root. Dashboard đọc `admin_dashboard_projection` cho summary, `order_history_projection` cho GMV/status/daily/top-selling, và `product_catalog_projection` cho low-stock. `newUsers30Days` dùng query hẹp trên `users` vì chưa có user projection. Không còn fallback sang write repository.
 
-**Phần còn lại:** hoàn tất dashboard projection read adapter + DI, sau đó bổ sung regression/integration evidence cho cả ba read path và cập nhật ADR/README cho đúng runtime.
+**Evidence:** `tests/integration/projection.read-models.test.ts` chứng minh divergent write/read sources; `tests/unit/core/di/dashboard-wiring.test.ts` chứng minh DashboardService nhận adapter projection; Catalog/Orders/ProjectionHandler có regression tests tương ứng.
 
 **File liên quan:** [container.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/container.ts), [catalog.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/services/catalog.service.ts), [prisma-product-catalog-read.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-product-catalog-read.repository.ts), [orders.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/orders.service.ts), [prisma-order-history-read.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/infrastructure/repositories/prisma-order-history-read.repository.ts), [dashboard.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/admin/dashboard/dashboard.service.ts)
 
-### #15 — 🟡 PARTIAL / PENDING
+### #15 — ✅ CLOSED
 
-**Việc cần làm:** Phát sự kiện cho các thay đổi ảnh hưởng catalog và bảo đảm chúng được đưa vào projection một cách nhất quán. Export `DNEK-output(5).md` cho thấy `Product` đã có `ProductCreatedEvent`/`ProductUpdatedEvent`, `AdminProductService.create()` đã tạo entity và phát `ProductCreatedEvent`, và composition root đã subscribe các product events vào `ProjectionHandler`. Tuy nhiên đường `create()` vẫn lưu product trước rồi publish event qua `EventBus`, chưa đi qua cùng transaction với outbox như `updateWithEvents()`/`setActiveWithEvents()`. Vì vậy chưa đủ evidence để CLOSED.
+**Đã hoàn tất:** mọi product mutation ảnh hưởng catalog đều có durable outbox path. Create dùng `createWithEvents`; generic update và image metadata dùng `updateWithEvents`; price/activate/deactivate giữ atomic paths hiện có; checkout stock decrement ghi `ProductUpdatedEvent` trong cùng transaction với stock/order/cart. Không còn `AdminProductService` hoặc image worker publish product event trực tiếp qua `EventBus`.
 
-**Phần còn lại:** đưa create-product vào atomic persistence + outbox, đồng thời kiểm tra image-processing/update event có cùng guarantee; bổ sung integration rollback test.
+**Evidence:** integration tests chứng minh create/update rollback, image worker failure propagation, checkout stock-event commit/rollback và product mutation convergence vào catalog projection. Shared `persistEvents` helper dùng chung cho typed events và aggregate events.
 
 **File liên quan:** [admin-product.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/services/admin-product.service.ts), [prisma-products.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-products.repository.ts), [product.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/domain/product.entity.ts), [projection-handler.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-handler.ts), [container.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/container.ts)
 
 ### #16 — 🟡 PARTIAL / PENDING
 
-**Việc cần làm:** Quy định cách xử lý projection cũ, event phát lặp và thứ tự event; kiểm thử rebuild sau các thay đổi projection. Export `DNEK-output(5).md` đã có `rebuild-order-history-projection.ts`, `rebuild-product-catalog-projection.ts`, test rebuild và projection store với upsert/idempotent paths. Product projection cũng đã nhận nhóm create/update/price/stock/activate/deactivate events. Tuy nhiên quy tắc chống event cũ ghi đè event mới và version/source ordering chưa được chứng minh đầy đủ cho mọi projection; dashboard vẫn chưa có read adapter.
+**Việc cần làm:** Quy định cách xử lý projection cũ, event phát lặp và thứ tự event; kiểm thử rebuild sau các thay đổi projection. Export `DNEK-output(5).md` đã có `rebuild-order-history-projection.ts`, `rebuild-product-catalog-projection.ts`, test rebuild và projection store với upsert/idempotent paths. Product projection cũng đã nhận nhóm create/update/price/stock/activate/deactivate events. Tuy nhiên quy tắc chống event cũ ghi đè event mới và version/source ordering chưa được chứng minh đầy đủ cho mọi projection.
 
 **Phần còn lại:** chốt ordering/version policy, kiểm thử out-of-order + duplicate events, và ghi quy trình rebuild vào operations runbook.
 
@@ -251,8 +251,8 @@ kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật t
 
 - Export `DNEK-output(5).md` được tạo lúc **07:17:57 (Asia/Saigon)** và gồm **339 files**; export đã chứa migration product-catalog projection, rebuild scripts, `PrismaProductCatalogReadRepository`, `PrismaOrderHistoryReadRepository` và wiring DI tương ứng. fileciteturn59file2L5-L8
 - **P0 đã CLOSED chắc chắn trên code/test:** #1–#11 và #35–#41. Riêng P0 #12 vẫn pending production verification.
-- **P1 #14 / C1:** 🟡 **PARTIAL / PENDING** — hướng **GIỮ projection/read-model** đã được triển khai một phần: catalog và order history đã có read adapter và được nối vào service/DI; dashboard projection vẫn chưa có read adapter được nối.
-- **P1 #15:** 🟡 **PARTIAL / PENDING** — product create/update/activate/deactivate đã có event path và projection subscriptions, nhưng create-product chưa atomic với outbox.
+- **P1 #14 / C1:** ✅ **CLOSED** — Catalog, Orders và Dashboard đều đọc qua query-side ports/adapters; dashboard có divergence integration evidence và không còn legacy write-model repository/token.
+- **P1 #15:** ✅ **CLOSED** — product create, generic/price update, activate/deactivate, image metadata và checkout stock mutation đều có durable event/outbox guarantee; rollback và projection convergence đã có evidence.
 - **P1 #16:** 🟡 **PARTIAL / PENDING** — đã có rebuild tooling và projection upsert paths; ordering/version policy và replay/out-of-order evidence vẫn cần hoàn thiện.
 - **P0 #12:** 🟡 **IMPLEMENTATION COMPLETE / PRODUCTION VERIFICATION PENDING** --- code, regression tests và quality gates đã hoàn tất; còn chờ kiểm chứng trên đúng hai domain Vercel + Render sau khi deploy.
 - **#39:** content validation bằng `sharp` và cleanup static `/uploads` legacy đã hoàn tất; typecheck/lint/unit test PASS.
@@ -337,7 +337,7 @@ kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật t
 
 1.  **#39/B8 và #40/B5 đã CLOSED.** Commit/push nhóm thay đổi security/cleanup hiện tại.
 2.  **#12** giữ trạng thái production-verification pending cho giai đoạn deploy Vercel + Render.
-3.  **P1 #14 / C1:** hướng **GIỮ projection/read-model** đã được triển khai một phần; hoàn tất dashboard read adapter + evidence trước khi CLOSED. Đây là dependency cho #13 và nhiều mục #42--#47.
+3.  **P1 #14 / C1: ✅ CLOSED.** Hướng **GIỮ projection/read-model** đã được nối đầy đủ cho Catalog, Orders và Dashboard; divergence evidence đã có.
 4.  Tiếp tục #42--#55 theo dependency sau khi C1 được chốt.
 5.  Thực hiện P2 và các diễn tập runtime/E2E để chứng minh hành vi
     production, recovery và CI.

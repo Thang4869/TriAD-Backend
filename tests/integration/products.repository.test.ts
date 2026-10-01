@@ -3,6 +3,8 @@ import prisma from "@core/database/prisma";
 import { PrismaProductsRepository } from "@modules/products/infrastructure/repositories/prisma-products.repository";
 import { Product } from "@modules/products/domain/product.entity";
 import { Money } from "@shared/value-objects/money";
+import { PrismaProjectionStore } from "@core/outbox/prisma-projection.store";
+import { ProductUpdatedEvent } from "@shared/domain/events/product-events";
 
 describe("PrismaProductsRepository (integration)", () => {
   const repository = new PrismaProductsRepository();
@@ -28,6 +30,64 @@ describe("PrismaProductsRepository (integration)", () => {
 
     const deactivated = await repository.setActive(product.id, false);
     expect(deactivated.isActive).toBe(false);
+  });
+
+  it("createWithEvents tạo product và ProductCreated outbox trong cùng transaction", async () => {
+    const suffix = Date.now();
+    const data = {
+      name: "Atomic Create Product",
+      description: "d",
+      price: 100,
+      stock: 5,
+      category: "atomic",
+      images: [],
+      slug: `atomic-create-${suffix}`,
+    };
+    const entity = Product.hydrate({
+      id: `product-${suffix}`,
+      ...data,
+      isActive: true,
+    });
+    entity.markCreated();
+
+    const created = await repository.createWithEvents(data, entity);
+
+    expect(created.id).toBe(entity.id);
+    await expect(
+      prisma.outboxEvent.findFirst({
+        where: { aggregateId: entity.id, eventName: "ProductCreated" },
+      }),
+    ).resolves.toMatchObject({ aggregateId: entity.id });
+    expect(entity.domainEvents).toHaveLength(0);
+  });
+
+  it("createWithEvents rollback không để lại product khi outbox thất bại", async () => {
+    const suffix = Date.now();
+    const data = {
+      name: "Rollback Create Product",
+      description: "d",
+      price: 100,
+      stock: 5,
+      category: "atomic",
+      images: [],
+      slug: `rollback-create-${suffix}`,
+    };
+    const entity = Product.hydrate({
+      id: `product-${suffix}`,
+      ...data,
+      isActive: true,
+    });
+    entity.markCreated();
+    const failingRepository = new PrismaProductsRepository(async () => {
+      throw new Error("outbox persistence failed");
+    });
+
+    await expect(
+      failingRepository.createWithEvents(data, entity),
+    ).rejects.toThrow("outbox persistence failed");
+    await expect(
+      prisma.product.findUnique({ where: { id: entity.id } }),
+    ).resolves.toBeNull();
   });
 
   it("updateWithEvents cập nhật giá và ghi ProductPriceChanged vào outbox cùng transaction", async () => {
@@ -112,6 +172,104 @@ describe("PrismaProductsRepository (integration)", () => {
     });
 
     expect(persisted?.price).toBe(100);
+  });
+
+  it("updateWithEvents ghi ProductUpdated cho generic update và rollback khi outbox thất bại", async () => {
+    const suffix = Date.now();
+    const product = await repository.create({
+      name: "Generic Update Product",
+      description: "old",
+      price: 100,
+      stock: 5,
+      category: "atomic",
+      images: [],
+      slug: `generic-update-${suffix}`,
+    });
+    const entity = Product.hydrate(product);
+    entity.markUpdated();
+
+    await repository.updateWithEvents(
+      product.id,
+      { name: "new name", description: "new" },
+      entity,
+    );
+
+    await expect(
+      prisma.outboxEvent.findFirst({
+        where: { aggregateId: product.id, eventName: "ProductUpdated" },
+      }),
+    ).resolves.toMatchObject({ aggregateId: product.id });
+
+    const rollbackEntity = Product.hydrate({
+      ...product,
+      name: "new name",
+    });
+    rollbackEntity.markUpdated();
+    const failingRepository = new PrismaProductsRepository(async () => {
+      throw new Error("outbox persistence failed");
+    });
+
+    await expect(
+      failingRepository.updateWithEvents(
+        product.id,
+        { name: "should rollback" },
+        rollbackEntity,
+      ),
+    ).rejects.toThrow("outbox persistence failed");
+
+    await expect(
+      prisma.product.findUnique({ where: { id: product.id } }),
+    ).resolves.toMatchObject({ name: "new name" });
+  });
+
+  it("ProductUpdated refreshes catalog projection from the current product row", async () => {
+    const suffix = Date.now();
+    const product = await repository.create({
+      name: "Projection Before",
+      description: "old",
+      price: 100,
+      stock: 5,
+      category: "atomic",
+      images: [],
+      slug: `projection-convergence-${suffix}`,
+    });
+    await prisma.productCatalogProjection.create({
+      data: {
+        productId: product.id,
+        name: "Stale Projection",
+        description: "stale",
+        price: 1,
+        stock: 99,
+        category: "stale",
+        images: [],
+        slug: `projection-stale-${suffix}`,
+        isActive: true,
+        searchText: "Stale Projection stale",
+        createdAt: product.createdAt,
+      },
+    });
+
+    const entity = Product.hydrate(product);
+    entity.markUpdated();
+    await repository.updateWithEvents(
+      product.id,
+      { name: "Projection After", images: ["new.jpg"] },
+      entity,
+    );
+
+    await new PrismaProjectionStore().upsertProduct(
+      new ProductUpdatedEvent(product.id),
+    );
+
+    await expect(
+      prisma.productCatalogProjection.findUnique({
+        where: { productId: product.id },
+      }),
+    ).resolves.toMatchObject({
+      name: "Projection After",
+      stock: 5,
+      images: ["new.jpg"],
+    });
   });
 
   it("setActiveWithEvents cập nhật trạng thái và ghi ProductDeactivated vào outbox cùng transaction", async () => {

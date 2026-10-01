@@ -6,15 +6,17 @@
 ## Cập nhật 01/10 (lần 3) — thay đổi lớn, đã xác minh trực tiếp trong code
 
 **Đã sửa thật và sửa đúng gốc rễ (không chỉ vá triệu chứng):**
+
 - A2, A3, A4, A5, A6, A7 (toàn bộ nhóm A — checkout) — **đã đóng hết**. Chi tiết: `runInTransaction` bắt `P2034` → `ConflictError`, retry có jitter; `orderNumber` dùng `crypto.randomUUID()` qua `OrderNumberGenerator` port; giá lấy từ sản phẩm đã khoá dòng (`lockedProductMap`), không còn đọc ngoài transaction; `saveNewOrder` bắt `P2002` trên `idempotencyKey` → trả đơn cũ với `idempotent: true`; idempotency key scope theo user; `idempotencyMiddleware` tách TTL `IN_PROGRESS` (≤60s) khỏi TTL `COMPLETED`, bọc try/catch đầy đủ.
-- C1 (projection không được đọc) — **đã đóng**. `PrismaOrderHistoryReadRepository` và `PrismaProductCatalogReadRepository` đọc thẳng từ bảng projection, nối cứng vào DI container, `readPort` không còn optional/fallback về repo ghi.
+- C1 (projection không được đọc) — **đã đóng**. `PrismaProductCatalogReadRepository`, `PrismaOrderHistoryReadRepository` và `PrismaDashboardReadRepository` đọc qua query-side ports, nối cứng vào DI container; không còn optional/fallback về repo ghi.
 - A2 cho `updateOrderStatus` — **đã đóng**. Dùng `Order.hydrate()` → gọi hành vi thật trên aggregate (`confirm/ship/deliver/cancel`) → `updateStatusWithEvents` có optimistic lock theo `version` + ghi outbox event cùng transaction.
-- E1 (publish event trước khi lưu DB ở admin-product) — **đã đóng cho nhánh đổi giá/kích hoạt**, dùng `updateWithEvents`/`setActiveWithEvents` (transaction + outbox).
+- E1 (publish event trước khi lưu DB ở admin-product) — **product mutation portion đã đóng trong P1 #15**: create/generic update dùng `createWithEvents`/`updateWithEvents`, price/activate dùng atomic paths; image worker và checkout stock cũng ghi event qua outbox. Các event path rộng hơn vẫn theo A1.
 - B1 (race điều kiện refresh token) — **đã đóng**. `rotateRefreshToken` atomic trong 1 transaction (`updateMany where revokedAt:null` + kiểm tra `count`), có test riêng `auth.refresh-token-race.test.ts`.
 - B8 (upload chỉ tin mimetype client gửi) — **đã đóng**, dùng `sharp(...).metadata()` xác minh định dạng ảnh thật.
 
 **Vẫn chưa sửa (đã kiểm tra lại, y nguyên so với lần trước):**
-- A1 (một phần): `AuthService`, `ReviewsService` vẫn publish event trong tiến trình, không qua outbox. `AdminProductService.create()` và nhánh update không đổi giá cũng vậy.
+
+- A1 (một phần): `AuthService`, `ReviewsService` và các event path ngoài P1 #15 vẫn publish trong tiến trình, không qua outbox. Product mutation paths đã được đóng riêng trong P1 #15; không coi đây là đóng toàn bộ A1.
 - L1 (định nghĩa doanh thu): **đã đóng trong phạm vi P1 #13**. Dashboard dùng tên `grossOrderValue`/GMV vì checkout hiện chỉ hỗ trợ COD với `paymentStatus = PENDING`, chưa có payment settlement để chứng minh realized revenue. Cả query tổng, daily query và dashboard projection đều cộng `Order.total` với `status != CANCELLED`, dùng cùng date boundary; integration tests bao phủ PENDING, REFUNDED, CANCELLED, zero, grouping và không double count.
 - L2 (`existsAndActive` không kiểm tra `isActive`): y nguyên, chưa sửa.
 - B2 (blacklist dùng JWT thô làm key, nuốt lỗi), B3 (JWT thiếu `iss`/`aud`/`typ`, dù refresh token đã có `jti`), B4 (`/metrics` không xác thực), B6 (CSRF chưa HMAC gắn session): đều chưa động tới.
@@ -29,21 +31,23 @@
 ## Cập nhật 29/09 — đối chiếu với checklist AI khác + xác minh bản sửa gần nhất
 
 **Đã xác nhận sửa đúng:**
+
 - `paymentStatus` khi đặt đơn giờ là `PENDING` thật (không còn hardcode `"PAID"`); projection lấy `tax`/`shippingFee`/`subtotal`/`placedAt` từ event thay vì gán cứng/`new Date()`.
 - Domain có thêm value object: `OrderNumber`, `Address`, `Email`, `PhoneNumber`, và `PaymentStatus`/`PaymentMethod` dạng const object có kiểu thay vì string thô — một phần của G3/G13.
 - `runInTransaction` của checkout giờ dùng `isolationLevel: Serializable` — cải thiện tốt cho A3, nhưng xem lưu ý ngay dưới.
 - `PrismaErrorClassifier` đã phân loại đúng `P2034` → `TRANSACTION_CONFLICT`, nhưng **chỉ được dùng ở error-handler middleware (tầng HTTP), chưa được dùng trong `executeWithRetry` của checkout** — nghĩa là A3 vẫn chưa đóng: transaction serializable vẫn có thể fail với `P2034` mà không được retry ở đúng chỗ.
 
 **Đã kiểm tra và xác nhận CHƯA sửa (dù có vẻ đã động vào file):**
+
 - A2/A1 (outbox cho `OrdersService.updateOrderStatus`): vẫn dùng `Order.canTransition` tĩnh, update repo trực tiếp, publish `.catch(logger.error)` ngoài outbox.
-- C1 (projection không được đọc): `OrdersService` vẫn có `readPort: OrderHistoryReadPort = repository` — mặc định đọc từ repo ghi, không phải projection.
 - A4/A5 (orderNumber trùng, giá đọc ngoài transaction): `orderNumber = ORD-${Date.now()...}` và giá vẫn lấy từ `item.product.price` (đọc ở `findUserCartForCheckout`, **ngoài** transaction), trong khi `lockProductsForUpdate` trả `price` đã khoá nhưng không dùng.
 - A7 (idempotent trả đơn cũ khi trùng key): `checkout()` vẫn luôn trả `idempotent: false`; không có chỗ nào bắt lỗi unique constraint trên `idempotencyKey` để trả lại đơn cũ.
 - E1 (`admin-product.service.update` publish event trước khi lưu DB): vẫn giữ nguyên thứ tự sai.
 - B1 (refresh token race): `revokeRefreshToken` vẫn là `update` vô điều kiện theo `id`, không phải `updateMany` có điều kiện `revokedAt: null` kèm kiểm tra `count`.
 
 **Phát hiện mới từ checklist AI khác, đã tự xác minh đúng trong code — bổ sung vào danh sách dưới:**
-- Định nghĩa "doanh thu" không nhất quán và có thể sai (xem **L1**).
+
+- L1 về dashboard revenue semantics đã được xử lý: metric được xác định rõ là `grossOrderValue`/GMV, không phải realized revenue (xem **L1**).
 - `existsAndActive` không kiểm tra `isActive` (xem **L2**).
 - Ngưỡng miễn phí vận chuyển dùng `>` ở backend, cần đối chiếu với frontend dùng `>=` (xem **L3**, phần backend đã xác minh, phần frontend chưa).
 
@@ -52,36 +56,35 @@
 ## Phạm vi và giới hạn của đánh giá
 
 - Đã đọc: README trên GitHub, toàn bộ `src/`, `tests/`, `docs/`, `prisma/migrations/`, `docker-compose*.yml`, `package.json`, `tsconfig.json`.
-- **Không xem được** (export không đưa vào): `Dockerfile`, `vitest*.mts`, `.github/workflows`, `.eslintrc.cjs`, `schema.prisma`, `.env.example`. Các mục liên quan ghi *(cần kiểm tra)*.
+- **Không xem được** (export không đưa vào): `Dockerfile`, `vitest*.mts`, `.github/workflows`, `.eslintrc.cjs`, `schema.prisma`, `.env.example`. Các mục liên quan ghi _(cần kiểm tra)_.
 - Chưa chạy test hay CI, chưa xem repo frontend.
 
 ## Phát hiện quan trọng nhất
 
-Không có đoạn code nào ngoài `PrismaProjectionStore` đọc các bảng projection. Trong `container.ts`, `CatalogService`, `OrdersService` và `DashboardService` đều nối với repository Prisma thường (`OrdersService` chỉ nhận 2 tham số nên `readPort` mặc định là `repository`). Vì vậy phần đọc của CQRS hiện là code chết: relay ghi projection nhưng không ai đọc, dù ADR-003 viết "Query adapters read those tables".
+Runtime read-side đã được nối thật: Catalog đọc `product_catalog_projection`, Orders đọc `order_history_projection`, Dashboard kết hợp `admin_dashboard_projection`, `order_history_projection` và `product_catalog_projection`. `newUsers30Days` là query hẹp trên `users` vì chưa có user projection; không tuyên bố Dashboard hoàn toàn projection-only.
 
 ## Điểm theo từng mảng (hiện tại)
 
-| Mảng | Điểm |
-|---|---|
-| Kiến trúc / DDD | 7 |
-| OOP / Clean Code | 7 |
-| Độ tin cậy (outbox, concurrency) | 6.5 |
-| Testing | 8 |
-| Bảo mật | 7 |
-| Tài liệu | 6 |
+| Mảng                             | Điểm |
+| -------------------------------- | ---- |
+| Kiến trúc / DDD                  | 7    |
+| OOP / Clean Code                 | 7    |
+| Độ tin cậy (outbox, concurrency) | 6.5  |
+| Testing                          | 8    |
+| Bảo mật                          | 7    |
+| Tài liệu                         | 6    |
 
 ## README mâu thuẫn với code
 
-| README nói | Thực tế |
-|---|---|
-| "Production factories wire both Sagas" | `OPERATIONS.md` và `ARCHITECTURE.md` nói rõ chưa nối |
-| "Unit of Work pattern" | Thư mục `core/unit-of-work` rỗng |
-| "Strategy pattern cho Payment" | Không thấy trong code |
-| "Mapper Entity ↔ Persistence ↔ DTO" | Chỉ có ở auth và products, còn lại repo trả model Prisma ép kiểu |
-| "Domain events publish qua Outbox" | Chỉ `OrderPlaced` đi qua outbox |
-| "Query adapters read those tables" (ADR-003) | Không có adapter đọc projection nào được nối |
-| Swagger ở `/api-docs` | Code là `/api/docs` |
-| "Internal / Private" | Repo public, không có LICENSE |
+| README nói                             | Thực tế                                                          |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| "Production factories wire both Sagas" | `OPERATIONS.md` và `ARCHITECTURE.md` nói rõ chưa nối             |
+| "Unit of Work pattern"                 | Thư mục `core/unit-of-work` rỗng                                 |
+| "Strategy pattern cho Payment"         | Không thấy trong code                                            |
+| "Mapper Entity ↔ Persistence ↔ DTO"    | Chỉ có ở auth và products, còn lại repo trả model Prisma ép kiểu |
+| "Domain events publish qua Outbox"     | Chỉ `OrderPlaced` đi qua outbox                                  |
+| Swagger ở `/api-docs`                  | Code là `/api/docs`                                              |
+| "Internal / Private"                   | Repo public, không có LICENSE                                    |
 
 ---
 
@@ -89,7 +92,7 @@ Không có đoạn code nào ngoài `PrismaProjectionStore` đọc các bảng p
 
 ### Outbox và luồng nghiệp vụ
 
-- [ ] **A1.** Đưa mọi event qua outbox: `OrdersService.updateOrderStatus`, `AuthService.publishEvents`, `AdminProductService.publishEvents`. Bỏ `eventBus.publish()` in-process kèm `.catch(logger.error)`. *Hoàn thành khi:* kill process giữa lúc ghi DB và publish thì không mất event (có chaos test).
+- [ ] **A1.** Đưa các event còn lại qua outbox: `OrdersService.updateOrderStatus`, `AuthService.publishEvents` và review/notification paths. Product mutation paths đã hoàn tất ở P1 #15; không mark A1 CLOSED cho đến khi mọi path còn lại có evidence kill-process.
 - [x] **A2.** ~~`OrdersService` phải dùng aggregate~~ — **Đã xong (01/10).** `updateOrderStatus` hydrate aggregate thật, gọi `confirm/ship/deliver/cancel`, `updateStatusWithEvents` có optimistic lock theo `version` + ghi outbox trong cùng transaction.
 - [x] **A3.** ~~Checkout chỉ retry `ConflictError`~~ — **Đã xong (01/10).** `runInTransaction` bắt `P2034` ngay tại repository và ném `ConflictError`, `executeWithRetry` retry với exponential backoff + jitter.
 - [x] **A4.** ~~`orderNumber` có thể trùng~~ — **Đã xong (01/10).** Dùng `CryptoOrderNumberGenerator` (`crypto.randomUUID()`), inject qua `OrderNumberGenerator` port.
@@ -115,7 +118,7 @@ Không có đoạn code nào ngoài `PrismaProjectionStore` đọc các bảng p
   - Thêm limiter cho verify-email và resend.
 - [x] **B8.** ~~Upload chỉ kiểm tra `mimetype` do client gửi~~ — **Đã xong (01/10)**, dùng `sharp(...).metadata()` xác minh định dạng ảnh thật. `/uploads` static và thư mục `uploads/tmp` có vẻ là di sản khi ảnh đã lên Cloudinary; xoá hoặc chuyển sang object storage.
 - [ ] **B9.** Fallback secret cho môi trường test đang nằm trong `src/config/index.ts` (production code). Chuyển sang `tests/setup.ts`.
-- [ ] **B10.** Chạy `npm audit`, nâng `multer 1.x` lên bản đã vá *(cần kiểm tra advisory hiện hành)*.
+- [ ] **B10.** Chạy `npm audit`, nâng `multer 1.x` lên bản đã vá _(cần kiểm tra advisory hiện hành)_.
 
 ---
 
@@ -123,16 +126,16 @@ Không có đoạn code nào ngoài `PrismaProjectionStore` đọc các bảng p
 
 ### CQRS và outbox
 
-- [ ] **C1.** Quyết định một trong hai hướng cho projection. **Giữ:** nối `CatalogReadPort`, `OrderHistoryReadPort`, `DashboardReadPort` vào adapter đọc bảng projection ở composition root. **Bỏ:** xoá projection và `refreshDashboard` (hiện chạy 6 query cho mỗi event mà không ai đọc).
+- [x] **C1.** **KEEP projection/read-model — đã hoàn tất.** Catalog, order history và dashboard đều có read port/adapter được bind trong composition root. Dashboard dùng singleton projection cho summary, order-history projection cho order analytics, product-catalog projection cho product analytics; `newUsers30Days` dùng query hẹp trên `users` vì chưa có user projection. Divergence integration test chứng minh read path không đọc write tables; legacy `DashboardRepository` đã xoá.
 - [x] **C2.** ~~Nếu giữ, sửa dữ liệu projection~~ — **Đã xong (xác minh 29/09).** `paymentStatus`, `subtotal`, `tax`, `shippingFee`, `placedAt` giờ lấy thật từ `OrderPlacedEvent` (được `Order.place()` tính đúng từ aggregate), không còn gán cứng. Có sẵn `rebuildOrderHistoryProjection` (`src/core/outbox/rebuild-order-history-projection.ts` + `scripts/rebuild-order-history-projection.ts`) đọc lại từ bảng `order` gốc để backfill dữ liệu cũ đã sai, có test riêng. Còn thiếu:
   - Script chưa được khai báo thành lệnh `npm run` trong `package.json`.
   - `OPERATIONS.md` chưa có hướng dẫn cụ thể khi nào/cách nào chạy lệnh backfill này.
   - `sourceVersion` để xử lý event sai thứ tự vẫn chưa có cho `orderHistoryProjection` (chỉ `productCatalogProjection` có `sourceVersion`); `updateOrderStatus` vẫn dùng `updateMany` im lặng khi không tìm thấy row.
-  - Dashboard (`refreshDashboard`) vẫn tính lại toàn bộ từ đầu mỗi lần, chưa theo delta — xem thêm L1 ở P8 về định nghĩa doanh thu sai trong chính hàm này.
+  - Dashboard (`refreshDashboard`) vẫn tính lại toàn bộ từ đầu mỗi lần, chưa theo delta; đây là vấn đề hiệu năng/read-model còn lại, không còn là vấn đề revenue semantics của L1.
 - [ ] **C3.** Outbox đảm bảo thứ tự theo aggregate (không claim event nếu còn event cũ chưa publish của cùng aggregate). Với nhiều relay instance, thứ tự hiện không được bảo đảm.
 - [ ] **C4.** `outboxLagSeconds` đang tính trên row vừa claim, nên khi mọi event đang backoff nó hiện 0. Đổi thành `now - min(occurredAt)` của các event chưa publish (truy vấn riêng), thêm gauge cho số dead-letter.
 - [ ] **C5.** Lease 60 giây cho batch 50 row xử lý tuần tự có thể hết hạn giữa chừng. Đặt lease theo từng row, hoặc heartbeat, hoặc giảm batch.
-- [ ] **C6.** Có công cụ replay dead-letter (CLI hoặc endpoint admin), job dọn row đã publish, và index phù hợp cho truy vấn claim *(cần kiểm tra schema)*.
+- [ ] **C6.** Có công cụ replay dead-letter (CLI hoặc endpoint admin), job dọn row đã publish, và index phù hợp cho truy vấn claim _(cần kiểm tra schema)_.
 - [ ] **C7.** `withRetry` bọc `eventBus.publish` không có tác dụng vì `publish` không throw mà trả `result`. Bỏ hoặc sửa. Handler có side-effect (email) phải idempotent bằng `jobId = eventId + handler`.
 - [ ] **C8.** Validate payload khi deserialize event bằng zod thay vì ép kiểu, và thêm `schemaVersion` cho event.
 
@@ -150,11 +153,11 @@ Không có đoạn code nào ngoài `PrismaProjectionStore` đọc các bảng p
   - Route file không import từ `@/container`; dùng factory `createAuthRoutes(controller)`.
   - `health.routes.ts` đang tự `new` service, đưa vào DI.
 - [ ] **D7.** `AuthRepository` và `AuthSessionUser` đăng ký hai instance riêng của cùng một class. Dùng chung một instance.
-- [ ] **D8.** `Lifetime.Scoped` và `request.scope.middleware` có vẻ chưa thực sự được dùng *(cần kiểm tra)*. Nếu vậy, dùng hoặc bỏ.
+- [ ] **D8.** `Lifetime.Scoped` và `request.scope.middleware` có vẻ chưa thực sự được dùng _(cần kiểm tra)_. Nếu vậy, dùng hoặc bỏ.
 
 ### Lỗi và ranh giới lớp
 
-- [ ] **E1.** Hai hệ thống lỗi song song. `AppError` (mang HTTP status) đang nằm trong file middleware và bị service import (`BadRequestError`), nên application layer biết mã HTTP. Chuyển sang lỗi ứng dụng có `code`, ánh xạ sang HTTP chỉ ở tầng presentation. *(Lưu ý: vấn đề "publish event trước khi lưu DB" trong `admin-product.service.ts`, vốn cũng từng gắn với E1, đã được sửa riêng cho nhánh đổi giá/activate/deactivate qua `updateWithEvents`/`setActiveWithEvents` — xem A1 trong mục cập nhật 01/10. Nhánh `create()` và update không đổi giá vẫn chưa đi qua outbox.)*
+- [ ] **E1.** Hai hệ thống lỗi song song. `AppError` (mang HTTP status) đang nằm trong file middleware và bị service import (`BadRequestError`), nên application layer biết mã HTTP. Chuyển sang lỗi ứng dụng có `code`, ánh xạ sang HTTP chỉ ở tầng presentation. _(Product mutation dual-write trong `admin-product.service.ts`, image worker và checkout stock đã được xử lý trong P1 #15; vấn đề error architecture này vẫn OPEN.)_
 - [ ] **E2.** `StockReservationService` ném `BadRequestError` dù domain đã có `InsufficientStockError`. Dùng lỗi domain.
 
 ### Saga
@@ -203,7 +206,7 @@ Không có đoạn code nào ngoài `PrismaProjectionStore` đọc các bảng p
 - [ ] **H8.** Bật thêm cờ TS: `noUncheckedIndexedAccess`, `noImplicitOverride`, `noUnusedLocals`, `noUnusedParameters`, `exactOptionalPropertyTypes`. Bỏ `experimentalDecorators` và `emitDecoratorMetadata` (không dùng decorator), bỏ config bị comment trong `tsconfig.json`.
 - [ ] **H9.** Ba cơ chế alias (`module-alias`, `tsconfig-paths`, `tsc-alias`). Giữ một cách, xoá `_moduleAliases` nếu không dùng.
 - [ ] **H10.** Chia nhỏ file lớn: `src/container.ts` (14KB), `tokens.ts` (8KB), `domain-error.ts` (6KB) theo module.
-- [ ] **H11.** ESLint đang ở v8 với `@typescript-eslint` v6. Nâng cấp và bật `no-explicit-any`, `no-floating-promises`, `import/no-cycle`, `complexity`, `max-lines-per-function` *(cần kiểm tra `.eslintrc`)*.
+- [ ] **H11.** ESLint đang ở v8 với `@typescript-eslint` v6. Nâng cấp và bật `no-explicit-any`, `no-floating-promises`, `import/no-cycle`, `complexity`, `max-lines-per-function` _(cần kiểm tra `.eslintrc`)_.
 - [ ] **H12.** Dependencies:
   - `@prisma/adapter-pg ^7` đi với `@prisma/client ^5.22` (lệch phiên bản).
   - `@types/*` nằm trong `dependencies` (bcrypt, cookie-parser, jsonwebtoken, nodemailer, speakeasy).
@@ -228,7 +231,7 @@ Không có đoạn code nào ngoài `PrismaProjectionStore` đọc các bảng p
   - Đổi giá song song với checkout.
 - [ ] **T3.** Contract test OpenAPI hiện chỉ 621B, gần như tượng trưng. Kiểm tra response thật so với schema; cân nhắc sinh OpenAPI từ zod (`zod-to-openapi`) thay vì viết tay các file `*.swagger.ts` để tránh lệch. Có thể thêm Pact với frontend.
 - [ ] **T4.** Mutation testing (Stryker) cho `domain/` và `value-objects/`, đặt ngưỡng trong CI.
-- [ ] **T5.** Đặt ngưỡng coverage trong config vitest và cho CI fail khi tụt *(cần kiểm tra config)*.
+- [ ] **T5.** Đặt ngưỡng coverage trong config vitest và cho CI fail khi tụt _(cần kiểm tra config)_.
 - [ ] **T6.** Mở rộng `chaos-outbox.ts` (hiện 885B) thành kịch bản chạy trong CI: kill relay giữa batch, mất kết nối DB.
 - [ ] **T7.** Load test bằng k6 cho checkout với sản phẩm "hot"; lưu kết quả vào `docs/` (rất hợp để đưa vào CV).
 - [ ] **T8.** Dùng test data builder (Object Mother) và in-memory fake repository cho service test thay vì mock từng lời gọi.
@@ -244,14 +247,14 @@ Không có đoạn code nào ngoài `PrismaProjectionStore` đọc các bảng p
   - Port `3000` trong khi port mặc định là `5000`.
   - Volume `product-images` khai báo nhưng không dùng.
   - Thiếu healthcheck, giới hạn tài nguyên, và bước chạy `prisma migrate deploy`.
-- [ ] **I3.** `docker-compose.yml` (dev): `version: "3.8"` đã lỗi thời; mount `./nodemon.json` không có trong repo (Docker sẽ tạo thư mục rỗng); bind cổng Postgres/Redis vào `127.0.0.1`; `QUEUE_REDIS_URL` được set nhưng config schema có vẻ không có *(cần kiểm tra)*.
-- [ ] **I4.** `Dockerfile` *(cần kiểm tra vì không có trong export)*: multi-stage, user non-root, `npm ci --omit=dev`, `HEALTHCHECK`, ghim phiên bản/digest base image, `.dockerignore`.
+- [ ] **I3.** `docker-compose.yml` (dev): `version: "3.8"` đã lỗi thời; mount `./nodemon.json` không có trong repo (Docker sẽ tạo thư mục rỗng); bind cổng Postgres/Redis vào `127.0.0.1`; `QUEUE_REDIS_URL` được set nhưng config schema có vẻ không có _(cần kiểm tra)_.
+- [ ] **I4.** `Dockerfile` _(cần kiểm tra vì không có trong export)_: multi-stage, user non-root, `npm ci --omit=dev`, `HEALTHCHECK`, ghim phiên bản/digest base image, `.dockerignore`.
 - [ ] **I5.** Tách worker: relay và BullMQ worker đang chạy trong tiến trình API (`server.ts`). Thêm entrypoint `worker.ts` hoặc cờ `RUN_RELAY` / `RUN_WORKERS` để scale riêng.
-- [ ] **I6.** Graceful shutdown: đảm bảo readiness trả 503 trước khi đóng, và đóng đủ queue, Redis, Prisma *(cần đọc hết `server.ts`)*.
+- [ ] **I6.** Graceful shutdown: đảm bảo readiness trả 503 trước khi đóng, và đóng đủ queue, Redis, Prisma _(cần đọc hết `server.ts`)_.
 - [ ] **I7.** CI (có `quality-gates.yml`, chưa đọc được): chạy cả integration test (Testcontainers cần Docker), `npm audit`, CodeQL, Dependabot hoặc Renovate, build Docker image, kiểm tra schema drift (`prisma migrate diff`), commitlint, upload coverage.
 - [ ] **I8.** Quản lý phát hành: tag `v1.0.0`, `CHANGELOG.md`, semver, branch protection. Repo có 480 commit nhưng chưa có release nào.
 - [ ] **I9.** Cấu hình hạ tầng dữ liệu: `connection_limit` của Prisma, `statement_timeout`, `idle_in_transaction_session_timeout`, chính sách backup, `maxmemory-policy noeviction` cho Redis dùng với BullMQ (tách Redis cache/rate-limit khỏi queue).
-- [ ] **I10.** Bí mật: dùng Docker/Kubernetes secrets thay vì biến môi trường thuần; xác nhận `.env.example` đầy đủ và không chứa giá trị thật *(cần kiểm tra)*.
+- [ ] **I10.** Bí mật: dùng Docker/Kubernetes secrets thay vì biến môi trường thuần; xác nhận `.env.example` đầy đủ và không chứa giá trị thật _(cần kiểm tra)_.
 
 ---
 

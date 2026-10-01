@@ -1,6 +1,9 @@
 import prisma from "@core/database/prisma";
 import { Order, PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
-import { persistDomainEvents } from "@core/outbox/persist-domain-events";
+import {
+  persistDomainEvents,
+  persistEvents,
+} from "@core/outbox/persist-domain-events";
 import type {
   DiscountRecord,
   ICheckoutRepository,
@@ -14,8 +17,10 @@ import type {
 import type { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import { IdempotencyConflictError } from "../../application/errors/idempotency-conflict.error";
 import { ConflictError } from "@/shared/utils/errors";
+import type { DomainEvent } from "@shared/domain/events/domain-event";
 
 const TRANSACTION_TIMEOUT_MS = 10_000;
+type PersistEvents = typeof persistEvents;
 
 function toPrismaTx(tx: CheckoutTransaction): Prisma.TransactionClient {
   return tx as unknown as Prisma.TransactionClient;
@@ -52,6 +57,10 @@ interface CreateOrderItemData {
 // ---------- Prisma implementation ----------
 
 export class PrismaCheckoutRepository implements ICheckoutRepository {
+  constructor(
+    private readonly persistTypedEvents: PersistEvents = persistEvents,
+  ) {}
+
   async findOrderWithItems(orderId: string): Promise<OrderWithItems | null> {
     return prisma.order.findUnique({
       where: { id: orderId },
@@ -142,6 +151,13 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
       },
     });
     return result.count > 0;
+  }
+
+  async persistProductEvent(
+    tx: CheckoutTransaction,
+    event: DomainEvent,
+  ): Promise<void> {
+    await this.persistTypedEvents(toPrismaTx(tx), [event]);
   }
 
   async findDiscountByCode(

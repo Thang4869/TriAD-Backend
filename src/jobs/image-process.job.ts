@@ -1,9 +1,8 @@
 import sharp from "sharp";
 import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
+import { Product } from "@modules/products/domain/product.entity";
 import { logger } from "@core/logger/winston";
 import type { IImageStorage } from "@core/storage/cloudinary";
-import type { EventBus } from "@shared/domain/event-bus/event-bus";
-import { ProductUpdatedEvent } from "@shared/domain/events/product-events";
 
 export interface ImageProcessJobData {
   productId: string;
@@ -17,7 +16,6 @@ export const processImage = async (
   job: { data: ImageProcessJobData },
   productsRepository: IProductsRepository,
   storage: IImageStorage,
-  eventBus: EventBus,
 ) => {
   const { productId, imageBuffer } = job.data;
   logger.info(`Processing image for product ${productId}`);
@@ -46,10 +44,13 @@ export const processImage = async (
     throw new Error(`Product ${productId} not found`);
   }
 
-  await productsRepository.update(productId, {
-    images: [...product.images, url],
-  });
-  await eventBus.publish(new ProductUpdatedEvent(productId));
+  const entity = Product.hydrate(product);
+  entity.markUpdated();
+  await productsRepository.updateWithEvents(
+    productId,
+    { images: [...product.images, url] },
+    entity,
+  );
   logger.info(`Image processed and linked to product ${productId}: ${url}`);
   return { processed: true, url };
 };

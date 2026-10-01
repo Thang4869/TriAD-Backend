@@ -8,7 +8,7 @@ import type { OrderHistoryReadPort } from "@modules/orders/application/order-his
 import type { IReviewsRepository } from "@modules/reviews/application/ports/reviews.repository.port";
 import type { IUsersRepository } from "@modules/users/application/ports/users.repository.port";
 import type { IWishlistRepository } from "@modules/wishlist/application/ports/wishlist.repository.port";
-import type { IDashboardRepository } from "@modules/admin/dashboard/application/ports/dashboard.repository.port";
+import type { DashboardReadPort } from "@modules/admin/dashboard/application/dashboard-read.port";
 import type { INotificationsRepository } from "@modules/notifications/application/ports/notifications.repository.port";
 
 import type { AuthService } from "@modules/auth/auth.service";
@@ -69,7 +69,7 @@ export const TOKENS = {
   ReviewsRepository: createToken<IReviewsRepository>("ReviewsRepository"),
   UsersRepository: createToken<IUsersRepository>("UsersRepository"),
   WishlistRepository: createToken<IWishlistRepository>("WishlistRepository"),
-  DashboardRepository: createToken<IDashboardRepository>("DashboardRepository"),
+  DashboardRead: createToken<DashboardReadPort>("DashboardRead"),
   NotificationsRepository: createToken<INotificationsRepository>(
     "NotificationsRepository",
   ),

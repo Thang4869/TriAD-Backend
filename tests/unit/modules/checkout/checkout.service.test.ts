@@ -83,6 +83,7 @@ function createFakeRepository(
     runInTransaction: vi.fn().mockImplementation(async (fn) => fn({} as any)),
     lockProductsForUpdate: vi.fn().mockResolvedValue(defaultLocked),
     decrementProductStock: vi.fn().mockResolvedValue(true),
+    persistProductEvent: vi.fn().mockResolvedValue(undefined),
     findDiscountByCode: vi.fn().mockResolvedValue(null),
     incrementDiscountUsage: vi.fn().mockResolvedValue(true),
     clearCartItems: vi.fn().mockResolvedValue(undefined),

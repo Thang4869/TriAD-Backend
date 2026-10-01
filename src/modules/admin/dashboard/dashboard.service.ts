@@ -1,13 +1,26 @@
-import { DashboardReadPort } from "./application/dashboard-read.port";
+import type {
+  DashboardLowStockProduct,
+  DashboardOrderStatusCount,
+  DashboardReadPort,
+  DashboardTopSellingProduct,
+  GrossOrderValueByDay,
+} from "./application/dashboard-read.port";
 
 const DEFAULT_LOW_STOCK_THRESHOLD = 10;
 const DEFAULT_TOP_PRODUCTS_LIMIT = 5;
-const DEFAULT_REVENUE_WINDOW_DAYS = 30;
+const DEFAULT_GROSS_ORDER_VALUE_WINDOW_DAYS = 30;
 
 export interface DashboardStats {
-  grossOrderValue: { total30Days: number; byDay: unknown };
-  orders: { statusBreakdown: unknown };
-  products: { total: number; lowStock: unknown; topSelling: unknown };
+  grossOrderValue: {
+    total30Days: number;
+    byDay: GrossOrderValueByDay[];
+  };
+  orders: { statusBreakdown: DashboardOrderStatusCount[] };
+  products: {
+    total: number;
+    lowStock: DashboardLowStockProduct[];
+    topSelling: DashboardTopSellingProduct[];
+  };
   users: { total: number; new30Days: number };
 }
 
@@ -19,7 +32,7 @@ export class DashboardService implements IDashboardService {
   constructor(private readonly repository: DashboardReadPort) {}
 
   async getStats(): Promise<DashboardStats> {
-    const since30Days = this.daysAgo(DEFAULT_REVENUE_WINDOW_DAYS);
+    const since30Days = this.daysAgo(DEFAULT_GROSS_ORDER_VALUE_WINDOW_DAYS);
 
     const [
       grossOrderValue,

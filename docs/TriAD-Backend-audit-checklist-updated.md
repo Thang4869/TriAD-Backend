@@ -2,9 +2,9 @@
 
 **Phạm vi:** Backend
 [`Thang4869/TriAD-Backend`](https://github.com/Thang4869/TriAD-Backend),
-commit `bc23f66` trên `main`; Frontend
+commit `f5a181e` trên `main`; Frontend
 [`Thang4869/TriAD-12`](https://github.com/Thang4869/TriAD-12), commit
-`9800494` trên `main`. Bản export backend đã được đối chiếu với các file
+`84431df` trên `main`. Bản export backend đã được đối chiếu với các file
 quan trọng ở repository.
 
 **Đánh giá hiện tại (mang tính tham khảo):** OOP/kiến trúc 8/10; Clean
@@ -27,7 +27,7 @@ kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật t
 | 🟡 **PARTIAL / PENDING** | Implementation đã có nhưng còn runtime/deployment verification hoặc một phần việc |
 | ⬜ **TODO / OPEN**       | Chưa triển khai hoặc chưa có trạng thái đóng                                      |
 
-> **P0 hiện tại:** #1–#11, #35, #36, #37 và #41 đã CLOSED; #12 chờ production verification; #38–#40 còn TODO.
+> **P0 hiện tại:** #1–#11 và #35–#41 đã CLOSED về code/test; #12 vẫn chờ production verification trên Vercel + Render.
 
 ## P0 — Production blockers
 
@@ -241,9 +241,10 @@ kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật t
 
 ## Tiến độ cập nhật 01/10/2026
 
-- **P0 đã CLOSED chắc chắn:** #1–#11, #35, #36, #37 và #41.
+- **P0 đã CLOSED chắc chắn trên code/test:** #1–#11 và #35–#41.
 - **P0 #12:** 🟡 **IMPLEMENTATION COMPLETE / PRODUCTION VERIFICATION PENDING** --- code, regression tests và quality gates đã hoàn tất; còn chờ kiểm chứng trên đúng hai domain Vercel + Render sau khi deploy.
-- **P0 còn TODO:** #38, #39 và #40.
+- **#39:** content validation bằng `sharp` và cleanup static `/uploads` legacy đã hoàn tất; typecheck/lint/unit test PASS.
+- **#40:** global body limit `100kb` + HTTP `413` handling đã hoàn tất; typecheck/lint/unit test PASS.
 - Một mục chỉ được chuyển sang **CLOSED** khi thay đổi mã nguồn,
   regression/integration test liên quan và quality gates cần thiết đều
   PASS.
@@ -322,13 +323,13 @@ kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật t
 
 ## Thứ tự thực hiện
 
-1.  Implementation của **#12** đã hoàn tất; production verification giữ lại cho giai đoạn deploy Vercel + Render. **#35, #36 và #37 đã CLOSED**; tiếp tục P0 theo thứ tự: **#38 → #39 → #40**.
-2.  Sau khi toàn bộ P0 có bằng chứng kiểm thử, chuyển sang các mục P1
-    theo mức độ phụ thuộc, ưu tiên #14 và #42--#55 cùng các mục liên
-    quan.
-3.  Thực hiện P2 và các diễn tập runtime/E2E để chứng minh hành vi
+1.  **#39/B8 và #40/B5 đã CLOSED.** Commit/push nhóm thay đổi security/cleanup hiện tại.
+2.  **#12** giữ trạng thái production-verification pending cho giai đoạn deploy Vercel + Render.
+3.  Chuyển sang **P1 #14 / C1**: quyết định giữ hay bỏ projection/read-model. Đây là dependency cho #13 và nhiều mục #42--#47.
+4.  Tiếp tục #42--#55 theo dependency sau khi C1 được chốt.
+5.  Thực hiện P2 và các diễn tập runtime/E2E để chứng minh hành vi
     production, recovery và CI.
-4.  Đánh giá lại OOP, Clean Code, Tech Lead và production readiness dựa
+6.  Đánh giá lại OOP, Clean Code, Tech Lead và production readiness dựa
     trên code + test + deploy evidence; không suy ra điểm tuyệt đối chỉ
     từ số checkbox đã đóng.
 
@@ -343,7 +344,7 @@ cam kết điểm tuyệt đối 10/10.
 Nguồn đối chiếu: `TriAD-Backend-Improvement-Checklist.md` do người dùng
 cung cấp. Tài liệu đó xem bản export cũ 309 file và chưa xem một số file
 cấu hình; các mục dưới đây đã được đối chiếu lại với repository backend
-`main` commit `bc23f66`. Những việc trùng với mục 1--34 được giữ ở vị
+`main` commit `f5a181e` tại thời điểm rà soát trước nhóm thay đổi #39/#40. Những việc trùng với mục 1--34 được giữ ở vị
 trí cũ, không tạo mục trùng. Các mục chưa kiểm thử runtime được diễn đạt
 là **kiểm chứng**.
 
@@ -369,23 +370,31 @@ là **kiểm chứng**.
 
 **Evidence:** concurrent refresh race test PASS; repository atomic-claim test PASS; rollback integration test PASS; unit tests, typecheck và lint PASS.
 
-### #38 — ⬜ TODO
+### #38 — ✅ CLOSED
 
-**Việc cần làm:** Hạn chế truy cập, `/metrics` ở production và quyết định có mở `/api/docs` công khai không; cả hai route hiện được mount trực tiếp mà không có middleware xác thực trên route.
+**Việc đã làm:** `/metrics` và `/api/docs` chỉ được mount khi `!config.isProduction`. Ở production hai route rơi xuống `notFoundHandler` và trả `404`; development/test vẫn giữ quyền truy cập.
 
-**File liên quan:** [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), [metrics.routes.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/metrics/metrics.routes.ts)
+**Evidence:** có integration test production-route cho cả `/metrics` và `/api/docs`; typecheck/lint/test liên quan PASS. Thay đổi đã có trên GitHub qua commit `cc8eb56` (`fix(security): protect metrics and api docs in production`).
 
-### #39 — ⬜ TODO
+**File liên quan:** [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), [metrics.routes.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/metrics/metrics.routes.ts), `tests/integration/production-routes.test.ts`
 
-**Việc cần làm:** Xác thực nội dung ảnh bằng, cách đọc/giải mã file, ngoài `mimetype` do client khai báo; rà soát static route `/uploads` nếu chỉ dùng Cloudinary.
+### #39 — ✅ CLOSED
 
-**File liên quan:** [upload.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/upload.middleware.ts), [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts)
+**Việc đã làm:** upload không còn chỉ tin `mimetype` do client gửi. Sau Multer, `validateUploadedImage` dùng `sharp(...).metadata()` để giải mã/nhận diện nội dung thật và chỉ chấp nhận `jpeg`, `png`, `webp`. Fake image/unsupported format bị từ chối bằng `BadRequestError`.
 
-### #40 — ⬜ TODO
+Static route `/uploads` và thư mục `uploads/tmp` legacy đã được loại bỏ sau khi xác nhận frontend không còn consumer và luồng ảnh hiện dùng `CloudinaryImageStorage`.
 
-**Việc cần làm:** Giảm giới hạn JSON toàn cục `10mb` và chỉ tăng ở endpoint có nhu cầu thực; đo ảnh hưởng với giới hạn của proxy và rate limiter.
+**Evidence:** unit tests upload middleware, typecheck và lint PASS; tìm kiếm runtime reference không còn `/uploads`.
 
-**File liên quan:** [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts)
+**File liên quan:** [upload.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/upload.middleware.ts), [products.routes.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/products.routes.ts), [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), `tests/unit/shared/middlewares/upload.middleware.test.ts`
+
+### #40 — ✅ CLOSED
+
+**Việc đã làm:** global JSON/urlencoded body limit đã giảm từ `10mb` xuống `100kb`. Upload ảnh không bị ảnh hưởng vì dùng `multipart/form-data` qua Multer với giới hạn riêng `5MB`. Error handler nhận diện `entity.too.large` và trả HTTP `413` với message `Request payload too large`.
+
+**Evidence:** unit test cho error handler, typecheck và lint PASS. Thay đổi `100kb` + HTTP `413` được đưa vào cùng commit với cleanup #39.
+
+**File liên quan:** [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), [error-handler.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/error-handler.middleware.ts), `tests/unit/shared/middlewares/error-handler.middleware.test.ts`
 
 ### #41 — ✅ CLOSED
 

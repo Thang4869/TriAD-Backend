@@ -17,6 +17,9 @@
 
 ### ✅ Đã xác nhận hoàn thành
 
+- **B4 --- CLOSED.** `/metrics` và `/api/docs` không còn được mount ở production; integration test xác nhận production trả 404.
+- **B5 --- CLOSED.** Global JSON/urlencoded limit đã giảm `10mb` → `100kb`; payload quá lớn được map thành HTTP 413. Unit test, typecheck và lint PASS.
+- **B8 --- CLOSED.** Content validation bằng `sharp.metadata()` đã hoàn tất; static `/uploads` và `uploads/tmp` legacy đã được loại bỏ sau khi xác nhận frontend không còn consumer. Unit test, typecheck và lint PASS.
 - **B1 --- CLOSED.** Refresh-token rotation đã atomic: conditional revoke theo `revokedAt IS NULL`, revoke token cũ + tạo token mới cùng Prisma transaction, concurrent refresh race chỉ một request thành công, rollback giữ token cũ active nếu create token mới lỗi và refresh JWT mới có `jti` để bảo đảm uniqueness trong cùng một giây.
 - **A3 --- CLOSED.** `PrismaCheckoutRepository.runInTransaction()` dịch Prisma `P2034` thành `ConflictError` ngay tại adapter; `CheckoutService` retry bằng exponential backoff + jitter. Có unit test retry/jitter, adapter test `P2034` → `ConflictError` và integration test contention thật trên PostgreSQL `Serializable`.
 - **A6 --- CLOSED.** `IN_PROGRESS` dùng TTL tối đa 60 giây; Redis failures trước response được chuyển qua `next(error)`; lỗi `setex()`/`del()` sau response được log để quan sát. Regression tests, typecheck và lint PASS.
@@ -61,18 +64,19 @@
   `COOKIE_DOMAIN` đã vào validated config. FE/BE tests và quality gates PASS;
   còn chờ Vercel + Render deployment verification.
 
-**Bước tiếp theo:** **A3 / P0 #35, A6 / P0 #36 và B1 / P0 #37 đã CLOSED**. P0 #12 còn production verification trên Vercel + Render. Tiếp theo thực hiện **B4 / P0 #38**, rồi #39 → #40.
+**Bước tiếp theo:** B4/#38, B5/#40 và B8/#39 đã CLOSED. P0 #12 giữ pending production verification. Chuyển sang **C1 / audit #14** để chốt hướng CQRS/projection trước các P1 phụ thuộc.
 
 ## Phạm vi và giới hạn của đánh giá
 
-- Đã đọc: README trên GitHub, toàn bộ `src/`, `tests/`, `docs/`,
-  `prisma/migrations/`, `docker-compose*.yml`, `package.json`,
-  `tsconfig.json`.
-- **Không xem được** (export không đưa vào): `Dockerfile`,
-  `vitest*.mts`, `.github/workflows`, `.eslintrc.cjs`,
-  `schema.prisma`, `.env.example`. Các mục liên quan ghi _(cần kiểm
-  tra)_.
-- Chưa chạy test hay CI, chưa xem repo frontend.
+- Đã đối chiếu repository hiện tại và hai bản export người dùng cung cấp:
+  Backend `main` ở `f5a181e`, Frontend `main` ở `84431df`.
+- Bản export backend hiện tại bao gồm `src/`, `tests/`, `docs/`,
+  `prisma/schema.prisma`, migrations, Dockerfile, compose, Vitest configs
+  và các file vận hành chính; bản export frontend cũng đã được rà theo các
+  luồng auth/checkout và tham chiếu asset.
+- Evidence chạy test/typecheck/lint được lấy từ các lần thực thi người dùng
+  xác nhận trong phiên làm việc; riêng #40 hiện có trong working tree/export
+  local nhưng chưa đồng bộ lên GitHub `main` tại thời điểm rà soát.
 
 ## Phát hiện quan trọng nhất
 
@@ -160,11 +164,13 @@ dù ADR-003 viết "Query adapters read those tables".
       và quy định fail-open hay fail-closed khi Redis chết.
 - [ ] **B3.** JWT thiếu `iss`, `aud`, `jti`, `typ`
       (access/refresh/preauth). Thêm và kiểm tra khi verify.
-- [ ] **B4.** `/metrics` đang mở công khai. Hạn chế theo mạng / IP
-      allowlist / basic auth hoặc port riêng. `/api/docs` nên tắt hoặc bảo
-      vệ ở production.
-- [ ] **B5.** `json({ limit: "10mb" })` áp dụng toàn cục. Đặt mặc định
-      \~100kb, chỉ nới cho route cần.
+- [x] **B4. [CLOSED]** `/metrics` và `/api/docs` chỉ mount khi
+      `!config.isProduction`; production trả `404`. Có integration test
+      cho cả hai route và GitHub đã có commit `cc8eb56`.
+- [x] **B5. [CLOSED]** Global JSON/urlencoded limit đã giảm từ `10mb`
+      xuống `100kb`; upload ảnh dùng Multer nên giữ giới hạn riêng `5MB`.
+      Error handler map `entity.too.large` thành HTTP `413 Request payload
+      too large`; unit test, typecheck và lint PASS.
 - [ ] **B6. [PARTIAL]** Cross-origin delivery/recovery của CSRF token đã
       được sửa: frontend không còn đọc API-domain cookie bằng `document.cookie`;
       backend trả token sau auth và có authenticated `GET /auth/csrf` để phục
@@ -178,10 +184,11 @@ dù ADR-003 viết "Query adapters read those tables".
   - Quyết định `passOnStoreError` khi Redis lỗi.
   - Thêm khoá theo tài khoản, không chỉ `ip+email`.
   - Thêm limiter cho verify-email và resend.
-- [ ] **B8.** Upload chỉ kiểm tra `mimetype` do client gửi. Kiểm tra
-      magic bytes (ví dụ `sharp.metadata()`). `/uploads` static và thư mục
-      `uploads/tmp` có vẻ là di sản khi ảnh đã lên Cloudinary; xoá hoặc
-      chuyển sang object storage.
+- [x] **B8. [CLOSED]** `validateUploadedImage` dùng `sharp.metadata()`
+      và chỉ chấp nhận `jpeg/png/webp`; fake content/unsupported format bị
+      reject. Static `/uploads` và `uploads/tmp` legacy đã được loại bỏ sau
+      khi xác nhận frontend không còn consumer và image storage dùng
+      Cloudinary. Unit tests, typecheck và lint PASS.
 - [ ] **B9.** Fallback secret cho môi trường test đang nằm trong
       `src/config/index.ts` (production code). Chuyển sang
       `tests/setup.ts`.
@@ -542,8 +549,8 @@ dù ADR-003 viết "Query adapters read those tables".
 ## Tiến độ đồng bộ với audit checklist --- 01/10/2026
 
 - **CLOSED chắc chắn liên quan checklist này:** A1, A2, A3, A4, A5, A6, A7, C2.
-- **PARTIAL:** Không còn mục A6; xem các mục P0/P1 còn mở bên dưới.
-- **NEXT:** B1 / audit #37; sau đó #38 → #39 → #40.
+- **PARTIAL/PENDING:** P0 #12 còn production verification trên Vercel + Render.
+- **NEXT:** C1 / audit #14 — quyết định giữ hay bỏ projection/read-model.
 - **Chưa đánh dấu CLOSED nếu chưa có đủ code + regression/integration
   evidence + quality gates.**
 - Mapping chính: audit #9 ↔ A1/A2; #35 ↔ A3; #7 ↔ A4; #6 ↔ A5; #36 ↔
@@ -551,11 +558,11 @@ dù ADR-003 viết "Query adapters read those tables".
 
 ## Thứ tự đề xuất
 
-1.  Hoàn tất phần P0 còn mở, bắt đầu bằng **A1/A2 (order-status +
-    outbox + conditional update)**.
-2.  **A3 và A6 đã CLOSED**; tiếp tục **B1--B4** và các P0 security/production tương ứng trong audit checklist.
-3.  Quyết định **C1**, rồi xử lý các mục outbox/concurrency và boundary
-    liên quan trước khi mở rộng abstraction.
-4.  Thực hiện P4/P5 bằng integration/E2E/runtime evidence.
-5.  Cuối cùng đồng bộ README, demo và số liệu CV với những gì
+1.  Commit/push nhóm thay đổi **B5/#40 + B8/#39** hiện tại.
+2.  Giữ P0 #12 cho production verification trên Vercel + Render.
+3.  Quyết định **C1 / audit #14** (giữ hoặc bỏ projection/read-model) trước,
+    vì đây là dependency cho dashboard revenue và nhiều mục outbox/P1.
+4.  Sau C1, xử lý #13 và #42--#55 theo dependency, rồi mới mở rộng abstraction.
+5.  Thực hiện P4/P5 bằng integration/E2E/runtime evidence.
+6.  Cuối cùng đồng bộ README, demo và số liệu CV với những gì
     code/test/deployment thực sự chứng minh.

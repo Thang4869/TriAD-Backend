@@ -42,7 +42,15 @@ export function createErrorHandler(
     let details: unknown = undefined;
     let code: string | undefined;
 
-    if (err instanceof DomainError) {
+    if (
+      err !== null &&
+      typeof err === "object" &&
+      "type" in err &&
+      err.type === "entity.too.large"
+    ) {
+      statusCode = 413;
+      message = "Request payload too large";
+    } else if (err instanceof DomainError) {
       statusCode = DOMAIN_ERROR_STATUS_MAP[err.code] ?? 400;
       message = err.message;
       code = err.code;
@@ -114,24 +122,27 @@ export function createErrorHandler(
       userId: (req.user as { id: string })?.id,
       correlationId,
     };
+
     if (statusCode >= 500) {
       logger.error("Error:", logPayload);
     } else {
       logger.warn("Error:", logPayload);
     }
 
-    // response
     const responsePayload: ErrorResponsePayload = {
       success: false,
       error: message,
       correlationId,
     };
+
     if (code) {
       responsePayload.code = code;
     }
+
     if (details) {
       responsePayload.details = details;
     }
+
     if (process.env.NODE_ENV === "development" && err instanceof Error) {
       responsePayload.stack = err.stack;
     }
@@ -142,7 +153,11 @@ export function createErrorHandler(
 
 function sanitizeCorrelationId(value: string | string[] | undefined): string {
   const candidate = Array.isArray(value) ? value[0] : value;
-  if (candidate && /^[A-Za-z0-9._:-]{1,128}$/.test(candidate)) return candidate;
+
+  if (candidate && /^[A-Za-z0-9._:-]{1,128}$/.test(candidate)) {
+    return candidate;
+  }
+
   return `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 }
 

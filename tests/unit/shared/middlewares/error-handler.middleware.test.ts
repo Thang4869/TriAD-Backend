@@ -200,6 +200,24 @@ describe("errorHandler", () => {
     );
   });
 
+  it("trả 413 khi request payload vượt giới hạn", () => {
+    const err = {
+      type: "entity.too.large",
+      message: "request entity too large",
+    };
+
+    const res = createMockResponse();
+
+    errorHandler(err, createMockRequest(), res, vi.fn());
+
+    expect(res.status).toHaveBeenCalledWith(413);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: "Request payload too large",
+      }),
+    );
+  });
+
   it("dùng đúng statusCode và message thật của AppError operational (BadRequestError...)", () => {
     const err = new AppError("Custom message", 422, true);
     const res = createMockResponse();

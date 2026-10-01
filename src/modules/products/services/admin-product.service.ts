@@ -71,7 +71,13 @@ export class AdminProductService {
   async create(data: CreateProductData) {
     const existing = await this.repository.findBySlugId(data.slug);
     if (existing) throw new BadRequestError("Slug already exists");
-    return this.repository.create(data);
+    const created = await this.repository.create(data);
+
+    const entity = Product.hydrate(created);
+    entity.markCreated();
+    await this.publishEvents(entity);
+
+    return created;
   }
 
   async update(id: string, data: UpdateProductData) {
@@ -90,7 +96,13 @@ export class AdminProductService {
       return this.repository.updateWithEvents(id, data, entity);
     }
 
-    return this.repository.update(id, data);
+    const entity = Product.hydrate(product);
+    entity.markUpdated();
+
+    const result = await this.repository.update(id, data);
+    await this.publishEvents(entity);
+
+    return result;
   }
 
   async delete(id: string) {
@@ -98,9 +110,7 @@ export class AdminProductService {
     if (!product) throw new NotFoundError("Product not found");
     const entity = Product.hydrate(product);
     entity.deactivate();
-    const result = await this.repository.setActive(id, false);
-    await this.publishEvents(entity);
-    return result;
+    return this.repository.setActiveWithEvents(id, false, entity);
   }
 
   async restore(id: string) {
@@ -108,9 +118,7 @@ export class AdminProductService {
     if (!product) throw new NotFoundError("Product not found");
     const entity = Product.hydrate(product);
     entity.activate();
-    const result = await this.repository.setActive(id, true);
-    await this.publishEvents(entity);
-    return result;
+    return this.repository.setActiveWithEvents(id, true, entity);
   }
 
   async uploadImage(productId: string, buffer: Buffer) {

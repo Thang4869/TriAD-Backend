@@ -4,6 +4,7 @@ import type { IAuthRepository } from "@modules/auth/application/ports/auth.repos
 import type { ICartRepository } from "@modules/cart/application/ports/cart.repository.port";
 import type { ICheckoutRepository } from "@modules/checkout/application/ports/checkout.repository.port";
 import type { IOrdersRepository } from "@modules/orders/application/ports/orders.repository.port";
+import type { OrderHistoryReadPort } from "@modules/orders/application/order-history-read.port";
 import type { IReviewsRepository } from "@modules/reviews/application/ports/reviews.repository.port";
 import type { IUsersRepository } from "@modules/users/application/ports/users.repository.port";
 import type { IWishlistRepository } from "@modules/wishlist/application/ports/wishlist.repository.port";
@@ -48,6 +49,7 @@ import type { OutboxRelayStore } from "@core/outbox/outbox-relay-store.port";
 import type { HandlerExecutionTracker } from "@shared/domain/event-bus/event-bus";
 import type { OutboxRelay } from "@core/outbox/outbox-relay";
 import type { OrderNumberGenerator } from "@modules/checkout/application/ports/order-number-generator.port";
+import type { ProductCatalogReadPort } from "@modules/products/application/product-catalog-read.port";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
@@ -58,10 +60,12 @@ import { ProductImageService } from "@/modules/products/services/product-image.s
 export const TOKENS = {
   // Repositories
   ProductsRepository: createToken<IProductsRepository>("ProductsRepository"),
+  ProductCatalogRead: createToken<ProductCatalogReadPort>("ProductCatalogRead"),
   AuthRepository: createToken<IAuthRepository>("AuthRepository"),
   CartRepository: createToken<ICartRepository>("CartRepository"),
   CheckoutRepository: createToken<ICheckoutRepository>("CheckoutRepository"),
   OrdersRepository: createToken<IOrdersRepository>("OrdersRepository"),
+  OrderHistoryRead: createToken<OrderHistoryReadPort>("OrderHistoryRead"),
   ReviewsRepository: createToken<IReviewsRepository>("ReviewsRepository"),
   UsersRepository: createToken<IUsersRepository>("UsersRepository"),
   WishlistRepository: createToken<IWishlistRepository>("WishlistRepository"),

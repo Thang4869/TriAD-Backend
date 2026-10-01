@@ -17,6 +17,7 @@ import { CheckoutService } from "@modules/checkout/checkout.service";
 import { CheckoutController } from "@modules/checkout/checkout.controller";
 
 import { PrismaOrdersRepository } from "@modules/orders/infrastructure/repositories/prisma-orders.repository";
+import { PrismaOrderHistoryReadRepository } from "@modules/orders/infrastructure/repositories/prisma-order-history-read.repository";
 import { OrdersService } from "@modules/orders/orders.service";
 import { OrdersController } from "@modules/orders/orders.controller";
 
@@ -52,6 +53,10 @@ import {
   ProductPriceChangedEvent,
   ProductRestockedEvent,
   ProductStockDepletedEvent,
+  ProductCreatedEvent,
+  ProductUpdatedEvent,
+  ProductActivatedEvent,
+  ProductDeactivatedEvent,
 } from "@shared/domain/events/product-events";
 import { ProjectionHandler } from "@core/outbox/projection-handler";
 
@@ -78,6 +83,11 @@ import { OutboxRelay } from "@core/outbox/outbox-relay";
 import { PrismaOutboxRelayStore } from "@core/outbox/prisma-outbox-relay.store";
 import { PrismaOutboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
 import { CryptoOrderNumberGenerator } from "@modules/checkout/infrastructure/order-number-generator";
+import { PrismaProductCatalogReadRepository } from "@modules/products/infrastructure/repositories/prisma-product-catalog-read.repository";
+import {
+  ReviewCreatedEvent,
+  ReviewDeletedEvent,
+} from "@shared/domain/events/review-events";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -110,6 +120,10 @@ container.register(
   TOKENS.ProductsRepository,
   () => new PrismaProductsRepository(),
 );
+container.register(
+  TOKENS.ProductCatalogRead,
+  () => new PrismaProductCatalogReadRepository(),
+);
 container.register(TOKENS.AuthRepository, () => new PrismaAuthRepository());
 container.register(TOKENS.AuthSessionUser, () => new PrismaAuthRepository());
 
@@ -123,6 +137,11 @@ container.register(TOKENS.OrdersRepository, () => new PrismaOrdersRepository());
 container.register(
   TOKENS.ReviewsRepository,
   () => new PrismaReviewsRepository(),
+);
+
+container.register(
+  TOKENS.OrderHistoryRead,
+  () => new PrismaOrderHistoryReadRepository(),
 );
 container.register(TOKENS.UsersRepository, () => new PrismaUsersRepository());
 container.register(
@@ -178,7 +197,11 @@ container.register(
 // ---------- Product sub-services ----------
 container.register(
   TOKENS.CatalogService,
-  (c) => new CatalogService(c.resolve(TOKENS.ProductsRepository)),
+  (c) =>
+    new CatalogService(
+      c.resolve(TOKENS.ProductCatalogRead),
+      c.resolve(TOKENS.ProductsRepository),
+    ),
 );
 container.register(
   TOKENS.AdminProductService,
@@ -239,11 +262,15 @@ container.register(
 );
 container.register(
   TOKENS.OrdersService,
-  (c) => new OrdersService(c.resolve(TOKENS.OrdersRepository)),
+  (c) =>
+    new OrdersService(
+      c.resolve(TOKENS.OrdersRepository),
+      c.resolve(TOKENS.OrderHistoryRead),
+    ),
 );
 container.register(
   TOKENS.ReviewsService,
-  (c) => new ReviewsService(c.resolve(TOKENS.ReviewsRepository)),
+  (c) => new ReviewsService(c.resolve(TOKENS.ReviewsRepository), eventBus),
 );
 container.register(
   TOKENS.UsersService,
@@ -363,14 +390,28 @@ eventBus.subscribe(
   projectionHandler.handleOrderStatusChanged.bind(projectionHandler),
 );
 for (const eventName of [
+  ProductCreatedEvent.eventName,
+  ProductUpdatedEvent.eventName,
   ProductPriceChangedEvent.eventName,
   ProductRestockedEvent.eventName,
   ProductStockDepletedEvent.eventName,
+  ProductActivatedEvent.eventName,
+  ProductDeactivatedEvent.eventName,
 ]) {
   eventBus.subscribe(
     eventName,
     `ProductCatalogProjectionHandler:${eventName}`,
     projectionHandler.handleProductEvent.bind(projectionHandler),
+  );
+}
+for (const eventName of [
+  ReviewCreatedEvent.eventName,
+  ReviewDeletedEvent.eventName,
+]) {
+  eventBus.subscribe(
+    eventName,
+    `ProductCatalogRatingProjectionHandler:${eventName}`,
+    projectionHandler.handleProductRatingChanged.bind(projectionHandler),
   );
 }
 
@@ -407,4 +448,5 @@ export const imageJobProcessor = (job: Parameters<typeof processImage>[0]) =>
     job,
     container.resolve(TOKENS.ProductsRepository),
     container.resolve(TOKENS.ImageStorage),
+    eventBus,
   );

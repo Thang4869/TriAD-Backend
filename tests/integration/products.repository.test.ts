@@ -114,6 +114,86 @@ describe("PrismaProductsRepository (integration)", () => {
     expect(persisted?.price).toBe(100);
   });
 
+  it("setActiveWithEvents cập nhật trạng thái và ghi ProductDeactivated vào outbox cùng transaction", async () => {
+    const suffix = Date.now();
+
+    const product = await repository.create({
+      name: "Atomic Deactivate Product",
+      description: "d",
+      price: 100,
+      stock: 5,
+      category: "atomic",
+      images: [],
+      slug: `atomic-deactivate-${suffix}`,
+    });
+
+    const entity = Product.hydrate(product);
+    entity.deactivate();
+
+    const updated = await repository.setActiveWithEvents(
+      product.id,
+      false,
+      entity,
+    );
+
+    expect(updated.isActive).toBe(false);
+
+    const persisted = await prisma.product.findUnique({
+      where: { id: product.id },
+    });
+
+    expect(persisted?.isActive).toBe(false);
+
+    const outboxEvent = await prisma.outboxEvent.findFirst({
+      where: {
+        aggregateId: product.id,
+        eventName: "ProductDeactivated",
+      },
+      orderBy: {
+        occurredAt: "desc",
+      },
+    });
+
+    expect(outboxEvent).not.toBeNull();
+    expect(outboxEvent?.payload).toMatchObject({
+      eventName: "ProductDeactivated",
+      aggregateId: product.id,
+    });
+
+    expect(entity.domainEvents).toHaveLength(0);
+  });
+
+  it("setActiveWithEvents rollback trạng thái khi persist outbox thất bại", async () => {
+    const suffix = Date.now();
+
+    const product = await repository.create({
+      name: "Rollback Deactivate Product",
+      description: "d",
+      price: 100,
+      stock: 5,
+      category: "atomic",
+      images: [],
+      slug: `rollback-deactivate-${suffix}`,
+    });
+
+    const entity = Product.hydrate(product);
+    entity.deactivate();
+
+    const failingRepository = new PrismaProductsRepository(async () => {
+      throw new Error("outbox persistence failed");
+    });
+
+    await expect(
+      failingRepository.setActiveWithEvents(product.id, false, entity),
+    ).rejects.toThrow("outbox persistence failed");
+
+    const persisted = await prisma.product.findUnique({
+      where: { id: product.id },
+    });
+
+    expect(persisted?.isActive).toBe(true);
+  });
+
   it("findManyWithRatings trả về sản phẩm kèm reviews, hỗ trợ where/orderBy/skip/take", async () => {
     const suffix = Date.now();
     const product = await prisma.product.create({

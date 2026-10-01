@@ -11,6 +11,22 @@ export class ProductStockDepletedEvent extends BaseDomainEvent {
   }
 }
 
+export class ProductCreatedEvent extends BaseDomainEvent {
+  static readonly eventName = "ProductCreated";
+
+  constructor(public readonly productId: string) {
+    super(productId, "ProductCreated");
+  }
+}
+
+export class ProductUpdatedEvent extends BaseDomainEvent {
+  static readonly eventName = "ProductUpdated";
+
+  constructor(public readonly productId: string) {
+    super(productId, "ProductUpdated");
+  }
+}
+
 export class ProductRestockedEvent extends BaseDomainEvent {
   static readonly eventName = "ProductRestocked";
 

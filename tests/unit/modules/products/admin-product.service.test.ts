@@ -6,6 +6,7 @@ import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { BadRequestError, NotFoundError } from "@shared/utils/errors";
 import { ProductAlreadyActiveError } from "@shared/domain/errors/domain-error";
 import { ImageProcessingQueuePort } from "@modules/products/application/ports/image-processing-queue.port";
+import { Product } from "@/modules/products/domain/product.entity";
 
 vi.mock("@core/logger/winston", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -47,6 +48,7 @@ function createRepository(
     update: vi.fn().mockResolvedValue(PRODUCT),
     updateWithEvents: vi.fn().mockResolvedValue(PRODUCT),
     setActive: vi.fn().mockResolvedValue(PRODUCT),
+    setActiveWithEvents: vi.fn().mockResolvedValue(PRODUCT),
     existsAndActive: vi.fn().mockResolvedValue(true),
     searchFullText: vi.fn().mockResolvedValue([]),
     countFullTextSearch: vi.fn().mockResolvedValue(0),
@@ -242,7 +244,11 @@ describe("AdminProductService.update", () => {
       price: 100_000,
     } as never);
 
-    expect(publishSpy).not.toHaveBeenCalled();
+    expect(publishSpy).toHaveBeenCalledOnce();
+    expect(publishSpy.mock.calls[0][0]).toMatchObject({
+      eventName: "ProductUpdated",
+      productId: "prod-1",
+    });
   });
 
   it("không truyền price thì không publish event", async () => {
@@ -252,7 +258,11 @@ describe("AdminProductService.update", () => {
       name: "Tên mới",
     } as never);
 
-    expect(publishSpy).not.toHaveBeenCalled();
+    expect(publishSpy).toHaveBeenCalledOnce();
+    expect(publishSpy.mock.calls[0][0]).toMatchObject({
+      eventName: "ProductUpdated",
+      productId: "prod-1",
+    });
   });
 
   it("lỗi atomic update với outbox thì update bị fail", async () => {
@@ -278,10 +288,20 @@ describe("AdminProductService.delete (soft delete)", () => {
 
     await createService(repository).service.delete("prod-1");
 
-    expect(repository.setActive).toHaveBeenCalledWith("prod-1", false);
-    expect(publishSpy.mock.calls[0][0]).toMatchObject({
-      eventName: "ProductDeactivated",
-    });
+    expect(repository.setActiveWithEvents).toHaveBeenCalledWith(
+      "prod-1",
+      false,
+      expect.any(Product),
+    );
+    const aggregate = vi.mocked(repository.setActiveWithEvents).mock
+      .calls[0][2];
+
+    expect(aggregate.pullEvents()).toEqual([
+      expect.objectContaining({
+        eventName: "ProductDeactivated",
+        productId: "prod-1",
+      }),
+    ]);
   });
 
   it("sản phẩm không tồn tại ném NotFoundError", async () => {
@@ -314,10 +334,20 @@ describe("AdminProductService.restore", () => {
 
     await createService(repository).service.restore("prod-1");
 
-    expect(repository.setActive).toHaveBeenCalledWith("prod-1", true);
-    expect(publishSpy.mock.calls[0][0]).toMatchObject({
-      eventName: "ProductActivated",
-    });
+    expect(repository.setActiveWithEvents).toHaveBeenCalledWith(
+      "prod-1",
+      true,
+      expect.any(Product),
+    );
+    const aggregate = vi.mocked(repository.setActiveWithEvents).mock
+      .calls[0][2];
+
+    expect(aggregate.pullEvents()).toEqual([
+      expect.objectContaining({
+        eventName: "ProductActivated",
+        productId: "prod-1",
+      }),
+    ]);
   });
 
   it("restore sản phẩm đang active bị chặn", async () => {

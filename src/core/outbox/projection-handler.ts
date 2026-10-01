@@ -22,6 +22,16 @@ export class ProjectionHandler {
     this.recordLag("order_history", event);
   }
 
+  async handleProductRatingChanged(
+    event: DomainEvent & { productId: string },
+  ): Promise<void> {
+    await withSpan("projection.product_catalog.rating_changed", () =>
+      this.store.refreshProductRating(event.productId),
+    );
+
+    this.recordLag("product_catalog", event);
+  }
+
   async handleOrderStatusChanged(
     event: OrderStatusChangedEvent,
   ): Promise<void> {

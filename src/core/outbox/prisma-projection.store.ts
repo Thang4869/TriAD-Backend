@@ -68,6 +68,7 @@ export class PrismaProjectionStore implements ProjectionStore {
         isActive: product.isActive,
         searchText: `${product.name} ${product.description ?? ""} ${product.category}`,
         sourceVersion: product.version,
+        createdAt: product.createdAt,
       },
       update: {
         name: product.name,
@@ -78,7 +79,25 @@ export class PrismaProjectionStore implements ProjectionStore {
         images: product.images,
         slug: product.slug,
         isActive: product.isActive,
+        searchText: `${product.name} ${product.description ?? ""} ${product.category}`,
+        createdAt: product.createdAt,
         sourceVersion: product.version,
+      },
+    });
+  }
+
+  async refreshProductRating(productId: string): Promise<void> {
+    const rating = await prisma.review.aggregate({
+      where: { productId },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+
+    await prisma.productCatalogProjection.updateMany({
+      where: { productId },
+      data: {
+        avgRating: rating._avg.rating ?? 0,
+        reviewCount: rating._count.rating,
       },
     });
   }

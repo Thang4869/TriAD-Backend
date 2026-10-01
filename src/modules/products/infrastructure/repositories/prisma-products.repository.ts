@@ -154,6 +154,23 @@ export class PrismaProductsRepository implements IProductsRepository {
     return prisma.product.update({ where: { id }, data: { isActive } });
   }
 
+  async setActiveWithEvents(
+    id: string,
+    isActive: boolean,
+    aggregate: Product,
+  ): Promise<ProductRecord> {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({
+        where: { id },
+        data: { isActive },
+      });
+
+      await this.persistEvents(tx, [aggregate]);
+
+      return updated;
+    });
+  }
+
   async existsAndActive(id: string): Promise<boolean> {
     const product = await prisma.product.findUnique({
       where: { id },

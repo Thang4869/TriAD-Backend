@@ -264,6 +264,7 @@ model ProductCatalogProjection {
   reviewCount  Int      @default(0)
   searchText   String
   sourceVersion Int     @default(0)
+  createdAt DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([isActive, category, price])

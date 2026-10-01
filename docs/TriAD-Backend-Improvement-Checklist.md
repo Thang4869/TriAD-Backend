@@ -10,13 +10,13 @@
 - A2, A3, A4, A5, A6, A7 (toàn bộ nhóm A — checkout) — **đã đóng hết**. Chi tiết: `runInTransaction` bắt `P2034` → `ConflictError`, retry có jitter; `orderNumber` dùng `crypto.randomUUID()` qua `OrderNumberGenerator` port; giá lấy từ sản phẩm đã khoá dòng (`lockedProductMap`), không còn đọc ngoài transaction; `saveNewOrder` bắt `P2002` trên `idempotencyKey` → trả đơn cũ với `idempotent: true`; idempotency key scope theo user; `idempotencyMiddleware` tách TTL `IN_PROGRESS` (≤60s) khỏi TTL `COMPLETED`, bọc try/catch đầy đủ.
 - C1 (projection không được đọc) — **đã đóng**. `PrismaProductCatalogReadRepository`, `PrismaOrderHistoryReadRepository` và `PrismaDashboardReadRepository` đọc qua query-side ports, nối cứng vào DI container; không còn optional/fallback về repo ghi.
 - A2 cho `updateOrderStatus` — **đã đóng**. Dùng `Order.hydrate()` → gọi hành vi thật trên aggregate (`confirm/ship/deliver/cancel`) → `updateStatusWithEvents` có optimistic lock theo `version` + ghi outbox event cùng transaction.
-- E1 (publish event trước khi lưu DB ở admin-product) — **đã đóng cho nhánh đổi giá/kích hoạt**, dùng `updateWithEvents`/`setActiveWithEvents` (transaction + outbox).
+- E1 (publish event trước khi lưu DB ở admin-product) — **product mutation portion đã đóng trong P1 #15**: create/generic update dùng `createWithEvents`/`updateWithEvents`, price/activate dùng atomic paths; image worker và checkout stock cũng ghi event qua outbox. Các event path rộng hơn vẫn theo A1.
 - B1 (race điều kiện refresh token) — **đã đóng**. `rotateRefreshToken` atomic trong 1 transaction (`updateMany where revokedAt:null` + kiểm tra `count`), có test riêng `auth.refresh-token-race.test.ts`.
 - B8 (upload chỉ tin mimetype client gửi) — **đã đóng**, dùng `sharp(...).metadata()` xác minh định dạng ảnh thật.
 
 **Vẫn chưa sửa (đã kiểm tra lại, y nguyên so với lần trước):**
 
-- A1 (một phần): `AuthService`, `ReviewsService` vẫn publish event trong tiến trình, không qua outbox. `AdminProductService.create()` và nhánh update không đổi giá cũng vậy.
+- A1 (một phần): `AuthService`, `ReviewsService` và các event path ngoài P1 #15 vẫn publish trong tiến trình, không qua outbox. Product mutation paths đã được đóng riêng trong P1 #15; không coi đây là đóng toàn bộ A1.
 - L1 (định nghĩa doanh thu): **đã đóng trong phạm vi P1 #13**. Dashboard dùng tên `grossOrderValue`/GMV vì checkout hiện chỉ hỗ trợ COD với `paymentStatus = PENDING`, chưa có payment settlement để chứng minh realized revenue. Cả query tổng, daily query và dashboard projection đều cộng `Order.total` với `status != CANCELLED`, dùng cùng date boundary; integration tests bao phủ PENDING, REFUNDED, CANCELLED, zero, grouping và không double count.
 - L2 (`existsAndActive` không kiểm tra `isActive`): y nguyên, chưa sửa.
 - B2 (blacklist dùng JWT thô làm key, nuốt lỗi), B3 (JWT thiếu `iss`/`aud`/`typ`, dù refresh token đã có `jti`), B4 (`/metrics` không xác thực), B6 (CSRF chưa HMAC gắn session): đều chưa động tới.
@@ -92,7 +92,7 @@ Runtime read-side đã được nối thật: Catalog đọc `product_catalog_pr
 
 ### Outbox và luồng nghiệp vụ
 
-- [ ] **A1.** Đưa mọi event qua outbox: `OrdersService.updateOrderStatus`, `AuthService.publishEvents`, `AdminProductService.publishEvents`. Bỏ `eventBus.publish()` in-process kèm `.catch(logger.error)`. _Hoàn thành khi:_ kill process giữa lúc ghi DB và publish thì không mất event (có chaos test).
+- [ ] **A1.** Đưa các event còn lại qua outbox: `OrdersService.updateOrderStatus`, `AuthService.publishEvents` và review/notification paths. Product mutation paths đã hoàn tất ở P1 #15; không mark A1 CLOSED cho đến khi mọi path còn lại có evidence kill-process.
 - [x] **A2.** ~~`OrdersService` phải dùng aggregate~~ — **Đã xong (01/10).** `updateOrderStatus` hydrate aggregate thật, gọi `confirm/ship/deliver/cancel`, `updateStatusWithEvents` có optimistic lock theo `version` + ghi outbox trong cùng transaction.
 - [x] **A3.** ~~Checkout chỉ retry `ConflictError`~~ — **Đã xong (01/10).** `runInTransaction` bắt `P2034` ngay tại repository và ném `ConflictError`, `executeWithRetry` retry với exponential backoff + jitter.
 - [x] **A4.** ~~`orderNumber` có thể trùng~~ — **Đã xong (01/10).** Dùng `CryptoOrderNumberGenerator` (`crypto.randomUUID()`), inject qua `OrderNumberGenerator` port.
@@ -157,7 +157,7 @@ Runtime read-side đã được nối thật: Catalog đọc `product_catalog_pr
 
 ### Lỗi và ranh giới lớp
 
-- [ ] **E1.** Hai hệ thống lỗi song song. `AppError` (mang HTTP status) đang nằm trong file middleware và bị service import (`BadRequestError`), nên application layer biết mã HTTP. Chuyển sang lỗi ứng dụng có `code`, ánh xạ sang HTTP chỉ ở tầng presentation. _(Lưu ý: vấn đề "publish event trước khi lưu DB" trong `admin-product.service.ts`, vốn cũng từng gắn với E1, đã được sửa riêng cho nhánh đổi giá/activate/deactivate qua `updateWithEvents`/`setActiveWithEvents` — xem A1 trong mục cập nhật 01/10. Nhánh `create()` và update không đổi giá vẫn chưa đi qua outbox.)_
+- [ ] **E1.** Hai hệ thống lỗi song song. `AppError` (mang HTTP status) đang nằm trong file middleware và bị service import (`BadRequestError`), nên application layer biết mã HTTP. Chuyển sang lỗi ứng dụng có `code`, ánh xạ sang HTTP chỉ ở tầng presentation. _(Product mutation dual-write trong `admin-product.service.ts`, image worker và checkout stock đã được xử lý trong P1 #15; vấn đề error architecture này vẫn OPEN.)_
 - [ ] **E2.** `StockReservationService` ném `BadRequestError` dù domain đã có `InsufficientStockError`. Dùng lỗi domain.
 
 ### Saga

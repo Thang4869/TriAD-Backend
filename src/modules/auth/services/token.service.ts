@@ -126,6 +126,7 @@ export class TokenService implements AccessTokenVerifierPort {
       {
         sub: user.id,
         familyId: finalFamilyId,
+        jti: crypto.randomUUID(),
       },
       TokenService.REFRESH_SECRET,
       TokenService.REFRESH_EXPIRY,
@@ -210,9 +211,50 @@ export class TokenService implements AccessTokenVerifierPort {
         }
       }
 
-      await this.authRepository.revokeRefreshToken(tokenRecord.id);
+      const accessToken = signToken(
+        {
+          sub: tokenRecord.user.id,
+          email: tokenRecord.user.email,
+          role: tokenRecord.user.role,
+        },
+        TokenService.ACCESS_SECRET,
+        TokenService.ACCESS_EXPIRY,
+      );
 
-      return this.generateTokens(tokenRecord.user, tokenRecord.familyId);
+      const newRefreshToken = signToken(
+        {
+          sub: tokenRecord.user.id,
+          familyId: tokenRecord.familyId,
+          jti: crypto.randomUUID(),
+        },
+        TokenService.REFRESH_SECRET,
+        TokenService.REFRESH_EXPIRY,
+      );
+
+      const rotated = await this.authRepository.rotateRefreshToken(
+        tokenRecord.id,
+        newRefreshToken,
+        tokenRecord.user.id,
+        tokenRecord.familyId,
+        new Date(Date.now() + SECURITY.REFRESH_TOKEN_TTL_MS),
+      );
+
+      if (!rotated) {
+        throw new UnauthorizedError("Refresh token already used");
+      }
+
+      return {
+        accessToken,
+        refreshToken: newRefreshToken,
+        user: {
+          id: tokenRecord.user.id,
+          email: tokenRecord.user.email,
+          firstName: tokenRecord.user.firstName,
+          lastName: tokenRecord.user.lastName,
+          role: tokenRecord.user.role,
+          is2FAEnabled: tokenRecord.user.is2FAEnabled || false,
+        },
+      };
     } catch (error) {
       if (error instanceof UnauthorizedError) {
         throw error;

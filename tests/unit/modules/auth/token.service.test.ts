@@ -32,7 +32,8 @@ function createRepo(overrides: Partial<IAuthRepository> = {}): IAuthRepository {
     updateUser: vi.fn(),
     createRefreshToken: vi.fn().mockResolvedValue({}),
     findRefreshTokenByToken: vi.fn(),
-    revokeRefreshToken: vi.fn().mockResolvedValue(undefined),
+    revokeRefreshToken: vi.fn().mockResolvedValue(true),
+    rotateRefreshToken: vi.fn().mockResolvedValue(true),
     findRefreshTokenWithUser: vi.fn().mockResolvedValue(null),
     deleteRefreshTokenById: vi.fn(),
     deleteRefreshTokenByToken: vi.fn(),
@@ -227,9 +228,17 @@ describe("TokenService.refreshToken", () => {
       "refresh-token",
     );
 
-    expect(repo.revokeRefreshToken).toHaveBeenCalledWith("rt-1");
+    expect(repo.rotateRefreshToken).toHaveBeenCalledWith(
+      "rt-1",
+      "REFRESH",
+      "user-1",
+      "fam-1",
+      expect.any(Date),
+    );
+
     expect(result.accessToken).toBe("ACCESS");
-    expect(repo.createRefreshToken).toHaveBeenCalled();
+    expect(result.refreshToken).toBe("REFRESH");
+    expect(repo.createRefreshToken).not.toHaveBeenCalled();
   });
 
   it("từ chối khi token không có trong DB", async () => {
@@ -352,6 +361,26 @@ describe("TokenService.refreshToken", () => {
     await expect(
       new TokenService(createRepo(), createTokenStore()).refreshToken("rác"),
     ).rejects.toThrow(UnauthorizedError);
+  });
+
+  it("từ chối refresh khi token đã được request khác revoke trước", async () => {
+    const repo = createRepo({
+      findRefreshTokenWithUser: vi.fn().mockResolvedValue(tokenRecord()),
+      rotateRefreshToken: vi.fn().mockResolvedValue(false),
+    });
+
+    await expect(
+      new TokenService(repo, createTokenStore()).refreshToken("refresh-token"),
+    ).rejects.toThrow(/already used/i);
+
+    expect(repo.rotateRefreshToken).toHaveBeenCalledWith(
+      "rt-1",
+      "REFRESH",
+      "user-1",
+      "fam-1",
+      expect.any(Date),
+    );
+    expect(repo.createRefreshToken).not.toHaveBeenCalled();
   });
 });
 

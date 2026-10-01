@@ -32,7 +32,20 @@ vi.mock("multer", () => {
   return { default: multerFn };
 });
 
-import { uploadProductImage } from "@shared/middlewares/upload.middleware";
+const { sharpMetadata } = vi.hoisted(() => ({
+  sharpMetadata: vi.fn(),
+}));
+
+vi.mock("sharp", () => ({
+  default: vi.fn(() => ({
+    metadata: sharpMetadata,
+  })),
+}));
+
+import {
+  uploadProductImage,
+  validateUploadedImage,
+} from "@shared/middlewares/upload.middleware";
 
 describe("upload.middleware", () => {
   beforeEach(() => {
@@ -66,5 +79,53 @@ describe("upload.middleware", () => {
     const cb = vi.fn();
     fileFilter(req, { mimetype: "image/jpeg" } as any, cb);
     expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("should accept valid image content", async () => {
+    sharpMetadata.mockResolvedValue({ format: "jpeg" });
+
+    const req = {
+      file: {
+        buffer: Buffer.from("valid-image"),
+      },
+    } as any;
+
+    const next = vi.fn();
+
+    await validateUploadedImage(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("should reject fake image content", async () => {
+    sharpMetadata.mockRejectedValue(new Error("Invalid image"));
+
+    const req = {
+      file: {
+        buffer: Buffer.from("not-an-image"),
+      },
+    } as any;
+
+    const next = vi.fn();
+
+    await validateUploadedImage(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith(expect.any(BadRequestError));
+  });
+
+  it("should reject unsupported detected image format", async () => {
+    sharpMetadata.mockResolvedValue({ format: "gif" });
+
+    const req = {
+      file: {
+        buffer: Buffer.from("gif-image"),
+      },
+    } as any;
+
+    const next = vi.fn();
+
+    await validateUploadedImage(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith(expect.any(BadRequestError));
   });
 });

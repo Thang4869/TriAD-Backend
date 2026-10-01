@@ -145,10 +145,52 @@ export class PrismaAuthRepository
     });
   }
 
-  async revokeRefreshToken(id: string): Promise<void> {
-    await prisma.refreshToken.update({
-      where: { id },
-      data: { revokedAt: new Date() },
+  async revokeRefreshToken(id: string): Promise<boolean> {
+    const result = await prisma.refreshToken.updateMany({
+      where: {
+        id,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    return result.count === 1;
+  }
+
+  async rotateRefreshToken(
+    currentTokenId: string,
+    token: string,
+    userId: string,
+    familyId: string,
+    expiresAt: Date,
+  ): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
+      const revoked = await tx.refreshToken.updateMany({
+        where: {
+          id: currentTokenId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+        },
+      });
+
+      if (revoked.count !== 1) {
+        return false;
+      }
+
+      await tx.refreshToken.create({
+        data: {
+          token: hashRefreshToken(token),
+          userId,
+          familyId,
+          expiresAt,
+        },
+      });
+
+      return true;
     });
   }
 

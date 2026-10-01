@@ -2,7 +2,10 @@ import { Router } from "express";
 import { authMiddleware } from "@/container";
 import { requireAdmin } from "@shared/middlewares/rbac.middleware";
 import { validate } from "@shared/middlewares/validation.middleware";
-import { uploadProductImage } from "@shared/middlewares/upload.middleware";
+import {
+  uploadProductImage,
+  validateUploadedImage,
+} from "@shared/middlewares/upload.middleware";
 import { productsController } from "@/container";
 import {
   getProductsQuerySchema,
@@ -67,6 +70,7 @@ router.post(
   "/admin/:id/images",
   validate(deleteProductParamsSchema),
   uploadProductImage,
+  validateUploadedImage,
   productsController.adminUploadImage,
 );
 

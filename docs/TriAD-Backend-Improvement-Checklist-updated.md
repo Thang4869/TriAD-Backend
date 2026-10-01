@@ -64,7 +64,7 @@
   `COOKIE_DOMAIN` đã vào validated config. FE/BE tests và quality gates PASS;
   còn chờ Vercel + Render deployment verification.
 
-**Bước tiếp theo:** B4/#38, B5/#40 và B8/#39 đã CLOSED. P0 #12 giữ pending production verification. Chuyển sang **C1 / audit #14** để chốt hướng CQRS/projection trước các P1 phụ thuộc.
+**Bước tiếp theo:** #36 → #40 đều CLOSED. P0 #12 giữ pending production verification. Chuyển sang **C1 / audit #14** để chốt hướng CQRS/projection trước các P1 phụ thuộc.
 
 ## Phạm vi và giới hạn của đánh giá
 
@@ -164,13 +164,13 @@ dù ADR-003 viết "Query adapters read those tables".
       và quy định fail-open hay fail-closed khi Redis chết.
 - [ ] **B3.** JWT thiếu `iss`, `aud`, `jti`, `typ`
       (access/refresh/preauth). Thêm và kiểm tra khi verify.
-- [x] **B4. [CLOSED]** `/metrics` và `/api/docs` chỉ mount khi
+- [x] **B4. [CLOSED]** `/metrics` và `/api/docs` chỉ mount ngoài production; production trả `404`, integration test PASS.
       `!config.isProduction`; production trả `404`. Có integration test
       cho cả hai route và GitHub đã có commit `cc8eb56`.
-- [x] **B5. [CLOSED]** Global JSON/urlencoded limit đã giảm từ `10mb`
+- [x] **B5. [CLOSED]** Global JSON/urlencoded limit đã giảm xuống `100kb`; payload quá lớn trả HTTP `413`; unit test, typecheck và lint PASS.
       xuống `100kb`; upload ảnh dùng Multer nên giữ giới hạn riêng `5MB`.
       Error handler map `entity.too.large` thành HTTP `413 Request payload
-      too large`; unit test, typecheck và lint PASS.
+too large`; unit test, typecheck và lint PASS.
 - [ ] **B6. [PARTIAL]** Cross-origin delivery/recovery của CSRF token đã
       được sửa: frontend không còn đọc API-domain cookie bằng `document.cookie`;
       backend trả token sau auth và có authenticated `GET /auth/csrf` để phục
@@ -184,7 +184,7 @@ dù ADR-003 viết "Query adapters read those tables".
   - Quyết định `passOnStoreError` khi Redis lỗi.
   - Thêm khoá theo tài khoản, không chỉ `ip+email`.
   - Thêm limiter cho verify-email và resend.
-- [x] **B8. [CLOSED]** `validateUploadedImage` dùng `sharp.metadata()`
+- [x] **B8. [CLOSED]** Upload dùng `sharp.metadata()` để xác thực nội dung thực; `/uploads` và `uploads/tmp` legacy đã được loại bỏ; unit test, typecheck và lint PASS.
       và chỉ chấp nhận `jpeg/png/webp`; fake content/unsupported format bị
       reject. Static `/uploads` và `uploads/tmp` legacy đã được loại bỏ sau
       khi xác nhận frontend không còn consumer và image storage dùng
@@ -549,7 +549,8 @@ dù ADR-003 viết "Query adapters read those tables".
 ## Tiến độ đồng bộ với audit checklist --- 01/10/2026
 
 - **CLOSED chắc chắn liên quan checklist này:** A1, A2, A3, A4, A5, A6, A7, C2.
-- **PARTIAL/PENDING:** P0 #12 còn production verification trên Vercel + Render.
+- **P0 code-side:** #36, #37, #38, #39 và #40 đều CLOSED.
+- **PARTIAL/PENDING:** chỉ P0 #12 còn production verification trên Vercel + Render.
 - **NEXT:** C1 / audit #14 — quyết định giữ hay bỏ projection/read-model.
 - **Chưa đánh dấu CLOSED nếu chưa có đủ code + regression/integration
   evidence + quality gates.**

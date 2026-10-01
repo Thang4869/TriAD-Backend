@@ -27,7 +27,7 @@ kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật t
 | 🟡 **PARTIAL / PENDING** | Implementation đã có nhưng còn runtime/deployment verification hoặc một phần việc |
 | ⬜ **TODO / OPEN**       | Chưa triển khai hoặc chưa có trạng thái đóng                                      |
 
-> **P0 hiện tại:** #1–#11 và #35–#41 đã CLOSED về code/test; #12 vẫn chờ production verification trên Vercel + Render.
+> **P0 hiện tại:** #1–#11 và #35–#41 đã CLOSED về code/test, bao gồm #36, #37, #38, #39 và #40; #12 vẫn chờ production verification trên Vercel + Render.
 
 ## P0 — Production blockers
 
@@ -241,7 +241,7 @@ kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật t
 
 ## Tiến độ cập nhật 01/10/2026
 
-- **P0 đã CLOSED chắc chắn trên code/test:** #1–#11 và #35–#41.
+- **P0 đã CLOSED chắc chắn trên code/test:** #1–#11 và #35–#41. Riêng chuỗi #36 → #40 đều đã PASS và CLOSED.
 - **P0 #12:** 🟡 **IMPLEMENTATION COMPLETE / PRODUCTION VERIFICATION PENDING** --- code, regression tests và quality gates đã hoàn tất; còn chờ kiểm chứng trên đúng hai domain Vercel + Render sau khi deploy.
 - **#39:** content validation bằng `sharp` và cleanup static `/uploads` legacy đã hoàn tất; typecheck/lint/unit test PASS.
 - **#40:** global body limit `100kb` + HTTP `413` handling đã hoàn tất; typecheck/lint/unit test PASS.
@@ -392,7 +392,7 @@ Static route `/uploads` và thư mục `uploads/tmp` legacy đã được loại
 
 **Việc đã làm:** global JSON/urlencoded body limit đã giảm từ `10mb` xuống `100kb`. Upload ảnh không bị ảnh hưởng vì dùng `multipart/form-data` qua Multer với giới hạn riêng `5MB`. Error handler nhận diện `entity.too.large` và trả HTTP `413` với message `Request payload too large`.
 
-**Evidence:** unit test cho error handler, typecheck và lint PASS. Thay đổi `100kb` + HTTP `413` được đưa vào cùng commit với cleanup #39.
+**Evidence:** unit test cho error handler, typecheck và lint PASS. #40 được xác nhận CLOSED.
 
 **File liên quan:** [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), [error-handler.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/error-handler.middleware.ts), `tests/unit/shared/middlewares/error-handler.middleware.test.ts`
 

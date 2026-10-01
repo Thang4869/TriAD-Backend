@@ -659,8 +659,7 @@ describe("AuthService", () => {
         .fn()
         .mockResolvedValue(record);
       repository.revokeAllTokensInFamily = vi.fn().mockResolvedValue(undefined);
-      repository.revokeRefreshToken = vi.fn().mockResolvedValue(undefined);
-      repository.createRefreshToken = vi.fn().mockResolvedValue({});
+      repository.rotateRefreshToken = vi.fn().mockResolvedValue(true);
       // Sử dụng real TokenService để kiểm tra logic thật
       const realTokenService = new TokenService(repository, createTokenStore());
       const serviceWithRealToken = new AuthService(
@@ -673,8 +672,13 @@ describe("AuthService", () => {
       );
 
       const result = await serviceWithRealToken.refreshToken(validRefreshToken);
-      expect(repository.revokeRefreshToken).toHaveBeenCalledWith(record.id);
-      expect(repository.createRefreshToken).toHaveBeenCalled();
+      expect(repository.rotateRefreshToken).toHaveBeenCalledWith(
+        record.id,
+        expect.any(String),
+        record.user.id,
+        record.familyId,
+        expect.any(Date),
+      );
       expect(result).toHaveProperty("accessToken");
       expect(result).toHaveProperty("refreshToken");
       expect(result.user).toMatchObject({ id: baseUser.id });

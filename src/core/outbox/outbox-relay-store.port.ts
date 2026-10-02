@@ -17,6 +17,11 @@ export interface OutboxRelayUpdate {
   lastError?: string;
 }
 
+export interface OutboxObservabilitySnapshot {
+  oldestPendingOccurredAt: Date | null;
+  deadLetteredCount: number;
+}
+
 export interface OutboxRelayStore {
   claimBatch(
     owner: string,
@@ -36,4 +41,6 @@ export interface OutboxRelayStore {
     ids: string[],
     lockLeaseSeconds: number,
   ): Promise<string[]>;
+
+  getObservabilitySnapshot(): Promise<OutboxObservabilitySnapshot>;
 }

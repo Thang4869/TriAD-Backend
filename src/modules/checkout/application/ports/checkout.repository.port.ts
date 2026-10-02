@@ -13,6 +13,7 @@ export interface LockedProductRow {
   version: number;
   name: string;
   price: number;
+  isActive: boolean;
 }
 
 export interface DiscountRecord {

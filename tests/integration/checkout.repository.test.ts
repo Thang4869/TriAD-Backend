@@ -41,9 +41,43 @@ describe("PrismaCheckoutRepository (integration)", () => {
       const rows = await repository.lockProductsForUpdate(tx, [productId]);
 
       expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        id: productId,
+        name: "Checkout Product",
+        price: 100,
+        isActive: true,
+      });
       expect(rows[0].stock).toBe(10);
       expect(rows[0].version).toBe(0);
     });
+  });
+
+  it("existsAndActive phân biệt active, inactive và missing", async () => {
+    const inactive = await prisma.product.create({
+      data: {
+        name: "Inactive Checkout Product",
+        description: "d",
+        price: 100,
+        stock: 10,
+        category: "c",
+        slug: `checkout-inactive-${Date.now()}`,
+        images: [],
+        isActive: false,
+      },
+    });
+    const { PrismaProductsRepository } =
+      await import("@modules/products/infrastructure/repositories/prisma-products.repository");
+    const productsRepository = new PrismaProductsRepository();
+
+    await expect(productsRepository.existsAndActive(productId)).resolves.toBe(
+      true,
+    );
+    await expect(productsRepository.existsAndActive(inactive.id)).resolves.toBe(
+      false,
+    );
+    await expect(
+      productsRepository.existsAndActive("missing-product"),
+    ).resolves.toBe(false);
   });
 
   it("decrementProductStock thành công khi version khớp (optimistic lock hợp lệ)", async () => {
@@ -96,6 +130,29 @@ describe("PrismaCheckoutRepository (integration)", () => {
         where: { aggregateId: productId, eventName: "ProductUpdated" },
       }),
     ).resolves.toMatchObject({ aggregateId: productId });
+  });
+
+  it("inactive product rollback không trừ kho và không ghi ProductUpdated", async () => {
+    await prisma.product.update({
+      where: { id: productId },
+      data: { isActive: false },
+    });
+    const stockService = new StockReservationService(repository);
+
+    await expect(
+      repository.runInTransaction((tx) =>
+        stockService.reserveStock(tx, [{ productId, quantity: 3 }]),
+      ),
+    ).rejects.toThrow("inactive");
+
+    await expect(
+      prisma.product.findUnique({ where: { id: productId } }),
+    ).resolves.toMatchObject({ stock: 10, version: 0, isActive: false });
+    await expect(
+      prisma.outboxEvent.findFirst({
+        where: { aggregateId: productId, eventName: "ProductUpdated" },
+      }),
+    ).resolves.toBeNull();
   });
 
   it("stock event failure rollback stock and order transaction", async () => {

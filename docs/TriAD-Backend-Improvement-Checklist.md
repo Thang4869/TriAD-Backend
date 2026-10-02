@@ -300,8 +300,8 @@ Runtime read-side đã được nối thật: Catalog đọc `product_catalog_pr
 ## P8. Phát hiện mới (từ đối chiếu với checklist AI khác, đã tự xác minh trong code)
 
 - [x] **L1. Dashboard revenue semantics đã được chốt và đồng bộ.** `grossOrderValue`/GMV là tổng `Order.total` của order không `CANCELLED`; COD/PENDING và REFUNDED được tính, CANCELLED bị loại. `getGrossOrderValue`, `getGrossOrderValueByDay` và `refreshDashboard` dùng cùng semantics; hệ thống không giả định `PAID` vì chưa có payment settlement workflow. Regression/integration tests chứng minh date boundary, daily grouping, zero và không double count.
-- [ ] **L2. `existsAndActive` không kiểm tra `isActive`.** Trong `prisma-products.repository.ts`, hàm chỉ kiểm tra sản phẩm có tồn tại (`findUnique` rồi `!== null`), không lọc `isActive: true`. Bất kỳ chỗ nào dùng hàm này để xác nhận "sản phẩm đang bán" trước khi cho thêm vào giỏ/đặt hàng đều có thể chấp nhận sản phẩm đã bị ẩn/xoá mềm. Sửa thành `findUnique({ where: { id, isActive: true } })`.
-- [ ] **L3. Ngưỡng miễn phí vận chuyển: xác nhận lại giữa backend và frontend.** Backend (`pricing.service.ts`) dùng so sánh chặt: `subtotal > FREE_SHIPPING_THRESHOLD` (đúng bằng ngưỡng thì **không** miễn phí ship). Nếu frontend hiển thị dùng `>=`, số tiền hiển thị lúc thanh toán sẽ khác số tiền server tính đúng tại mốc ngưỡng. Cần đối chiếu code frontend `CheckoutRenderer.js` để xác nhận, sau đó thống nhất một chiều — tốt nhất là để server luôn là nguồn sự thật và frontend chỉ hiển thị lại kết quả server trả về, không tự tính lại (xem cả mục C-tương-đương ở phần độ tin cậy).
+- [x] **L2. `existsAndActive` không kiểm tra `isActive`.** Đã sửa truy vấn repository để lọc `isActive: true`, bổ sung test active/inactive/missing, và giữ `ProductImageService` từ chối upload vào sản phẩm inactive.
+- [x] **L3. Ngưỡng miễn phí vận chuyển: xác nhận lại giữa backend và frontend.** Backend miễn phí tại `subtotal >= CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD`; test bao phủ ngay dưới, đúng bằng và trên ngưỡng. Frontend chỉ giữ estimate trước submit và success modal hiển thị phí ship server trả về.
 
 ## Thứ tự đề xuất
 

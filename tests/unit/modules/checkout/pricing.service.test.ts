@@ -51,7 +51,31 @@ describe("PricingService - thuế và phí ship", () => {
     );
   });
 
-  it("miễn phí ship khi subtotal vượt ngưỡng", async () => {
+  it("tính phí ship ngay dưới ngưỡng", async () => {
+    const service = new PricingService(createRepository(), enabledFeatureFlags);
+
+    const result = await service.calculatePricing(
+      new Money(CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD - 1),
+      undefined,
+      tx,
+    );
+
+    expect(result.shippingFee.getValue()).toBe(CHECKOUT_PRICING.SHIPPING_FEE);
+  });
+
+  it("miễn phí ship đúng bằng ngưỡng", async () => {
+    const service = new PricingService(createRepository(), enabledFeatureFlags);
+
+    const result = await service.calculatePricing(
+      new Money(CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD),
+      undefined,
+      tx,
+    );
+
+    expect(result.shippingFee.getValue()).toBe(0);
+  });
+
+  it("miễn phí ship trên ngưỡng", async () => {
     const service = new PricingService(createRepository(), enabledFeatureFlags);
 
     const result = await service.calculatePricing(
@@ -61,18 +85,6 @@ describe("PricingService - thuế và phí ship", () => {
     );
 
     expect(result.shippingFee.getValue()).toBe(0);
-  });
-
-  it("đúng bằng ngưỡng thì vẫn tính phí ship (điều kiện là lớn hơn)", async () => {
-    const service = new PricingService(createRepository(), enabledFeatureFlags);
-
-    const result = await service.calculatePricing(
-      new Money(CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD),
-      undefined,
-      tx,
-    );
-
-    expect(result.shippingFee.getValue()).toBe(CHECKOUT_PRICING.SHIPPING_FEE);
   });
 
   it("không có mã giảm giá thì discountAmount = 0 và discountCode undefined", async () => {

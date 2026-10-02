@@ -29,7 +29,7 @@ export class PricingService {
     const tax = subtotal.multiply(CHECKOUT_PRICING.TAX_RATE);
 
     const shippingFee = new Money(
-      subtotal.getValue() > CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD
+      subtotal.getValue() >= CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD
         ? 0
         : CHECKOUT_PRICING.SHIPPING_FEE,
     );

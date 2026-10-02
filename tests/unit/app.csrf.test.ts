@@ -10,6 +10,16 @@ vi.mock("express-rate-limit", () => ({
   }),
 }));
 
+vi.mock("@/container", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/container")>();
+
+  return {
+    ...actual,
+    authMiddleware: (_req: Request, _res: Response, next: NextFunction) =>
+      next(),
+  };
+});
+
 describe("global CSRF protection", () => {
   it("rejects an unsafe cookie-authenticated write without CSRF", async () => {
     const response = await request(app)

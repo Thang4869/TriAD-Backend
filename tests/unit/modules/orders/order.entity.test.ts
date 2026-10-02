@@ -220,14 +220,15 @@ describe("Order.applyPricing", () => {
 });
 
 describe("Order.total", () => {
-  it("không bao giờ âm dù giảm giá lớn hơn tổng sau thuế/ship", () => {
+  it("từ chối persisted state có giảm giá vượt tổng đơn hàng", () => {
     const order = Order.hydrate(
       hydrateData({
         discountAmount: 500_000,
         items: [{ productId: "p1", productName: "Áo", quantity: 1, price: 10 }],
       }),
     );
-    expect(order.total.getValue()).toBe(0);
+
+    expect(() => order.total).toThrow(InvalidDiscountError);
   });
 });
 

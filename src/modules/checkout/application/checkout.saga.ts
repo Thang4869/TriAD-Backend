@@ -1,8 +1,4 @@
 import {
-  FeatureFlag,
-  FeatureFlagPort,
-} from "@shared/application/feature-flags/feature-flag.port";
-import {
   executeSagaStep,
   SagaStateStore,
 } from "@shared/application/saga/saga-state";
@@ -59,7 +55,6 @@ export class CheckoutSaga {
   constructor(
     private readonly ports: CheckoutSagaPorts,
     private readonly stateStore: SagaStateStore<CheckoutSagaState>,
-    private readonly featureFlags?: FeatureFlagPort,
   ) {}
 
   async execute(input: CheckoutInput): Promise<CheckoutSagaState> {
@@ -123,21 +118,15 @@ export class CheckoutSaga {
         };
         await this.stateStore.save(input.sagaId, state);
       }
-      if (
-        this.featureFlags?.isEnabled(FeatureFlag.NewCheckoutFlow, {
-          userId: input.userId,
-        }) !== false
-      ) {
-        await executeSagaStep(
-          "checkout.confirm-order",
-          () =>
-            withSpan("saga.checkout.confirm", () =>
-              this.ports.confirmOrder(state.orderId!),
-            ),
-          STEP_POLICY,
-          deadlineAt,
-        );
-      }
+      await executeSagaStep(
+        "checkout.confirm-order",
+        () =>
+          withSpan("saga.checkout.confirm", () =>
+            this.ports.confirmOrder(state.orderId!),
+          ),
+        STEP_POLICY,
+        deadlineAt,
+      );
       state = { ...state, step: "COMPLETED" };
       await this.stateStore.save(input.sagaId, state);
       checkoutSucceeded.inc();

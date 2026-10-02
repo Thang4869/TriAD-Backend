@@ -209,29 +209,29 @@ integration tests, contract tests, build, Prisma validation và diff check PASS.
 
 **File liên quan:** [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts)
 
-### #26 — ⬜ OPEN
+### #26 — ✅ CLOSED
 
-**Việc cần làm:** Rà soát việc ghép HTML từ tên sản phẩm; renderer đang chèn `item.name` bằng `innerHTML`. Dùng nút text hoặc escape nội dung.
+**Đã hoàn tất:** CheckoutRenderer dựng summary bằng DOM nodes và `textContent`; malicious product-name tests xác nhận không tạo `IMG`, `SCRIPT` hoặc event handler executable.
 
 **File liên quan:** [CheckoutRenderer.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutRenderer.js)
 
 ## P2 — Quality evidence & portfolio readiness
 
-### #27 — ⬜ OPEN
+### #27 — ✅ CLOSED
 
-**Việc cần làm:** Viết test checkout frontend dùng validator thật và, payload thật của controller. Test controller hiện mock validator nên không phát hiện lỗi ở mục 1.
+**Đã hoàn tất:** CheckoutController tests dùng CheckoutValidator thật với DOM form hiện tại, kiểm tra payload `{ paymentMethod, address, phone, notes, discountCode }`, validation lỗi và optional-field normalization.
 
 **File liên quan:** [CheckoutController.test.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/unit/modules/checkout/CheckoutController.test.js), [CheckoutValidator.test.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/unit/modules/checkout/CheckoutValidator.test.js)
 
-### #28 — ⬜ OPEN
+### #28 — ✅ CLOSED
 
-**Việc cần làm:** Thay test integration chỉ kiểm tra header tồn tại bằng test thực sự thêm giỏ → đặt đơn → kiểm tra số đơn và giỏ.
+**Đã hoàn tất:** Integration test dùng CartController, CartRepository, CheckoutService, CheckoutController, CheckoutValidator và CheckoutRenderer thật trên stateful fake HTTP backend; xác nhận add-cart → checkout → server order pricing/order number → cart empty, cùng failure path giữ cart.
 
 **File liên quan:** [checkout.flow.test.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/integration/checkout.flow.test.js)
 
-### #29 — ⬜ OPEN
+### #29 — ✅ CLOSED
 
-**Việc cần làm:** Cập nhật E2E theo form và yêu cầu đăng nhập hiện tại; test đang điền các trường tên/email của luồng cũ.
+**Đã hoàn tất:** Playwright khởi động Vite đúng từ frontend repository trên port được cấu hình, phục vụ authoritative `public/pages/checkout-modal.html` và `public/pages/success-modal.html`. Current authenticated checkout flow passed locally with address/phone/notes/discount selectors, returned order number, server total and empty-cart assertions.
 
 **File liên quan:** [cart.spec.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/e2e/cart.spec.js)
 

@@ -58,7 +58,7 @@
 - `existsAndActive` không kiểm tra `isActive` (xem **L2**).
 - Ngưỡng miễn phí vận chuyển dùng `>` ở backend, cần đối chiếu với frontend dùng `>=` (xem **L3**, phần backend đã xác minh, phần frontend chưa).
 
-**Chưa tự xác minh được** (thiếu `schema.prisma`, `Dockerfile`, `.github/workflows`, và toàn bộ code `TriAD-12` trong export hiện có): các mục liên quan unique constraint của `orderNumber`, cấu hình CI/Docker, và mọi mục phía frontend trong checklist kia (#1, #5, #12, #17 phần FE, #26–29). Về mặt logic các mục đó hợp lý, nhưng nên tự đối chiếu trực tiếp với code frontend hoặc gửi export frontend để mình kiểm tra.
+**Đã đối chiếu frontend:** #26–#29 đã đóng bằng test/build; checkout Playwright hiện khởi động Vite đúng, dùng authoritative public partials và pass current authenticated flow. Full E2E còn một test search phụ thuộc backend runtime, không thuộc phạm vi #29. Các mục backend/CI khác vẫn giữ nguyên trạng thái chưa xác minh.
 
 ## Phạm vi và giới hạn của đánh giá
 

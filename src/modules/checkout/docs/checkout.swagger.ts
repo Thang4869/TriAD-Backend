@@ -43,7 +43,16 @@
  *                 data:
  *                   type: object
  *                   properties:
- *                     order: { type: object }
+ *                     order:
+ *                       type: object
+ *                       required: [subtotal, tax, shippingFee, discountAmount, total]
+ *                       properties:
+ *                         subtotal: { type: number }
+ *                         tax: { type: number }
+ *                         shippingFee: { type: number }
+ *                         discountAmount: { type: number }
+ *                         discountCode: { type: string, nullable: true }
+ *                         total: { type: number }
  *                     idempotent: { type: boolean, description: "true nếu đây là kết quả trả về từ 1 request trùng key trước đó" }
  *       400:
  *         description: Giỏ hàng trống hoặc dữ liệu không hợp lệ

@@ -153,15 +153,15 @@ integration tests, contract tests, build, Prisma validation và diff check PASS.
 
 **File liên quan:** [projection-writer.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-writer.ts), [projection-rating.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-rating.ts), [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts), [rebuild-order-history-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-order-history-projection.ts), [rebuild-product-catalog-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-product-catalog-projection.ts), [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md)
 
-### #17 — ⬜ OPEN
+### #17 — ✅ CLOSED
 
-**Việc cần làm:** Thống nhất ngưỡng miễn phí vận; chuyển: backend dùng `>` còn frontend hiển thị `>=`. Ngay tại ngưỡng, số tiền hiển thị có thể khác số tiền lưu.
+**Việc đã làm:** Backend dùng `CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD` với điều kiện `>=`. Frontend giữ estimate trước submit, còn success modal hiển thị `order.shippingFee` từ server nên không thể ghi đè kết quả cuối.
 
 **File liên quan:** [pricing.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/services/pricing.service.ts), [CheckoutRenderer.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutRenderer.js)
 
-### #18 — ⬜ OPEN
+### #18 — ✅ CLOSED
 
-**Việc cần làm:** Để server trả breakdown giá cuối; cùng và frontend hiển thị theo kết quả server, gồm thuế, phí vận chuyển và giảm giá.
+**Việc đã làm:** Checkout response dùng `result.order` cho cả checkout mới và idempotent replay. Swagger công khai `subtotal`, `tax`, `shippingFee`, `discountAmount`, `discountCode` và `total`; frontend success modal hiển thị toàn bộ các trường từ order persisted.
 
 **File liên quan:** [pricing.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/services/pricing.service.ts), [CheckoutRenderer.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutRenderer.js)
 
@@ -171,15 +171,15 @@ integration tests, contract tests, build, Prisma validation và diff check PASS.
 
 **File liên quan:** [money.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/value-objects/money.ts), [schema.prisma](https://github.com/Thang4869/TriAD-Backend/blob/main/prisma/schema.prisma)
 
-### #20 — ⬜ OPEN
+### #20 — ✅ CLOSED
 
-**Việc cần làm:** Sửa `existsAndActive`: tên hàm nói kiểm tra sản phẩm đang hoạt động, nhưng truy vấn hiện chỉ kiểm tra sản phẩm có tồn tại.
+**Việc đã làm:** `existsAndActive` chỉ trả `true` khi bản ghi có `isActive: true`; active, inactive và missing đều có test repository. `ProductImageService` tiếp tục dùng cổng này nên inactive upload bị từ chối.
 
 **File liên quan:** [prisma-products.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-products.repository.ts)
 
-### #21 — ⬜ OPEN
+### #21 — ✅ CLOSED
 
-**Việc cần làm:** Bảo đảm tồn kho, giá, trạng thái, `isActive` và số lượng giỏ được xác nhận ở cùng thời điểm đặt hàng; bổ sung ca kiểm tra khi sản phẩm thay đổi trong lúc checkout.
+**Việc đã làm:** `lockProductsForUpdate` khóa và trả về `id`, `name`, `price`, `stock`, `version`, `isActive`. Checkout kiểm tra snapshot này cho product tồn tại, active, quantity dương nguyên và đủ stock trước khi decrement; order dùng locked price. PostgreSQL integration tests chứng minh lock fields, rollback khi event thất bại và stock contention/serializable conflict.
 
 **File liên quan:** [stock-reservation.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/services/stock-reservation.service.ts), [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts)
 

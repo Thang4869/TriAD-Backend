@@ -3,6 +3,11 @@
 > Đánh giá lần đầu 28/09/2026, cập nhật 29/09 (lần 2), cập nhật 01/10/2026 (lần 3) sau khi đối chiếu bản export code mới nhất (333 file).
 > Điểm hiện tại: **~8.5/10** (từ 7/10 → 7/10 → **8.5/10**). Mục tiêu: **9–10/10**.
 
+## Cập nhật 02/10/2026 — P1 #23 và #25
+
+- **P1 #23 — IMPLEMENTATION COMPLETE / EXTERNAL PROVIDER SMOKE PENDING:** OAuth account được định danh bằng provider subject với unique constraint; state provider-bound, TTL-bound và single-use qua atomic Redis consume; email trust/linking policy không dùng email chưa verified để tự động link; unit và PostgreSQL integration tests đã pass. Còn chờ Google/Facebook redirect, callback và deployed cookie/CORS smoke.
+- **P1 #25 — CLOSED:** `NewCheckoutFlow` là flag chết và đã bị xoá. Production vẫn dùng một checkout transaction flow; `CheckoutSaga` chưa được production-wire và rollout thuộc #24.
+
 ## Cập nhật 01/10 (lần 3) — thay đổi lớn, đã xác minh trực tiếp trong code
 
 **Đã sửa thật và sửa đúng gốc rễ (không chỉ vá triệu chứng):**
@@ -200,7 +205,7 @@ Runtime read-side đã được nối thật: Catalog đọc `product_catalog_pr
   - `createOrder` và `createOrderItems` trong `PrismaCheckoutRepository`.
   - Thư mục rỗng `checkout/domain/` và `core/unit-of-work/`.
   - File lạc `tests/unit/shared/domain/event-bus/event-bus.port.ts`.
-  - Flag `NewCheckoutFlow` chỉ dùng làm span attribute.
+  - Flag `NewCheckoutFlow` đã được xoá vì không điều khiển production behavior.
 - [ ] **H2.** Trùng lặp chức năng: `CheckoutService.getOrders/getOrder` và `OrdersService.getOrders/getOrderById` (hai API `/api/checkout/orders` và `/api/orders`). Chọn một nguồn.
 - [ ] **H3.** Sửa log message trỏ tới file không tồn tại (`prisma/schema.additions.prisma`).
 - [ ] **H4.** Thống nhất quy ước tên interface (`IOrdersRepository` và `OutboxRelayStore`/`TokenStorePort` đang lẫn lộn) và tên file (`.port.ts` / `-models.ts`).

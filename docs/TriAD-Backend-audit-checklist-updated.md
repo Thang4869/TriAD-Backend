@@ -189,9 +189,11 @@ integration tests, contract tests, build, Prisma validation và diff check PASS.
 
 **File liên quan:** [token.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/services/token.service.ts), [prisma-auth.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/infrastructure/repositories/prisma-auth.repository.ts), `tests/integration/auth.refresh-token-race.test.ts`
 
-### #23 — ⬜ OPEN
+### #23 — 🟡 IMPLEMENTATION COMPLETE / EXTERNAL PROVIDER SMOKE PENDING
 
-**Việc cần làm:** Kiểm chứng OAuth `state`, callback, liên kết tài khoản và email do provider trả về trước khi dùng như danh tính đã xác minh.
+**Đã hoàn tất cục bộ:** OAuth dùng `provider + providerSubject` làm danh tính chuẩn với unique constraint PostgreSQL; email chỉ là thuộc tính. State có 32 byte entropy, TTL 10 phút, gắn provider và consume một lần bằng Redis Lua atomic get-and-delete. Google chỉ tin email khi profile trả về `verified === true`; Facebook không tự suy diễn verified. Email provider chưa verified không được tự động link tài khoản local; user mới được tạo ở trạng thái chưa verified và dùng lại email verification hiện có. OAuth account, User, Cart và UserRegistered event được tạo atomically; duplicate callback/race được DB unique constraint xử lý.
+
+**Còn chờ external smoke:** real Google/Facebook authorization redirect và callback, deployed callback URL, cookie và CORS behavior. Chưa có credentials/provider runtime verification trong môi trường này.
 
 **File liên quan:** [oauth2.strategy.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/strategies/oauth2.strategy.ts), [auth.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/auth.service.ts)
 
@@ -201,9 +203,9 @@ integration tests, contract tests, build, Prisma validation và diff check PASS.
 
 **File liên quan:** [checkout.saga.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/application/checkout.saga.ts), [cancellation-refund.saga.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/application/cancellation-refund.saga.ts), [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md)
 
-### #25 — ⬜ OPEN
+### #25 — ✅ CLOSED
 
-**Việc cần làm:** Làm rõ cờ `NewCheckoutFlow`: trong `CheckoutService` hiện cờ được ghi vào trace, nhưng không chọn một luồng checkout khác.
+**Đã hoàn tất:** Xoá `NewCheckoutFlow` vì audit xác nhận chỉ có một production checkout flow; không còn trace-only flag hoặc `FEATURE_NEW_CHECKOUT_FLOW`. Checkout transaction hiện tại giữ nguyên. `CheckoutSaga` vẫn chưa được nối vào request path production; bước confirmation của Saga được khai báo rõ ràng và việc rollout vẫn thuộc P1 #24.
 
 **File liên quan:** [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts)
 
@@ -270,6 +272,8 @@ integration tests, contract tests, build, Prisma validation và diff check PASS.
 - **P1 #14 / C1:** ✅ **CLOSED** — Catalog, Orders và Dashboard đều đọc qua query-side ports/adapters; dashboard có divergence integration evidence và không còn legacy write-model repository/token.
 - **P1 #15:** ✅ **CLOSED** — product create, generic/price update, activate/deactivate, image metadata và checkout stock mutation đều có durable event/outbox guarantee; rollback và projection convergence đã có evidence.
 - **P1 #16:** ✅ **CLOSED** — legacy baseline `-1`, monotonic CAS/P2002 handling, Order/Product sourceVersion persistence, duplicate/out-of-order safety, status dependency retry, rating repair, rebuild/live protection và operations runbook đã có evidence; Docker-based integration và full quality gates PASS.
+- **P1 #23:** 🟡 **IMPLEMENTATION COMPLETE / EXTERNAL PROVIDER SMOKE PENDING** — provider subject identity, state replay protection, email trust/linking policy, unit tests và PostgreSQL integration tests đã hoàn tất; còn chờ Google/Facebook runtime verification.
+- **P1 #25:** ✅ **CLOSED** — dead `NewCheckoutFlow` removed; single transaction-based checkout remains and Saga production rollout stays deferred to #24.
 - **P0 #12:** 🟡 **IMPLEMENTATION COMPLETE / PRODUCTION VERIFICATION PENDING** --- code, regression tests và quality gates đã hoàn tất; còn chờ kiểm chứng trên đúng hai domain Vercel + Render sau khi deploy.
 - **#39:** content validation bằng `sharp` và cleanup static `/uploads` legacy đã hoàn tất; typecheck/lint/unit test PASS.
 - **#40:** global body limit `100kb` + HTTP `413` handling đã hoàn tất; typecheck/lint/unit test PASS.

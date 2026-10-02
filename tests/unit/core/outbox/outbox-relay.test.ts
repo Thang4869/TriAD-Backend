@@ -44,6 +44,7 @@ const ROW = {
     eventName: "OrderPlaced",
     aggregateId: "order-1",
     occurredAt: new Date().toISOString(),
+    sourceVersion: 0,
   },
   attempts: 0,
 };
@@ -85,7 +86,7 @@ describe("OutboxRelay.pollOnce", () => {
     ).pollOnce();
 
     expect(publish).toHaveBeenCalledWith(
-      expect.objectContaining({ eventName: "OrderPlaced" }),
+      expect.objectContaining({ eventName: "OrderPlaced", sourceVersion: 0 }),
       expect.any(Object),
     );
     const [id, owner, data] = vi.mocked(store.updateClaimed).mock.calls[0];

@@ -23,34 +23,35 @@ describe("rebuildProductCatalogProjection", () => {
       ])
       .mockResolvedValueOnce([]);
 
-    const upsert = vi.fn().mockReturnValue({ operation: "upsert" });
-    const transaction = vi.fn().mockResolvedValue([]);
+    const create = vi.fn().mockResolvedValue(undefined);
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const aggregate = vi.fn().mockResolvedValue({
+      _avg: { rating: 4.5 },
+      _count: { rating: 2 },
+    });
+    const queryRaw = vi.fn().mockResolvedValue([]);
+    const transaction = vi.fn();
 
     const db = {
       product: { findMany },
-      productCatalogProjection: { upsert },
+      productCatalogProjection: { create, updateMany },
+      review: { aggregate },
+      $queryRaw: queryRaw,
       $transaction: transaction,
     };
+    transaction.mockImplementation((callback) => callback(db));
 
     const processed = await rebuildProductCatalogProjection(db as never, 100);
 
     expect(processed).toBe(1);
 
-    expect(upsert).toHaveBeenCalledWith({
-      where: { productId: "product-1" },
-      create: expect.objectContaining({
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
         productId: "product-1",
         avgRating: 4.5,
         reviewCount: 2,
         sourceVersion: 3,
       }),
-      update: expect.objectContaining({
-        avgRating: 4.5,
-        reviewCount: 2,
-        sourceVersion: 3,
-      }),
     });
-
-    expect(transaction).toHaveBeenCalledOnce();
   });
 });

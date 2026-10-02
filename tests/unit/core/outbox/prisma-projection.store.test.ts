@@ -1,19 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import prisma from "@core/database/prisma";
 import { PrismaProjectionStore } from "@core/outbox/prisma-projection.store";
-import { OrderPlacedEvent } from "@shared/domain/events/order-events";
+import {
+  OrderPlacedEvent,
+  OrderStatusChangedEvent,
+} from "@shared/domain/events/order-events";
 import { ProductPriceChangedEvent } from "@shared/domain/events/product-events";
 
 vi.mock("@core/database/prisma", () => ({
   default: {
     orderHistoryProjection: {
-      upsert: vi.fn(),
+      create: vi.fn(),
       updateMany: vi.fn(),
+      findUnique: vi.fn(),
       count: vi.fn(),
       aggregate: vi.fn(),
     },
     productCatalogProjection: {
-      upsert: vi.fn(),
+      create: vi.fn(),
       updateMany: vi.fn(),
       count: vi.fn(),
     },
@@ -29,18 +33,21 @@ vi.mock("@core/database/prisma", () => ({
     product: {
       findUnique: vi.fn(),
     },
+    $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
   },
 }));
 
 const mockedPrisma = prisma as unknown as {
   orderHistoryProjection: {
-    upsert: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
     updateMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
     count: ReturnType<typeof vi.fn>;
     aggregate: ReturnType<typeof vi.fn>;
   };
   productCatalogProjection: {
-    upsert: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
     updateMany: ReturnType<typeof vi.fn>;
     count: ReturnType<typeof vi.fn>;
   };
@@ -56,17 +63,32 @@ const mockedPrisma = prisma as unknown as {
   product: {
     findUnique: ReturnType<typeof vi.fn>;
   };
+  $transaction: ReturnType<typeof vi.fn>;
+  $queryRaw: ReturnType<typeof vi.fn>;
 };
 
 describe("PrismaProjectionStore", () => {
   const store = new PrismaProjectionStore();
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedPrisma.orderHistoryProjection.updateMany.mockResolvedValue({
+      count: 0,
+    });
+    mockedPrisma.orderHistoryProjection.create.mockResolvedValue(undefined);
+    mockedPrisma.productCatalogProjection.updateMany.mockResolvedValue({
+      count: 0,
+    });
+    mockedPrisma.productCatalogProjection.create.mockResolvedValue(undefined);
+    mockedPrisma.orderHistoryProjection.findUnique.mockResolvedValue({
+      orderId: "order-1",
+    });
+    mockedPrisma.$transaction.mockImplementation((callback) =>
+      callback(mockedPrisma),
+    );
+    mockedPrisma.$queryRaw.mockResolvedValue([]);
   });
 
   it("upserts an order history projection", async () => {
-    mockedPrisma.orderHistoryProjection.upsert.mockResolvedValue(undefined);
-
     const event = new OrderPlacedEvent(
       "order-1",
       "user-1",
@@ -80,14 +102,12 @@ describe("PrismaProjectionStore", () => {
       140,
       [],
     );
+    Object.assign(event, { sourceVersion: 0 });
     const occurredAt = event.occurredAt;
     await store.upsertOrderPlaced(event);
 
-    expect(prisma.orderHistoryProjection.upsert).toHaveBeenCalledWith({
-      where: {
-        orderId: "order-1",
-      },
-      create: {
+    expect(prisma.orderHistoryProjection.create).toHaveBeenCalledWith({
+      data: {
         orderId: "order-1",
         userId: "user-1",
         orderNumber: "ORD-1",
@@ -99,19 +119,29 @@ describe("PrismaProjectionStore", () => {
         total: 140,
         items: [],
         placedAt: occurredAt,
-      },
-      update: {
-        userId: "user-1",
-        orderNumber: "ORD-1",
-        paymentStatus: "PENDING",
-        subtotal: 100,
-        tax: 10,
-        shippingFee: 30,
-        total: 140,
-        items: [],
-        placedAt: occurredAt,
+        sourceVersion: 0,
       },
     });
+  });
+
+  it("rejects an unversioned order placement", async () => {
+    const event = new OrderPlacedEvent(
+      "order-legacy",
+      "user-1",
+      "ORD-LEGACY",
+      "User",
+      "u@example.com",
+      "PENDING",
+      100,
+      0,
+      0,
+      100,
+      [],
+    );
+
+    await expect(store.upsertOrderPlaced(event)).rejects.toThrow(
+      "Versioned projection event is required",
+    );
   });
 
   it("upserts the current product into the catalog projection", async () => {
@@ -127,8 +157,6 @@ describe("PrismaProjectionStore", () => {
       isActive: true,
       version: 1,
     });
-    mockedPrisma.productCatalogProjection.upsert.mockResolvedValue(undefined);
-
     const event = new ProductPriceChangedEvent("product-1", 90, 100);
 
     await store.upsertProduct(event);
@@ -137,17 +165,88 @@ describe("PrismaProjectionStore", () => {
       where: { id: "product-1" },
     });
 
-    expect(mockedPrisma.productCatalogProjection.upsert).toHaveBeenCalledWith(
+    expect(mockedPrisma.productCatalogProjection.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { productId: "product-1" },
-        create: expect.objectContaining({
+        data: expect.objectContaining({
           productId: "product-1",
           sourceVersion: 1,
         }),
-        update: expect.objectContaining({
-          sourceVersion: 1,
-        }),
       }),
+    );
+  });
+
+  it("applies only a newer order status revision", async () => {
+    const event = new OrderStatusChangedEvent(
+      "order-1",
+      "PROCESSING",
+      "SHIPPED",
+      "user-1",
+    );
+    Object.assign(event, { sourceVersion: 2 });
+    mockedPrisma.orderHistoryProjection.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
+    await store.updateOrderStatus(event);
+
+    expect(mockedPrisma.orderHistoryProjection.updateMany).toHaveBeenCalledWith(
+      {
+        where: { orderId: "order-1", sourceVersion: { lt: 2 } },
+        data: { status: "SHIPPED", sourceVersion: 2 },
+      },
+    );
+    expect(
+      mockedPrisma.orderHistoryProjection.findUnique,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("treats duplicate and stale order status revisions as no-ops", async () => {
+    const event = new OrderStatusChangedEvent(
+      "order-1",
+      "PROCESSING",
+      "SHIPPED",
+      "user-1",
+    );
+    Object.assign(event, { sourceVersion: 2 });
+
+    await store.updateOrderStatus(event);
+
+    expect(mockedPrisma.orderHistoryProjection.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { orderId: "order-1", sourceVersion: { lt: 2 } },
+      }),
+    );
+    expect(
+      mockedPrisma.orderHistoryProjection.findUnique,
+    ).toHaveBeenCalledOnce();
+  });
+
+  it("throws a retryable dependency error when status precedes placement", async () => {
+    mockedPrisma.orderHistoryProjection.findUnique.mockResolvedValue(null);
+    const event = new OrderStatusChangedEvent(
+      "order-1",
+      "PENDING",
+      "PROCESSING",
+      "user-1",
+    );
+    Object.assign(event, { sourceVersion: 1 });
+
+    await expect(store.updateOrderStatus(event)).rejects.toMatchObject({
+      name: "ProjectionDependencyError",
+      retryable: true,
+    });
+  });
+
+  it("rejects an unversioned order status", async () => {
+    const event = new OrderStatusChangedEvent(
+      "order-legacy",
+      "PENDING",
+      "PROCESSING",
+      "user-1",
+    );
+
+    await expect(store.updateOrderStatus(event)).rejects.toThrow(
+      "Versioned projection event is required",
     );
   });
 
@@ -158,7 +257,7 @@ describe("PrismaProjectionStore", () => {
 
     await store.upsertProduct(event);
 
-    expect(mockedPrisma.productCatalogProjection.upsert).not.toHaveBeenCalled();
+    expect(mockedPrisma.productCatalogProjection.create).not.toHaveBeenCalled();
   });
 
   it("refreshes product catalog rating aggregates", async () => {

@@ -111,6 +111,7 @@ describe("projection read adapters (integration, real DB)", () => {
           },
         ],
         placedAt,
+        sourceVersion: 0,
       },
     });
     await prisma.orderHistoryProjection.create({
@@ -133,6 +134,7 @@ describe("projection read adapters (integration, real DB)", () => {
           },
         ],
         placedAt,
+        sourceVersion: 0,
       },
     });
     await prisma.adminDashboardProjection.upsert({

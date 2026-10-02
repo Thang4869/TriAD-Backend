@@ -129,13 +129,29 @@ kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật t
 
 **File liên quan:** [admin-product.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/services/admin-product.service.ts), [prisma-products.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-products.repository.ts), [product.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/domain/product.entity.ts), [projection-handler.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-handler.ts), [container.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/container.ts)
 
-### #16 — 🟡 PARTIAL / PENDING
+### #16 — ✅ CLOSED
 
-**Việc cần làm:** Quy định cách xử lý projection cũ, event phát lặp và thứ tự event; kiểm thử rebuild sau các thay đổi projection. Export `DNEK-output(5).md` đã có `rebuild-order-history-projection.ts`, `rebuild-product-catalog-projection.ts`, test rebuild và projection store với upsert/idempotent paths. Product projection cũng đã nhận nhóm create/update/price/stock/activate/deactivate events. Tuy nhiên quy tắc chống event cũ ghi đè event mới và version/source ordering chưa được chứng minh đầy đủ cho mọi projection.
+**Đã hoàn tất:** `sourceVersion` monotonic CAS cho Product Catalog và Order
+History; duplicate/stale/out-of-order events là no-op; status-before-placement
+retryable; OrderPlaced dùng revision 0 và status events dùng committed Order
+revision; unversioned order projection events bị reject không fallback timestamp.
 
-**Phần còn lại:** chốt ordering/version policy, kiểm thử out-of-order + duplicate events, và ghi quy trình rebuild vào operations runbook.
+Legacy Order History và Product Catalog rows được baseline `sourceVersion = -1`
+trong migration, sau đó rebuild authoritative nâng lên `Order.version` hoặc
+`Product.version`. Product rebuild dùng cùng CAS writer với live handler; rating
+là derived dimension riêng, được recompute authoritative với row lock ngay cả
+khi Product version không đổi.
 
-**File liên quan:** [projection-handler.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-handler.ts), [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts), [rebuild-order-history-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-order-history-projection.ts), [rebuild-product-catalog-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-product-catalog-projection.ts)
+**Evidence:** `tests/integration/projection.ordering.test.ts` chứng minh legacy
+stale repair, rebuild idempotency, newer-row protection, concurrent writes và
+same-version rating repair trên PostgreSQL thật. Unit tests chứng minh P2002
+same-identity recovery, unrelated unique conflict rethrow, sourceVersion
+persistence, relay preservation và missing/unversioned event handling.
+
+**Quality gates:** Docker/Testcontainers, typecheck, lint, 817 unit tests, 109
+integration tests, contract tests, build, Prisma validation và diff check PASS.
+
+**File liên quan:** [projection-writer.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-writer.ts), [projection-rating.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-rating.ts), [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts), [rebuild-order-history-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-order-history-projection.ts), [rebuild-product-catalog-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-product-catalog-projection.ts), [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md)
 
 ### #17 — ⬜ OPEN
 
@@ -253,7 +269,7 @@ kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật t
 - **P0 đã CLOSED chắc chắn trên code/test:** #1–#11 và #35–#41. Riêng P0 #12 vẫn pending production verification.
 - **P1 #14 / C1:** ✅ **CLOSED** — Catalog, Orders và Dashboard đều đọc qua query-side ports/adapters; dashboard có divergence integration evidence và không còn legacy write-model repository/token.
 - **P1 #15:** ✅ **CLOSED** — product create, generic/price update, activate/deactivate, image metadata và checkout stock mutation đều có durable event/outbox guarantee; rollback và projection convergence đã có evidence.
-- **P1 #16:** 🟡 **PARTIAL / PENDING** — đã có rebuild tooling và projection upsert paths; ordering/version policy và replay/out-of-order evidence vẫn cần hoàn thiện.
+- **P1 #16:** ✅ **CLOSED** — legacy baseline `-1`, monotonic CAS/P2002 handling, Order/Product sourceVersion persistence, duplicate/out-of-order safety, status dependency retry, rating repair, rebuild/live protection và operations runbook đã có evidence; Docker-based integration và full quality gates PASS.
 - **P0 #12:** 🟡 **IMPLEMENTATION COMPLETE / PRODUCTION VERIFICATION PENDING** --- code, regression tests và quality gates đã hoàn tất; còn chờ kiểm chứng trên đúng hai domain Vercel + Render sau khi deploy.
 - **#39:** content validation bằng `sharp` và cleanup static `/uploads` legacy đã hoàn tất; typecheck/lint/unit test PASS.
 - **#40:** global body limit `100kb` + HTTP `413` handling đã hoàn tất; typecheck/lint/unit test PASS.

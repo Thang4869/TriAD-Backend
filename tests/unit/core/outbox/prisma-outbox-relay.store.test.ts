@@ -54,6 +54,18 @@ describe("PrismaOutboxRelayStore", () => {
     expect(mockedPrisma.$queryRaw).toHaveBeenCalledTimes(1);
   });
 
+  it("reads active lag and unresolved dead-letter backlog from the database", async () => {
+    const oldestPendingOccurredAt = new Date("2026-10-02T00:00:00.000Z");
+    mockedPrisma.$queryRaw.mockResolvedValue([
+      { oldestPendingOccurredAt, deadLetteredCount: 2 },
+    ]);
+
+    await expect(store.getObservabilitySnapshot()).resolves.toEqual({
+      oldestPendingOccurredAt,
+      deadLetteredCount: 2,
+    });
+  });
+
   it("updates only an event claimed by the same owner", async () => {
     mockedPrisma.outboxEvent.updateMany.mockResolvedValue({ count: 1 });
 

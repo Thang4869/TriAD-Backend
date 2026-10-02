@@ -6,21 +6,38 @@ import {
 } from "@shared/domain/event-bus/event-bus";
 import { logger } from "@core/logger/winston";
 import { OutboxRelayStore } from "@core/outbox/outbox-relay-store.port";
+import {
+  outboxDeadLetteredEvents,
+  outboxEventsFailed,
+  outboxEventsPublished,
+  outboxLagSeconds,
+} from "@core/metrics/metrics.registry";
 
 vi.mock("@core/logger/winston", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-// Giữ nguyên withRetry nhưng rút ngắn thời gian chờ để test chạy nhanh.
-vi.mock("@core/circuit-breaker/circuit-breaker", () => ({
-  withRetry: vi.fn(async (fn: () => Promise<unknown>) => fn()),
-}));
+vi.mock("@core/metrics/metrics.registry", () => {
+  const metric = () => ({ inc: vi.fn(), set: vi.fn() });
+  return {
+    outboxEventsClaimed: metric(),
+    outboxEventsPublished: metric(),
+    outboxEventsFailed: metric(),
+    outboxEventsDeadLettered: metric(),
+    outboxLagSeconds: metric(),
+    outboxDeadLetteredEvents: metric(),
+  };
+});
 
 function createStore(): OutboxRelayStore {
   return {
     claimBatch: vi.fn(),
     updateClaimed: vi.fn().mockResolvedValue(true),
     renewClaims: vi.fn().mockResolvedValue([]),
+    getObservabilitySnapshot: vi.fn().mockResolvedValue({
+      oldestPendingOccurredAt: null,
+      deadLetteredCount: 0,
+    }),
   };
 }
 
@@ -165,6 +182,109 @@ describe("OutboxRelay.pollOnce", () => {
     );
   });
 
+  it("retries a logical handler failure and publishes after recovery", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    const publish = vi
+      .fn()
+      .mockResolvedValueOnce({ success: false, failedHandlers: ["HandlerB"] })
+      .mockResolvedValueOnce({ success: true, failedHandlers: [] });
+
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
+
+    expect(publish).toHaveBeenCalledTimes(2);
+    expect(store.updateClaimed).toHaveBeenCalledWith(
+      "outbox-1",
+      expect.any(String),
+      expect.objectContaining({ publishedAt: expect.any(Date) }),
+    );
+    expect(outboxEventsFailed.inc).not.toHaveBeenCalled();
+    expect(outboxEventsPublished.inc).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a persistent logical failure three times but records one durable failure", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    const publish = vi
+      .fn()
+      .mockResolvedValue({ success: false, failedHandlers: ["HandlerB"] });
+
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
+
+    expect(publish).toHaveBeenCalledTimes(3);
+    expect(store.updateClaimed).toHaveBeenCalledTimes(1);
+    expect(outboxEventsFailed.inc).toHaveBeenCalledTimes(1);
+    expect(outboxEventsPublished.inc).not.toHaveBeenCalled();
+  });
+
+  it("does not repeat a successful sibling handler during immediate retry", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    const succeeded = new Set<string>();
+    const tracker: HandlerExecutionTracker = {
+      hasSucceeded: vi.fn(async (_eventId, handlerName) =>
+        succeeded.has(handlerName),
+      ),
+      recordResult: vi.fn(async (_eventId, handlerName, result) => {
+        if (result.success) succeeded.add(handlerName);
+      }),
+    };
+    let handlerBCalls = 0;
+    let handlerACalls = 0;
+    const eventBus = new EventBus();
+    eventBus.subscribe("OrderPlaced", "HandlerA", async () => {
+      handlerACalls += 1;
+    });
+    eventBus.subscribe("OrderPlaced", "HandlerB", async () => {
+      handlerBCalls += 1;
+      if (handlerBCalls === 1) throw new Error("transient");
+    });
+
+    await new OutboxRelay(store, tracker, eventBus).pollOnce();
+
+    expect(handlerACalls).toBe(1);
+    expect(handlerBCalls).toBe(2);
+    expect(store.updateClaimed).toHaveBeenCalledWith(
+      "outbox-1",
+      expect.any(String),
+      expect.objectContaining({ publishedAt: expect.any(Date) }),
+    );
+  });
+
+  it("refreshes lag and dead-letter backlog from the snapshot when no row is claimable", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([] as never);
+    vi.mocked(store.getObservabilitySnapshot).mockResolvedValue({
+      oldestPendingOccurredAt: new Date(Date.now() - 5_000),
+      deadLetteredCount: 3,
+    });
+
+    await new OutboxRelay(store, handlerTracker, createEventBus()).pollOnce();
+
+    expect(outboxLagSeconds.set).toHaveBeenCalledWith(expect.any(Number));
+    expect(outboxDeadLetteredEvents.set).toHaveBeenCalledWith(3);
+  });
+
+  it("does not overwrite valid metrics or block delivery when the snapshot fails", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    vi.mocked(store.getObservabilitySnapshot).mockRejectedValue(
+      new Error("metrics db down"),
+    );
+
+    await new OutboxRelay(store, handlerTracker, createEventBus()).pollOnce();
+
+    expect(store.updateClaimed).toHaveBeenCalled();
+    expect(outboxLagSeconds.set).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Outbox observability refresh failed",
+      expect.any(Object),
+    );
+  });
+
   it("dead-letters the event after the maximum number of attempts", async () => {
     vi.mocked(store.claimBatch).mockResolvedValue([
       {
@@ -213,7 +333,7 @@ describe("OutboxRelay.pollOnce", () => {
       createEventBus(publish),
     ).pollOnce();
 
-    expect(publish).toHaveBeenCalledTimes(2);
+    expect(publish).toHaveBeenCalledTimes(3);
     expect(vi.mocked(store.updateClaimed)).toHaveBeenCalledTimes(2);
   });
 

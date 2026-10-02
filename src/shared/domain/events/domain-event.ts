@@ -3,6 +3,7 @@ export interface DomainEvent {
   occurredAt: Date;
   aggregateId: string;
   version?: number;
+  sourceVersion?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -11,6 +12,7 @@ export abstract class BaseDomainEvent implements DomainEvent {
   public readonly occurredAt: Date;
   public readonly aggregateId: string;
   public readonly version?: number;
+  public readonly sourceVersion?: number;
   public readonly metadata?: Record<string, unknown>;
 
   constructor(

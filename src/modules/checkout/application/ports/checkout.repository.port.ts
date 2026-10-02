@@ -52,6 +52,7 @@ export interface ICheckoutRepository {
   persistProductEvent(
     tx: CheckoutTransaction,
     event: DomainEvent,
+    sourceVersion: number,
   ): Promise<void>;
 
   findDiscountByCode(

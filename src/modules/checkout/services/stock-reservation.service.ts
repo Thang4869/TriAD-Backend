@@ -81,6 +81,7 @@ export class StockReservationService {
       await this.repository.persistProductEvent(
         tx,
         new ProductUpdatedEvent(item.productId),
+        product.version + 1,
       );
     }
     return lockedProducts;

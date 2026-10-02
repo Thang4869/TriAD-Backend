@@ -142,14 +142,21 @@ export class PrismaProductsRepository implements IProductsRepository {
         },
       });
 
-      await this.persistEvents(tx, [aggregate]);
+      await this.persistEvents(
+        tx,
+        [aggregate],
+        new Map([[aggregate.id, created.version]]),
+      );
 
       return created;
     });
   }
 
   async update(id: string, data: UpdateProductData): Promise<ProductRecord> {
-    return prisma.product.update({ where: { id }, data });
+    return prisma.product.update({
+      where: { id },
+      data: { ...data, version: { increment: 1 } },
+    });
   }
 
   async updateWithEvents(
@@ -160,17 +167,24 @@ export class PrismaProductsRepository implements IProductsRepository {
     return prisma.$transaction(async (tx) => {
       const updated = await tx.product.update({
         where: { id },
-        data,
+        data: { ...data, version: { increment: 1 } },
       });
 
-      await this.persistEvents(tx, [aggregate]);
+      await this.persistEvents(
+        tx,
+        [aggregate],
+        new Map([[id, updated.version]]),
+      );
 
       return updated;
     });
   }
 
   async setActive(id: string, isActive: boolean): Promise<ProductRecord> {
-    return prisma.product.update({ where: { id }, data: { isActive } });
+    return prisma.product.update({
+      where: { id },
+      data: { isActive, version: { increment: 1 } },
+    });
   }
 
   async setActiveWithEvents(
@@ -181,10 +195,14 @@ export class PrismaProductsRepository implements IProductsRepository {
     return prisma.$transaction(async (tx) => {
       const updated = await tx.product.update({
         where: { id },
-        data: { isActive },
+        data: { isActive, version: { increment: 1 } },
       });
 
-      await this.persistEvents(tx, [aggregate]);
+      await this.persistEvents(
+        tx,
+        [aggregate],
+        new Map([[id, updated.version]]),
+      );
 
       return updated;
     });

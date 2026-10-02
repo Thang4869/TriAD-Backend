@@ -1,4 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
+import { writeProductCatalogProjection } from "./projection-writer";
+import { refreshProductRatingProjection } from "./projection-rating";
 
 const DEFAULT_BATCH_SIZE = 100;
 
@@ -63,19 +65,20 @@ export async function rebuildProductCatalogProjection(
         createdAt: product.createdAt,
       };
 
-      return db.productCatalogProjection.upsert({
-        where: {
-          productId: product.id,
-        },
-        create: {
-          productId: product.id,
-          ...data,
-        },
-        update: data,
-      });
+      return {
+        productId: product.id,
+        ...data,
+      };
     });
 
-    await db.$transaction(operations);
+    await Promise.all(
+      operations.map((data) => writeProductCatalogProjection(db, data)),
+    );
+    await Promise.all(
+      products.map((product) =>
+        db.$transaction((tx) => refreshProductRatingProjection(tx, product.id)),
+      ),
+    );
 
     processed += products.length;
     cursor = products[products.length - 1].id;

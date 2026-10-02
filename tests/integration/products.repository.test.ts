@@ -118,7 +118,7 @@ describe("PrismaProductsRepository (integration)", () => {
       where: { id: product.id },
     });
 
-    expect(persisted?.price).toBe(200);
+    expect(persisted?.price.toString()).toBe("200");
 
     const outboxEvent = await prisma.outboxEvent.findFirst({
       where: {
@@ -171,7 +171,7 @@ describe("PrismaProductsRepository (integration)", () => {
       where: { id: product.id },
     });
 
-    expect(persisted?.price).toBe(100);
+    expect(persisted?.price.toString()).toBe("100");
   });
 
   it("updateWithEvents ghi ProductUpdated cho generic update và rollback khi outbox thất bại", async () => {

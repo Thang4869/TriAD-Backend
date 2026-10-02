@@ -7,6 +7,7 @@ import type {
   CartItemWithProduct,
   ProductStockInfo,
 } from "../../application/ports/cart-models";
+import { toSafeMoneyNumber } from "@shared/infrastructure/money-number";
 
 // ---------- Prisma implementation ----------
 
@@ -21,7 +22,7 @@ export class PrismaCartRepository implements ICartRepository {
   } as const;
 
   async findCartWithItems(userId: string): Promise<CartWithItems | null> {
-    return prisma.cart.findUnique({
+    const cart = await prisma.cart.findUnique({
       where: { userId },
       include: {
         items: {
@@ -31,10 +32,11 @@ export class PrismaCartRepository implements ICartRepository {
         },
       },
     });
+    return cart ? mapCartWithItems(cart) : null;
   }
 
   async createCartWithItems(userId: string): Promise<CartWithItems> {
-    return prisma.cart.create({
+    const cart = await prisma.cart.create({
       data: { userId },
       include: {
         items: {
@@ -44,6 +46,7 @@ export class PrismaCartRepository implements ICartRepository {
         },
       },
     });
+    return mapCartWithItems(cart);
   }
 
   async findCartByUserId(userId: string): Promise<PrismaCart | null> {
@@ -77,21 +80,23 @@ export class PrismaCartRepository implements ICartRepository {
     productId: string,
     quantity: number,
   ): Promise<CartItemWithProduct> {
-    return prisma.cartItem.create({
+    const item = await prisma.cartItem.create({
       data: { cartId, productId, quantity },
       include: { product: true },
     });
+    return mapCartItemWithProduct(item);
   }
 
   async updateCartItemQuantity(
     itemId: string,
     quantity: number,
   ): Promise<CartItemWithProduct> {
-    return prisma.cartItem.update({
+    const item = await prisma.cartItem.update({
       where: { id: itemId },
       data: { quantity },
       include: { product: true },
     });
+    return mapCartItemWithProduct(item);
   }
 
   async deleteCartItem(itemId: string): Promise<void> {
@@ -102,4 +107,69 @@ export class PrismaCartRepository implements ICartRepository {
     const result = await prisma.cartItem.deleteMany({ where: { cartId } });
     return result.count;
   }
+}
+
+function mapCartWithItems(cart: {
+  id: string;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  items: Array<{
+    id: string;
+    cartId: string;
+    productId: string;
+    quantity: number;
+    createdAt: Date;
+    updatedAt: Date;
+    product: {
+      id: string;
+      name: string;
+      price: Parameters<typeof toSafeMoneyNumber>[0];
+      images: string[];
+      stock: number;
+      slug: string;
+    };
+  }>;
+}): CartWithItems {
+  return {
+    ...cart,
+    items: cart.items.map((item) => ({
+      ...item,
+      product: {
+        ...item.product,
+        price: toSafeMoneyNumber(item.product.price),
+      },
+    })),
+  };
+}
+
+function mapCartItemWithProduct(item: {
+  id: string;
+  cartId: string;
+  productId: string;
+  quantity: number;
+  createdAt: Date;
+  updatedAt: Date;
+  product: {
+    id: string;
+    name: string;
+    description: string | null;
+    price: Parameters<typeof toSafeMoneyNumber>[0];
+    stock: number;
+    version: number;
+    category: string;
+    images: string[];
+    slug: string;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+}): CartItemWithProduct {
+  return {
+    ...item,
+    product: {
+      ...item.product,
+      price: toSafeMoneyNumber(item.product.price),
+    },
+  };
 }

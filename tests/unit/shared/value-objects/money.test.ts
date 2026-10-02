@@ -17,9 +17,31 @@ describe("Money", () => {
     expect(() => new Money(-1)).toThrow("Amount cannot be negative");
   });
 
-  it("should round amount to integer", () => {
-    const money = new Money(1000.9);
-    expect(money.getValue()).toBe(1001);
+  it.each([NaN, Infinity, -Infinity])(
+    "should reject non-finite amount %s",
+    (amount) => {
+      expect(() => new Money(amount)).toThrow("Amount must be finite");
+    },
+  );
+
+  it("should reject amounts that round outside the safe integer range", () => {
+    expect(() => new Money(Number.MAX_SAFE_INTEGER + 1)).toThrow(
+      "Amount must be a safe integer",
+    );
+  });
+
+  it("should accept the maximum safe integer exactly", () => {
+    expect(new Money(Number.MAX_SAFE_INTEGER).getValue()).toBe(
+      Number.MAX_SAFE_INTEGER,
+    );
+  });
+
+  it.each([
+    [10.4, 10],
+    [10.5, 11],
+    [10.6, 11],
+  ])("should use half-up rounding for %s", (amount, expected) => {
+    expect(new Money(amount).getValue()).toBe(expected);
   });
 
   it("should add two monies with same currency", () => {
@@ -49,10 +71,34 @@ describe("Money", () => {
     expect(() => a.subtract(b)).toThrow("Currency mismatch");
   });
 
+  it("should throw when subtraction would become negative", () => {
+    expect(() => new Money(100).subtract(new Money(101))).toThrow(
+      "Amount cannot be negative",
+    );
+  });
+
   it("should multiply by factor", () => {
     const money = new Money(100);
     const result = money.multiply(2.5);
     expect(result.getValue()).toBe(250);
+  });
+
+  it.each([NaN, Infinity, -Infinity, -1])(
+    "should reject invalid multiplication factor %s",
+    (factor) => {
+      expect(() => new Money(100).multiply(factor)).toThrow();
+    },
+  );
+
+  it("should reject multiplication overflow", () => {
+    expect(() => new Money(Number.MAX_SAFE_INTEGER).multiply(2)).toThrow(
+      "Amount must be a safe integer",
+    );
+  });
+
+  it("should reject invalid currency identifiers", () => {
+    expect(() => new Money(100, "")).toThrow("Invalid currency");
+    expect(() => new Money(100, "vnd")).toThrow("Invalid currency");
   });
 
   it("should format to string", () => {

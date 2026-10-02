@@ -10,6 +10,7 @@ import { OrderStatus } from "../../domain/order-status";
 import { Order } from "../../domain/order.entity";
 import { persistDomainEvents } from "@core/outbox/persist-domain-events";
 import { ConflictError } from "@shared/utils/errors";
+import { toSafeMoneyNumber } from "@shared/infrastructure/money-number";
 type PersistDomainEvents = typeof persistDomainEvents;
 
 export class PrismaOrdersRepository implements IOrdersRepository {
@@ -210,11 +211,11 @@ export class PrismaOrdersRepository implements IOrdersRepository {
       version: order.version,
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,
-      subtotal: order.subtotal,
-      tax: order.tax,
-      shippingFee: order.shippingFee,
-      total: order.total,
-      discountAmount: order.discountAmount,
+      subtotal: toSafeMoneyNumber(order.subtotal),
+      tax: toSafeMoneyNumber(order.tax),
+      shippingFee: toSafeMoneyNumber(order.shippingFee),
+      total: toSafeMoneyNumber(order.total),
+      discountAmount: toSafeMoneyNumber(order.discountAmount),
       discountCode: order.discountCode,
       customerName: order.customerName,
       customerEmail: order.customerEmail,
@@ -228,8 +229,8 @@ export class PrismaOrdersRepository implements IOrdersRepository {
         orderId: item.orderId,
         productId: item.productId,
         quantity: item.quantity,
-        price: item.price,
-        total: item.total,
+        price: toSafeMoneyNumber(item.price),
+        total: toSafeMoneyNumber(item.total),
         product: item.product,
       })),
     };

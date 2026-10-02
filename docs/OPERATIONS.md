@@ -12,7 +12,7 @@
 - Inspect `triad_backend_outbox_lag_seconds`, `triad_backend_outbox_dead_lettered_events`, claimed/published/failed counters and `outbox_events` rows with `publishedAt IS NULL`.
 - Verify the relay process is running and database connections are not exhausted.
 - Check `leaseUntil`, `attempts` and `lastError`. Expired leases are safe to reclaim.
-- Fix the downstream handler or dependency, then replay eligible events through the normal relay. Preserve event ids so handler idempotency remains effective.
+- Fix the downstream handler or dependency, then explicitly requeue selected dead-letter events with `npm run outbox:replay`; the normal relay performs delivery afterward. Preserve event ids so handler idempotency remains effective.
 
 `triad_backend_outbox_lag_seconds` is the age of the oldest unpublished,
 non-dead-lettered event. It includes events waiting for retry/backoff and
@@ -27,6 +27,149 @@ The relay refreshes both values from an authoritative database aggregate on
 every poll, including empty claim batches. If that read fails, the relay logs
 the observability error and keeps the last valid metric values while delivery
 continues.
+
+### Dead-letter replay
+
+Dead-letter events are never reclaimed automatically. An operator must first
+fix the failing handler or downstream dependency, inspect the affected rows,
+and explicitly requeue the selected events.
+
+Inspect unresolved dead letters:
+
+```sql
+SELECT
+  id,
+  "eventName",
+  "aggregateId",
+  attempts,
+  "occurredAt",
+  "deadLetteredAt",
+  "lastError"
+FROM outbox_events
+WHERE "publishedAt" IS NULL
+  AND "deadLetteredAt" IS NOT NULL
+ORDER BY "deadLetteredAt" ASC;
+```
+
+Replay one or more dead-letter events by their existing outbox ids:
+
+```bash
+npm run outbox:replay -- --ids="event-id-1,event-id-2"
+```
+
+Replay has the following safety rules:
+
+- every requested id must still exist as an unpublished dead-letter event;
+- the complete selection is requeued atomically; partial replay is rejected;
+- the original outbox event id and payload are preserved;
+- `attempts`, `deadLetteredAt`, `lastError` and stale lease metadata are reset;
+- existing `outbox_handler_log` rows are preserved;
+- handlers already recorded as `SUCCESS` are skipped on replay;
+- handlers that previously failed may run again;
+- projection handlers still enforce their `sourceVersion` CAS/idempotency rules.
+
+Preserving the original outbox id is required for handler-level idempotency.
+Do not copy a dead-letter row into a new outbox event merely to replay it,
+because doing so creates a new event identity and can repeat external side
+effects.
+
+After requeueing, verify that the normal relay claims and publishes the event:
+
+```sql
+SELECT
+  id,
+  attempts,
+  "publishedAt",
+  "deadLetteredAt",
+  "lockOwner",
+  "leaseUntil",
+  "lastError"
+FROM outbox_events
+WHERE id IN ('event-id-1', 'event-id-2');
+```
+
+A successfully replayed event should eventually have `publishedAt` set and no
+active lease. If it dead-letters again, stop replaying it repeatedly and
+investigate the handler or dependency recorded in `lastError`.
+
+### Published outbox retention
+
+Only already-published events are eligible for retention cleanup. Pending,
+leased and unpublished dead-letter events are recovery state and must not be
+removed by the cleanup command.
+
+The cleanup command defaults to:
+
+- retention: 30 days;
+- maximum deletion batch: 500 rows;
+- dry-run mode.
+
+Preview eligible rows without deleting anything:
+
+```bash
+npm run outbox:cleanup
+```
+
+Use a different retention window or batch size while remaining in dry-run mode:
+
+```bash
+npm run outbox:cleanup -- --retention-days=60 --limit=1000
+```
+
+After reviewing the reported eligible count, explicitly add `--execute` to
+perform one bounded deletion batch:
+
+```bash
+npm run outbox:cleanup -- --retention-days=30 --limit=500 --execute
+```
+
+The cleanup query deletes only rows where `publishedAt` is older than the
+retention cutoff. Related `outbox_handler_log` rows are removed by the
+database foreign-key cascade only when their published outbox event is
+deleted.
+
+Run cleanup repeatedly in bounded batches when a large backlog exists rather
+than issuing one unbounded delete. Monitor database load between batches.
+
+Verify remaining published rows around the cutoff:
+
+```sql
+SELECT
+  COUNT(*) AS eligible
+FROM outbox_events
+WHERE "publishedAt" IS NOT NULL
+  AND "publishedAt" < NOW() - INTERVAL '30 days';
+```
+
+### Outbox maintenance indexes
+
+The relay claim path and published-event cleanup path use PostgreSQL partial
+indexes created by migration
+`20261003020000_outbox_maintenance_indexes`.
+
+The relay claim index covers only unpublished, non-dead-letter events.
+
+Verify the indexes:
+
+```sql
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'outbox_events'
+  AND indexname IN (
+    'outbox_events_relay_claim_idx',
+    'outbox_events_published_cleanup_idx'
+  );
+```
+
+Expected indexes:
+
+- `outbox_events_relay_claim_idx` for relay candidate selection by
+  `attempts`, `leaseUntil` and `occurredAt`;
+- `outbox_events_published_cleanup_idx` for retention cleanup ordered by
+  `publishedAt`.
+
+These indexes are intentionally defined in SQL migration rather than
+`schema.prisma` because they use PostgreSQL partial-index predicates.
 
 ## Outbox delivery and relay leases
 

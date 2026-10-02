@@ -20,6 +20,8 @@
     "test:integration:watch": "vitest --config vitest.workspace.mts --project integration",
     "test:contract": "vitest run --config vitest.workspace.mts --project unit tests/unit/config/openapi.contract.test.ts",
     "test:chaos": "ts-node -r tsconfig-paths/register scripts/chaos-outbox.ts",
+    "outbox:replay": "ts-node -r tsconfig-paths/register scripts/outbox-replay-dead-letters.ts",
+    "outbox:cleanup": "ts-node -r tsconfig-paths/register scripts/outbox-cleanup.ts",
     "projection:rebuild:orders": "ts-node -r tsconfig-paths/register scripts/rebuild-order-history-projection.ts",
     "projection:rebuild:products": "ts-node -r tsconfig-paths/register scripts/rebuild-product-catalog-projection.ts",
     "seed": "ts-node scripts/seed.ts",

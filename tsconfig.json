@@ -29,6 +29,6 @@
     "emitDecoratorMetadata": true,
     "noImplicitAny": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist", "src/**/*.js", "src/**/*.js.map"]
 }

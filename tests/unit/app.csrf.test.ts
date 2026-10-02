@@ -1,7 +1,14 @@
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import app from "@/app";
 import config from "@config";
+import type { NextFunction, Request, Response } from "express";
+
+vi.mock("express-rate-limit", () => ({
+  default: vi.fn().mockImplementation(() => {
+    return (_req: Request, _res: Response, next: NextFunction) => next();
+  }),
+}));
 
 describe("global CSRF protection", () => {
   it("rejects an unsafe cookie-authenticated write without CSRF", async () => {

@@ -70,6 +70,9 @@ describe("PrismaOutboxRelayStore", () => {
       where: {
         id: "outbox-1",
         lockOwner: "worker-1",
+        publishedAt: null,
+        deadLetteredAt: null,
+        leaseUntil: { gt: expect.any(Date) },
       },
       data: {
         publishedAt,
@@ -98,6 +101,9 @@ describe("PrismaOutboxRelayStore", () => {
       where: {
         id: "outbox-1",
         lockOwner: "worker-1",
+        publishedAt: null,
+        deadLetteredAt: null,
+        leaseUntil: { gt: expect.any(Date) },
       },
       data: {
         attempts: { increment: 1 },

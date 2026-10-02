@@ -19,7 +19,8 @@ vi.mock("@core/circuit-breaker/circuit-breaker", () => ({
 function createStore(): OutboxRelayStore {
   return {
     claimBatch: vi.fn(),
-    updateClaimed: vi.fn(),
+    updateClaimed: vi.fn().mockResolvedValue(true),
+    renewClaims: vi.fn().mockResolvedValue([]),
   };
 }
 
@@ -255,6 +256,54 @@ describe("OutboxRelay.pollOnce", () => {
     await relay.pollOnce();
 
     expect(vi.mocked(store.claimBatch)).toHaveBeenCalledTimes(2);
+  });
+
+  it("gia hạn lease cho toàn bộ batch khi handler còn đang chạy", async () => {
+    let releasePublish!: () => void;
+    const publishRelease = new Promise<void>((resolve) => {
+      releasePublish = resolve;
+    });
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    vi.mocked(store.renewClaims).mockResolvedValue(["outbox-1"]);
+    const publish = vi.fn().mockImplementation(() =>
+      publishRelease.then(() => ({
+        success: true,
+        failedHandlers: [],
+      })),
+    );
+    const relay = new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+      {
+        leaseDurationSeconds: 1,
+        heartbeatIntervalMs: 10,
+      },
+    );
+
+    const poll = relay.pollOnce();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(store.renewClaims).toHaveBeenCalledWith(
+      expect.any(String),
+      ["outbox-1"],
+      1,
+    );
+
+    releasePublish();
+    await poll;
+    expect(store.renewClaims).toHaveBeenCalled();
+  });
+
+  it("stops the heartbeat after the batch completes", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    const relay = new OutboxRelay(store, handlerTracker, createEventBus(), {
+      heartbeatIntervalMs: 10,
+    });
+
+    await relay.pollOnce();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    expect(store.renewClaims).not.toHaveBeenCalled();
   });
 });
 

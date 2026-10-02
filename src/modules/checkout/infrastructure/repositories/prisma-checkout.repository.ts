@@ -129,7 +129,7 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
   ): Promise<LockedProductRow[]> {
     const prismaTx = toPrismaTx(tx);
     return prismaTx.$queryRaw<LockedProductRow[]>`
-      SELECT id, stock, version, name, price
+      SELECT id, name, price, stock, version, "isActive"
       FROM products
       WHERE id = ANY(${productIds})
       FOR UPDATE

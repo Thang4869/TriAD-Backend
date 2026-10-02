@@ -209,8 +209,8 @@ export class PrismaProductsRepository implements IProductsRepository {
   }
 
   async existsAndActive(id: string): Promise<boolean> {
-    const product = await prisma.product.findUnique({
-      where: { id },
+    const product = await prisma.product.findFirst({
+      where: { id, isActive: true },
       select: { id: true },
     });
     return product !== null;

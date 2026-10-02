@@ -54,9 +54,18 @@ export class StockReservationService {
     setAttributes({ "stock.locked_product_count": lockedProducts.length });
 
     for (const item of cartItems) {
+      if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+        throw new BadRequestError(
+          `Invalid quantity for product ${item.productId}`,
+        );
+      }
+
       const product = productMap.get(item.productId);
       if (!product) {
         throw new NotFoundError(`Product ${item.productId} not found`);
+      }
+      if (!product.isActive) {
+        throw new BadRequestError(`Product ${product.name} is inactive`);
       }
       if (product.stock < item.quantity) {
         throw new BadRequestError(

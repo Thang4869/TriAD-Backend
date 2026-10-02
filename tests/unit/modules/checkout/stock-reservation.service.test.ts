@@ -25,6 +25,7 @@ function lockedProduct(overrides: Record<string, unknown> = {}) {
     stock: 10,
     version: 1,
     price: 100_000,
+    isActive: true,
     ...overrides,
   };
 }
@@ -128,6 +129,35 @@ describe("StockReservationService.reserveStock", () => {
         { productId: "prod-1", quantity: 5 },
       ]),
     ).rejects.toThrow(/Not enough stock for Áo thun. Available: 2/);
+  });
+
+  it.each([0, -1, 1.5])(
+    "từ chối số lượng không hợp lệ: %s",
+    async (quantity) => {
+      const repository = createRepository();
+
+      await expect(
+        new StockReservationService(repository).reserveStock(tx, [
+          { productId: "prod-1", quantity },
+        ]),
+      ).rejects.toThrow(BadRequestError);
+      expect(repository.decrementProductStock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("từ chối sản phẩm inactive", async () => {
+    const repository = createRepository({
+      lockProductsForUpdate: vi
+        .fn()
+        .mockResolvedValue([lockedProduct({ isActive: false })]),
+    });
+
+    await expect(
+      new StockReservationService(repository).reserveStock(tx, [
+        { productId: "prod-1", quantity: 1 },
+      ]),
+    ).rejects.toThrow(BadRequestError);
+    expect(repository.decrementProductStock).not.toHaveBeenCalled();
   });
 
   it("kiểm tra toàn bộ giỏ trước khi trừ — một item thiếu hàng thì không trừ item nào", async () => {

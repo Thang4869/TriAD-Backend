@@ -47,6 +47,9 @@ beforeAll(async () => {
   await redis.ping?.();
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
+      "order_history_projection",
+      "product_catalog_projection",
+      "admin_dashboard_projection",
       "outbox_handler_log",
       "outbox_events",
       "wishlist_items",
@@ -81,6 +84,9 @@ afterEach(async () => {
   if (!prisma) return;
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
+      "order_history_projection",
+      "product_catalog_projection",
+      "admin_dashboard_projection",
       "outbox_handler_log",
       "outbox_events",
       "wishlist_items",

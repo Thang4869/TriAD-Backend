@@ -29,5 +29,11 @@ export interface OutboxRelayStore {
     id: string,
     owner: string,
     data: OutboxRelayUpdate,
-  ): Promise<void>;
+  ): Promise<boolean>;
+
+  renewClaims(
+    owner: string,
+    ids: string[],
+    lockLeaseSeconds: number,
+  ): Promise<string[]>;
 }

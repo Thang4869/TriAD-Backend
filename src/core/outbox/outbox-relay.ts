@@ -24,17 +24,45 @@ const BATCH_SIZE = 50;
 const MAX_ATTEMPTS = 10;
 const LOCK_LEASE_SECONDS = 60;
 
+export interface OutboxRelayOptions {
+  pollIntervalMs?: number;
+  batchSize?: number;
+  maxAttempts?: number;
+  leaseDurationSeconds?: number;
+  heartbeatIntervalMs?: number;
+  owner?: string;
+}
+
 export class OutboxRelay {
   private inFlightPoll: Promise<void> | null = null;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
-  private readonly owner = crypto.randomUUID();
+  private heartbeatTimer: NodeJS.Timeout | null = null;
+  private heartbeatInFlight = false;
+  private activeClaimIds = new Set<string>();
+  private readonly pollIntervalMs: number;
+  private readonly batchSize: number;
+  private readonly maxAttempts: number;
+  private readonly leaseDurationSeconds: number;
+  private readonly heartbeatIntervalMs: number;
+  private readonly owner: string;
 
   constructor(
     private readonly store: OutboxRelayStore,
     private readonly handlerTracker: HandlerExecutionTracker,
     private readonly eventBus: EventBus,
-  ) {}
+    options: OutboxRelayOptions = {},
+  ) {
+    this.pollIntervalMs = options.pollIntervalMs ?? POLL_INTERVAL_MS;
+    this.batchSize = options.batchSize ?? BATCH_SIZE;
+    this.maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
+    this.leaseDurationSeconds =
+      options.leaseDurationSeconds ?? LOCK_LEASE_SECONDS;
+    this.heartbeatIntervalMs =
+      options.heartbeatIntervalMs ??
+      Math.max(100, Math.floor((this.leaseDurationSeconds * 1000) / 3));
+    this.owner = options.owner ?? crypto.randomUUID();
+  }
 
   start(): void {
     if (this.timer) return;
@@ -45,9 +73,9 @@ export class OutboxRelay {
       this.inFlightPoll = this.pollOnce().finally(() => {
         this.inFlightPoll = null;
       });
-    }, POLL_INTERVAL_MS).unref();
+    }, this.pollIntervalMs).unref();
 
-    logger.info("OutboxRelay started", { intervalMs: POLL_INTERVAL_MS });
+    logger.info("OutboxRelay started", { intervalMs: this.pollIntervalMs });
   }
 
   async stop(): Promise<void> {
@@ -69,9 +97,9 @@ export class OutboxRelay {
     try {
       const rows = await this.store.claimBatch(
         this.owner,
-        BATCH_SIZE,
-        MAX_ATTEMPTS,
-        LOCK_LEASE_SECONDS,
+        this.batchSize,
+        this.maxAttempts,
+        this.leaseDurationSeconds,
       );
 
       outboxEventsClaimed.inc(rows.length);
@@ -82,8 +110,14 @@ export class OutboxRelay {
           : 0,
       );
 
-      for (const row of rows) {
-        await this.publishRow(row);
+      this.startHeartbeat(rows.map((row) => row.id));
+      try {
+        for (const row of rows) {
+          if (!this.activeClaimIds.has(row.id)) continue;
+          await this.publishRow(row);
+        }
+      } finally {
+        this.stopHeartbeat();
       }
     } catch (error) {
       logger.error("OutboxRelay poll failed", { error });
@@ -124,8 +158,8 @@ export class OutboxRelay {
         attempts: row.attempts,
       });
       const attempts = row.attempts + 1;
-      const deadLettered = attempts >= MAX_ATTEMPTS;
-      await this.updateClaimedRow(row.id, {
+      const deadLettered = attempts >= this.maxAttempts;
+      const updated = await this.updateClaimedRow(row.id, {
         attempts: { increment: 1 },
         lockedAt: null,
         lockOwner: null,
@@ -135,6 +169,7 @@ export class OutboxRelay {
         deadLetteredAt: deadLettered ? new Date() : null,
         lastError: error instanceof Error ? error.message : String(error),
       });
+      if (!updated) return;
       if (deadLettered) outboxEventsDeadLettered.inc();
       outboxEventsFailed.inc();
     }
@@ -143,8 +178,60 @@ export class OutboxRelay {
   private async updateClaimedRow(
     id: string,
     data: OutboxRelayUpdate,
-  ): Promise<void> {
-    await this.store.updateClaimed(id, this.owner, data);
+  ): Promise<boolean> {
+    const updated = await this.store.updateClaimed(id, this.owner, data);
+    this.activeClaimIds.delete(id);
+    if (!updated) {
+      logger.warn("OutboxRelay lost ownership before updating event", {
+        eventId: id,
+        owner: this.owner,
+      });
+    }
+    return updated;
+  }
+
+  private startHeartbeat(ids: string[]): void {
+    if (ids.length === 0) return;
+    this.activeClaimIds = new Set(ids);
+
+    this.heartbeatTimer = setInterval(() => {
+      if (this.heartbeatInFlight) return;
+      const activeIds = [...this.activeClaimIds];
+      if (activeIds.length === 0) {
+        this.stopHeartbeat();
+        return;
+      }
+      this.heartbeatInFlight = true;
+      void this.store
+        .renewClaims(this.owner, activeIds, this.leaseDurationSeconds)
+        .then((renewed) => {
+          const renewedIds = new Set(renewed);
+          for (const id of activeIds) {
+            if (!renewedIds.has(id)) this.activeClaimIds.delete(id);
+          }
+          if (renewed.length !== activeIds.length) {
+            logger.warn("OutboxRelay lost ownership during heartbeat", {
+              owner: this.owner,
+              claimed: activeIds.length,
+              renewed: renewed.length,
+            });
+          }
+        })
+        .catch((error) => {
+          logger.warn("OutboxRelay heartbeat failed", { error });
+        })
+        .finally(() => {
+          this.heartbeatInFlight = false;
+        });
+    }, this.heartbeatIntervalMs).unref();
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    this.activeClaimIds.clear();
   }
 }
 

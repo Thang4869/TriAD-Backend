@@ -14,6 +14,37 @@
 - Check `leaseUntil`, `attempts` and `lastError`. Expired leases are safe to reclaim.
 - Fix the downstream handler or dependency, then replay eligible events through the normal relay. Preserve event ids so handler idempotency remains effective.
 
+## Outbox delivery and relay leases
+
+Outbox delivery is at-least-once, not exactly-once. A process can finish a
+handler and crash before persisting `publishedAt`, so handler tracking and
+projection CAS remain required even when relay ownership is correct.
+
+Multiple relay instances may process events for the same aggregate at the
+same time, and handler completion order is not guaranteed. Current consumers
+are order-tolerant: order and product projections apply only newer
+`sourceVersion` values, equal versions are idempotent, stale versions are
+ignored, and missing order prerequisites are retried. Email and notification
+side effects use stable event-derived idempotency keys plus the handler
+tracker. Do not infer aggregate order from `occurredAt`, UUIDs or
+`updatedAt`; a new consumer that requires strict order must add its own
+version/CAS or explicit ordering invariant.
+
+The production relay defaults are a 2 second poll interval, batch size 50,
+10 maximum attempts and a 60 second lease. Every claimed batch has a
+heartbeat that renews all still-pending rows about three times per lease
+period. A row is renewed or updated only when `lockOwner` still matches, the
+row is unpublished and its lease has not expired. `leaseUntil` is the current
+ownership deadline and `lockOwner` identifies the relay allowed to mutate the
+claim. If renewal or completion reports ownership loss, the stale relay does
+not mark the row published, clear the replacement lease or overwrite retry
+metadata. If a relay disappears, its heartbeat stops and another relay can
+reclaim the row after `leaseUntil`.
+
+Stopping a relay stops scheduling new polls and lets the current batch finish;
+heartbeat resources are cleared when the batch completes or fails. Do not
+manually clear active claims while a handler is still running.
+
 ## Saga operations
 
 `CheckoutSaga` and `CancellationRefundSaga` are not currently wired into the production request path. The `saga_states` table and Prisma state adapter are prepared for future orchestration.

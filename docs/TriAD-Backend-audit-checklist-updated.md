@@ -436,15 +436,19 @@ Static route `/uploads` và thư mục `uploads/tmp` legacy đã được loại
 
 ### P1 bổ sung — Outbox, domain & architecture
 
-### #42 — ⬜ OPEN
+### #42 — ✅ CLOSED
 
-**Việc cần làm:** Kiểm chứng thứ tự sự kiện của, cùng aggregate khi nhiều relay claim song song; nếu người đọc phụ thuộc thứ tự, thêm quy tắc claim theo aggregate hoặc version.
+**Việc đã làm:** Kiểm chứng bằng test PostgreSQL thật với hai store và hai relay owner khác nhau. Same-aggregate events có thể cùng in-flight và hoàn tất ngược thứ tự; đây là chính sách được chấp nhận vì order/product projections dùng CAS `sourceVersion`, equal version idempotent, stale version bị bỏ qua, còn email/notification được bảo vệ bằng handler tracker và idempotency key. Aggregate độc lập vẫn claim/process song song. Không thêm global FIFO hoặc mutex theo aggregate.
+
+**Evidence:** `tests/integration/outbox.relay-concurrency.test.ts` PASS: same aggregate reverse completion converges to the newer projection version; different aggregates remain concurrent; no event is owned by both relays.
 
 **File liên quan:** [prisma-outbox-relay.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-outbox-relay.store.ts), [projection-handler.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-handler.ts)
 
-### #43 — ⬜ OPEN
+### #43 — ✅ CLOSED
 
-**Việc cần làm:** Kiểm chứng batch 50 event xử lý, tuần tự có thể vượt lease 60 giây; nếu có, gia hạn lease/heartbeat hoặc claim theo batch nhỏ. Đo bằng handler chậm và hai relay.
+**Việc đã làm:** Relay có options timing nhưng giữ mặc định production poll 2s, batch 50, max attempts 10, lease 60s. Heartbeat gia hạn toàn bộ rows còn pending trong batch; `updateClaimed` trả kết quả ownership và chỉ ghi khi owner còn giữ lease. Khi relay chết, heartbeat dừng và lease hết hạn để relay khác reclaim; stale owner không thể publish/clear/rewrite claim của relay mới.
+
+**Evidence:** `tests/integration/outbox.relay-concurrency.test.ts` PASS với lease ngắn: handler chậm quá lease ban đầu vẫn không bị relay thứ hai lấy, abandoned lease được reclaim, stale-owner update bị từ chối. Unit tests cover defaults, heartbeat lifecycle, ownership loss and poll overlap.
 
 **File liên quan:** [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [prisma-outbox-relay.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-outbox-relay.store.ts)
 

@@ -18,6 +18,8 @@
 
 - A1 (một phần): `AuthService`, `ReviewsService` và các event path ngoài P1 #15 vẫn publish trong tiến trình, không qua outbox. Product mutation paths đã được đóng riêng trong P1 #15; không coi đây là đóng toàn bộ A1.
 - L1 (định nghĩa doanh thu): **đã đóng trong phạm vi P1 #13**. Dashboard dùng tên `grossOrderValue`/GMV vì checkout hiện chỉ hỗ trợ COD với `paymentStatus = PENDING`, chưa có payment settlement để chứng minh realized revenue. Cả query tổng, daily query và dashboard projection đều cộng `Order.total` với `status != CANCELLED`, dùng cùng date boundary; integration tests bao phủ PENDING, REFUNDED, CANCELLED, zero, grouping và không double count.
+
+- P1 #16: **✅ CLOSED** — `sourceVersion` monotonic CAS/P2002 handling cho Product Catalog và Order History; legacy baseline `-1`; duplicate/stale/out-of-order safety; status dependency retry; sourceVersion persistence/relay evidence; authoritative rating repair; rebuild/live protection; Docker-based integration và full quality gates PASS.
 - L2 (`existsAndActive` không kiểm tra `isActive`): y nguyên, chưa sửa.
 - B2 (blacklist dùng JWT thô làm key, nuốt lỗi), B3 (JWT thiếu `iss`/`aud`/`typ`, dù refresh token đã có `jti`), B4 (`/metrics` không xác thực), B6 (CSRF chưa HMAC gắn session): đều chưa động tới.
 - D1 (chưa có `dependency-cruiser` hay công cụ kiểm tra ranh giới kiến trúc).

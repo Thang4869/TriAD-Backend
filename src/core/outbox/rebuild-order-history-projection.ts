@@ -1,10 +1,11 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { writeOrderHistoryProjection } from "./projection-writer";
 
 const DEFAULT_BATCH_SIZE = 100;
 
 type RebuildOrderHistoryProjectionDb = Pick<
   PrismaClient,
-  "order" | "orderHistoryProjection" | "$transaction"
+  "order" | "orderHistoryProjection"
 >;
 
 export async function rebuildOrderHistoryProjection(
@@ -44,50 +45,29 @@ export async function rebuildOrderHistoryProjection(
       continue;
     }
 
-    const operations = orders.map((order) =>
-      db.orderHistoryProjection.upsert({
-        where: {
-          orderId: order.id,
-        },
-        create: {
-          orderId: order.id,
-          userId: order.userId,
-          orderNumber: order.orderNumber,
-          status: order.status,
-          paymentStatus: order.paymentStatus,
-          subtotal: order.subtotal,
-          tax: order.tax,
-          shippingFee: order.shippingFee,
-          total: order.total,
-          items: order.items.map((item) => ({
-            productId: item.productId,
-            productName: item.product.name,
-            quantity: item.quantity,
-            unitPrice: item.price,
-          })) as Prisma.InputJsonValue,
-          placedAt: order.createdAt,
-        },
-        update: {
-          userId: order.userId,
-          orderNumber: order.orderNumber,
-          status: order.status,
-          paymentStatus: order.paymentStatus,
-          subtotal: order.subtotal,
-          tax: order.tax,
-          shippingFee: order.shippingFee,
-          total: order.total,
-          items: order.items.map((item) => ({
-            productId: item.productId,
-            productName: item.product.name,
-            quantity: item.quantity,
-            unitPrice: item.price,
-          })) as Prisma.InputJsonValue,
-          placedAt: order.createdAt,
-        },
-      }),
-    );
+    const operations = orders.map((order) => ({
+      orderId: order.id,
+      userId: order.userId,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      subtotal: order.subtotal,
+      tax: order.tax,
+      shippingFee: order.shippingFee,
+      total: order.total,
+      items: order.items.map((item) => ({
+        productId: item.productId,
+        productName: item.product.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+      })) as Prisma.InputJsonValue,
+      placedAt: order.createdAt,
+      sourceVersion: order.version,
+    }));
 
-    await db.$transaction(operations);
+    await Promise.all(
+      operations.map((data) => writeOrderHistoryProjection(db, data)),
+    );
 
     processed += orders.length;
     cursor = orders[orders.length - 1].id;

@@ -161,7 +161,11 @@ export class PrismaOrdersRepository implements IOrdersRepository {
         );
       }
 
-      await this.persistEvents(tx, [aggregate]);
+      await this.persistEvents(
+        tx,
+        [aggregate],
+        new Map([[orderId, expectedVersion + 1]]),
+      );
 
       const updated = await tx.order.findUnique({
         where: {

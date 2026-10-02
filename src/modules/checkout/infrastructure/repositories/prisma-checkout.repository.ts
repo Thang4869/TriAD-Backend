@@ -156,8 +156,13 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
   async persistProductEvent(
     tx: CheckoutTransaction,
     event: DomainEvent,
+    sourceVersion: number,
   ): Promise<void> {
-    await this.persistTypedEvents(toPrismaTx(tx), [event]);
+    await this.persistTypedEvents(
+      toPrismaTx(tx),
+      [event],
+      new Map([[event.aggregateId, sourceVersion]]),
+    );
   }
 
   async findDiscountByCode(
@@ -255,7 +260,11 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
       })),
     });
 
-    await persistDomainEvents(toPrismaTx(tx), [order]);
+    await persistDomainEvents(
+      toPrismaTx(tx),
+      [order],
+      new Map([[order.id, 0]]),
+    );
 
     return created;
   }

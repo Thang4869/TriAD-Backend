@@ -76,6 +76,18 @@ describe("persistDomainEvents", () => {
     expect(arg.data[1].occurredAt).toBeInstanceOf(Date);
   });
 
+  it("persists the committed sourceVersion in the outbox payload", async () => {
+    const tx = makeTx();
+    const aggregate = new FakeAggregate("a1");
+    aggregate.emit("OrderStatusChanged");
+
+    await persistDomainEvents(tx, [aggregate], new Map([["a1", 7]]));
+
+    expect(tx.outboxEvent.createMany.mock.calls[0][0].data[0].payload).toEqual(
+      expect.objectContaining({ sourceVersion: 7 }),
+    );
+  });
+
   it("drains the aggregate so events are not written twice", async () => {
     const tx = makeTx();
     const aggregate = new FakeAggregate("a1");

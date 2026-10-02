@@ -3,24 +3,24 @@ import { rebuildOrderHistoryProjection } from "@core/outbox/rebuild-order-histor
 
 describe("rebuildOrderHistoryProjection", () => {
   const findMany = vi.fn();
-  const upsert = vi.fn();
-  const transaction = vi.fn();
+  const create = vi.fn();
+  const updateMany = vi.fn();
 
   const db = {
     order: {
       findMany,
     },
     orderHistoryProjection: {
-      upsert,
+      create,
+      updateMany,
     },
-    $transaction: transaction,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    upsert.mockImplementation((args) => args);
-    transaction.mockResolvedValue([]);
+    create.mockResolvedValue(undefined);
+    updateMany.mockResolvedValue({ count: 0 });
   });
 
   it("rebuilds projection from the order source of truth", async () => {
@@ -38,6 +38,7 @@ describe("rebuildOrderHistoryProjection", () => {
           tax: 20,
           shippingFee: 30,
           total: 240,
+          version: 0,
           createdAt,
           items: [
             {
@@ -57,12 +58,9 @@ describe("rebuildOrderHistoryProjection", () => {
 
     expect(processed).toBe(1);
 
-    expect(upsert).toHaveBeenCalledTimes(1);
-    expect(upsert).toHaveBeenCalledWith({
-      where: {
-        orderId: "order-1",
-      },
-      create: {
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith({
+      data: {
         orderId: "order-1",
         userId: "user-1",
         orderNumber: "ORD-001",
@@ -81,29 +79,9 @@ describe("rebuildOrderHistoryProjection", () => {
           },
         ],
         placedAt: createdAt,
-      },
-      update: {
-        userId: "user-1",
-        orderNumber: "ORD-001",
-        status: "DELIVERED",
-        paymentStatus: "PAID",
-        subtotal: 200,
-        tax: 20,
-        shippingFee: 30,
-        total: 240,
-        items: [
-          {
-            productId: "product-1",
-            productName: "Product 1",
-            quantity: 2,
-            unitPrice: 100,
-          },
-        ],
-        placedAt: createdAt,
+        sourceVersion: 0,
       },
     });
-
-    expect(transaction).toHaveBeenCalledTimes(1);
   });
 
   it("processes multiple batches using the last order as cursor", async () => {
@@ -119,6 +97,7 @@ describe("rebuildOrderHistoryProjection", () => {
       tax: 0,
       shippingFee: 30,
       total: 130,
+      version: 0,
       createdAt,
       items: [],
     });
@@ -131,7 +110,6 @@ describe("rebuildOrderHistoryProjection", () => {
     const processed = await rebuildOrderHistoryProjection(db as never, 2);
 
     expect(processed).toBe(3);
-    expect(transaction).toHaveBeenCalledTimes(2);
 
     expect(findMany).toHaveBeenNthCalledWith(1, {
       take: 2,
@@ -196,7 +174,6 @@ describe("rebuildOrderHistoryProjection", () => {
     const processed = await rebuildOrderHistoryProjection(db as never);
 
     expect(processed).toBe(0);
-    expect(upsert).not.toHaveBeenCalled();
-    expect(transaction).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
   });
 });

@@ -99,6 +99,7 @@ describe("StockReservationService.reserveStock", () => {
         eventName: "ProductUpdated",
         aggregateId: "prod-1",
       }),
+      8,
     );
   });
 

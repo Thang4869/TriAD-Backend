@@ -8,43 +8,45 @@ import type {
   OrderPlacedEvent,
   OrderStatusChangedEvent,
 } from "@shared/domain/events/order-events";
+import { ProjectionDependencyError } from "./projection-dependency.error";
+import {
+  writeOrderHistoryProjection,
+  writeProductCatalogProjection,
+} from "./projection-writer";
+import { refreshProductRatingProjection } from "./projection-rating";
 
 export class PrismaProjectionStore implements ProjectionStore {
   async upsertOrderPlaced(event: OrderPlacedEvent): Promise<void> {
-    await prisma.orderHistoryProjection.upsert({
-      where: { orderId: event.orderId },
-      create: {
-        orderId: event.orderId,
-        userId: event.userId,
-        orderNumber: event.orderNumber,
-        status: "PENDING",
-        paymentStatus: event.paymentStatus,
-        subtotal: event.subtotal,
-        tax: event.tax,
-        shippingFee: event.shippingFee,
-        total: event.total,
-        items: event.items as unknown as Prisma.InputJsonValue,
-        placedAt: event.occurredAt,
-      },
-      update: {
-        userId: event.userId,
-        orderNumber: event.orderNumber,
-        paymentStatus: event.paymentStatus,
-        subtotal: event.subtotal,
-        tax: event.tax,
-        shippingFee: event.shippingFee,
-        total: event.total,
-        items: event.items as unknown as Prisma.InputJsonValue,
-        placedAt: event.occurredAt,
-      },
+    await writeOrderHistoryProjection(prisma, {
+      orderId: event.orderId,
+      userId: event.userId,
+      orderNumber: event.orderNumber,
+      status: "PENDING",
+      paymentStatus: event.paymentStatus,
+      subtotal: event.subtotal,
+      tax: event.tax,
+      shippingFee: event.shippingFee,
+      total: event.total,
+      items: event.items as unknown as Prisma.InputJsonValue,
+      placedAt: event.occurredAt,
+      sourceVersion: requireSourceVersion(event.sourceVersion),
     });
   }
 
   async updateOrderStatus(event: OrderStatusChangedEvent): Promise<void> {
-    await prisma.orderHistoryProjection.updateMany({
-      where: { orderId: event.orderId },
-      data: { status: event.newStatus },
+    const sourceVersion = requireSourceVersion(event.sourceVersion);
+    const result = await prisma.orderHistoryProjection.updateMany({
+      where: { orderId: event.orderId, sourceVersion: { lt: sourceVersion } },
+      data: { status: event.newStatus, sourceVersion },
     });
+
+    if (result.count > 0) return;
+
+    const projection = await prisma.orderHistoryProjection.findUnique({
+      where: { orderId: event.orderId },
+      select: { orderId: true },
+    });
+    if (!projection) throw new ProjectionDependencyError(event.orderId);
   }
 
   async upsertProduct(event: ProductProjectionEvent): Promise<void> {
@@ -54,52 +56,26 @@ export class PrismaProjectionStore implements ProjectionStore {
 
     if (!product) return;
 
-    await prisma.productCatalogProjection.upsert({
-      where: { productId: product.id },
-      create: {
-        productId: product.id,
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        stock: product.stock,
-        category: product.category,
-        images: product.images,
-        slug: product.slug,
-        isActive: product.isActive,
-        searchText: `${product.name} ${product.description ?? ""} ${product.category}`,
-        sourceVersion: product.version,
-        createdAt: product.createdAt,
-      },
-      update: {
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        stock: product.stock,
-        category: product.category,
-        images: product.images,
-        slug: product.slug,
-        isActive: product.isActive,
-        searchText: `${product.name} ${product.description ?? ""} ${product.category}`,
-        createdAt: product.createdAt,
-        sourceVersion: product.version,
-      },
+    await writeProductCatalogProjection(prisma, {
+      productId: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      stock: product.stock,
+      category: product.category,
+      images: product.images,
+      slug: product.slug,
+      isActive: product.isActive,
+      searchText: `${product.name} ${product.description ?? ""} ${product.category}`,
+      sourceVersion: product.version,
+      createdAt: product.createdAt,
     });
   }
 
   async refreshProductRating(productId: string): Promise<void> {
-    const rating = await prisma.review.aggregate({
-      where: { productId },
-      _avg: { rating: true },
-      _count: { rating: true },
-    });
-
-    await prisma.productCatalogProjection.updateMany({
-      where: { productId },
-      data: {
-        avgRating: rating._avg.rating ?? 0,
-        reviewCount: rating._count.rating,
-      },
-    });
+    await prisma.$transaction((tx) =>
+      refreshProductRatingProjection(tx, productId),
+    );
   }
 
   async refreshDashboard(): Promise<void> {
@@ -145,4 +121,11 @@ export class PrismaProjectionStore implements ProjectionStore {
       },
     });
   }
+}
+
+function requireSourceVersion(sourceVersion: number | undefined): number {
+  if (sourceVersion === undefined) {
+    throw new Error("Versioned projection event is required");
+  }
+  return sourceVersion;
 }

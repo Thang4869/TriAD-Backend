@@ -1,6 +1,5 @@
 export const FeatureFlag = {
   RequireTwoFactor: "require_two_factor",
-  NewCheckoutFlow: "new_checkout_flow",
   DiscountSystem: "discount_system",
 } as const;
 

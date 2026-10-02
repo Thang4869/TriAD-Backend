@@ -39,6 +39,7 @@ import type { OrderStatusChangedHandler } from "@modules/orders/event-handlers/o
 import type { PricingService } from "@/modules/checkout/services/pricing.service";
 import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
 import type { TokenStorePort } from "@modules/auth/application/ports/token-store.port";
+import type { OAuthStateStorePort } from "@modules/auth/application/ports/oauth-state-store.port";
 import type { PersistenceErrorClassifier } from "@shared/errors/persistence-error";
 import type { FeatureFlagPort } from "@shared/application/feature-flags/feature-flag.port";
 import type { ImageProcessingQueuePort } from "@modules/products/application/ports/image-processing-queue.port";
@@ -125,6 +126,7 @@ export const TOKENS = {
   // Auth
   AuthSessionUser: createToken<AuthSessionUserPort>("AuthSessionUser"),
   TokenStore: createToken<TokenStorePort>("TokenStore"),
+  OAuthStateStore: createToken<OAuthStateStorePort>("OAuthStateStore"),
   TokenService: createToken<TokenService>("TokenService"),
   TwoFactorService: createToken<TwoFactorService>("TwoFactorService"),
 

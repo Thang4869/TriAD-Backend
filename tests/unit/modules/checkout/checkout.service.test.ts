@@ -126,9 +126,6 @@ describe("CheckoutService", () => {
       pricingService,
       mockStockService,
       {
-        isEnabled: vi.fn().mockReturnValue(false),
-      },
-      {
         generate: vi.fn().mockReturnValue("ORD-TEST-123"),
       },
     );
@@ -476,9 +473,6 @@ describe("CheckoutService", () => {
         repository,
         pricingService,
         mockStockService,
-        {
-          isEnabled: vi.fn().mockReturnValue(false),
-        },
         orderNumberGenerator,
       );
 

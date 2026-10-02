@@ -63,6 +63,7 @@ function createFakeRepository(overrides = {}): IAuthRepository {
     findUserById: vi.fn(),
     createUser: vi.fn(),
     createOAuthUser: vi.fn(),
+    resolveOAuthIdentity: vi.fn(),
     createCartForUser: vi.fn(),
     updateUser: vi.fn(),
     createRefreshToken: vi.fn(),
@@ -889,6 +890,77 @@ describe("AuthService", () => {
       const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
       expect(typeof result.refreshToken).toBe("string");
+    });
+  });
+
+  describe("resolveOAuthIdentity", () => {
+    const identity = {
+      provider: "GOOGLE" as const,
+      subject: "google-subject",
+      email: "oauth@example.com",
+      emailVerified: true,
+      firstName: "OAuth",
+      lastName: "User",
+    };
+
+    it("returns the linked user without resolving ownership by email", async () => {
+      repository.resolveOAuthIdentity = vi.fn().mockResolvedValue({
+        user: baseUser,
+        created: false,
+      });
+
+      const result = await service.resolveOAuthIdentity({
+        ...identity,
+        email: "changed@example.com",
+      });
+
+      expect(result).toBe(baseUser);
+      expect(repository.resolveOAuthIdentity).toHaveBeenCalledWith({
+        ...identity,
+        email: "changed@example.com",
+      });
+      expect(repository.findUserByEmail).not.toHaveBeenCalled();
+    });
+
+    it("publishes registration and sends verification for a new unverified identity", async () => {
+      const unverifiedUser = {
+        ...baseUser,
+        email: identity.email,
+        isVerified: false,
+      };
+      repository.resolveOAuthIdentity = vi.fn().mockResolvedValue({
+        user: unverifiedUser,
+        created: true,
+      });
+
+      await expect(
+        service.resolveOAuthIdentity({
+          ...identity,
+          emailVerified: false,
+        }),
+      ).rejects.toThrow("OAuth identity email verification is required");
+
+      expect(mockEventBus.publish).toHaveBeenCalled();
+      expect(mockEmailService.sendVerificationEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ email: identity.email }),
+        expect.any(String),
+      );
+    });
+
+    it("does not issue a session when the repository rejects an untrusted link", async () => {
+      repository.resolveOAuthIdentity = vi
+        .fn()
+        .mockRejectedValue(
+          new Error("OAuth identity email verification is required"),
+        );
+
+      await expect(
+        service.resolveOAuthIdentity({
+          ...identity,
+          emailVerified: false,
+        }),
+      ).rejects.toThrow("OAuth identity email verification is required");
+      expect(mockTokenService.generateTokens).not.toHaveBeenCalled();
     });
   });
 });

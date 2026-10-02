@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import prisma from "@core/database/prisma";
 import {
+  Prisma,
   User as PrismaUser,
   RefreshToken as PrismaRefreshToken,
 } from "@prisma/client";
@@ -15,6 +16,11 @@ import type {
   AuthSessionUserPort,
 } from "../../application/ports/auth-session-user.port";
 import type { AuthUser } from "../../application/ports/auth-user";
+import type {
+  OAuthIdentity,
+  OAuthResolution,
+} from "../../application/ports/oauth-identity";
+import { OAuthIdentityUntrustedError } from "../../application/errors/oauth-identity.errors";
 
 function hashRefreshToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -61,6 +67,115 @@ export class PrismaAuthRepository
         },
       },
     });
+  }
+
+  async resolveOAuthIdentity(data: OAuthIdentity): Promise<OAuthResolution> {
+    try {
+      const user = await prisma.$transaction(async (tx) => {
+        const linked = await tx.oAuthAccount.findUnique({
+          where: {
+            provider_providerSubject: {
+              provider: data.provider,
+              providerSubject: data.subject,
+            },
+          },
+          include: { user: true },
+        });
+        if (linked) return { user: linked.user, created: false };
+
+        const existing = await tx.user.findUnique({
+          where: { email: data.email },
+        });
+        if (existing) {
+          if (!data.emailVerified) throw new OAuthIdentityUntrustedError();
+          await tx.oAuthAccount.create({
+            data: {
+              userId: existing.id,
+              provider: data.provider,
+              providerSubject: data.subject,
+              providerEmail: data.email,
+              providerEmailVerified: true,
+            },
+          });
+          return { user: existing, created: false };
+        }
+
+        const created = await tx.user.create({
+          data: {
+            email: data.email,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            isVerified: data.emailVerified,
+            cart: { create: {} },
+            oauthAccounts: {
+              create: {
+                provider: data.provider,
+                providerSubject: data.subject,
+                providerEmail: data.email,
+                providerEmailVerified: data.emailVerified,
+              },
+            },
+          },
+        });
+        return { user: created, created: true };
+      });
+      return user;
+    } catch (error) {
+      if (
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== "P2002"
+      ) {
+        throw error;
+      }
+
+      const linked = await prisma.oAuthAccount.findUnique({
+        where: {
+          provider_providerSubject: {
+            provider: data.provider,
+            providerSubject: data.subject,
+          },
+        },
+        include: { user: true },
+      });
+      if (linked) return { user: linked.user, created: false };
+
+      const existing = await prisma.user.findUnique({
+        where: { email: data.email },
+      });
+      if (existing && data.emailVerified) {
+        try {
+          await prisma.oAuthAccount.create({
+            data: {
+              userId: existing.id,
+              provider: data.provider,
+              providerSubject: data.subject,
+              providerEmail: data.email,
+              providerEmailVerified: true,
+            },
+          });
+          return { user: existing, created: false };
+        } catch (retryError) {
+          if (
+            retryError instanceof Prisma.PrismaClientKnownRequestError &&
+            retryError.code === "P2002"
+          ) {
+            const raced = await prisma.oAuthAccount.findUnique({
+              where: {
+                provider_providerSubject: {
+                  provider: data.provider,
+                  providerSubject: data.subject,
+                },
+              },
+              include: { user: true },
+            });
+            if (raced) return { user: raced.user, created: false };
+          }
+          throw retryError;
+        }
+      }
+
+      throw error;
+    }
   }
 
   async createCartForUser(userId: string): Promise<void> {

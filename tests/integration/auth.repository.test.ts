@@ -345,4 +345,119 @@ describe("PrismaAuthRepository (integration)", () => {
       expect(persisted?.revokedAt).toBeNull();
     });
   });
+
+  describe("OAuth identity resolution", () => {
+    it("creates one verified user, cart, and OAuth account", async () => {
+      const email = `oauth-new-${Date.now()}@test.com`;
+      const subject = `google-${Date.now()}`;
+      const result = await repository.resolveOAuthIdentity({
+        provider: "GOOGLE",
+        subject,
+        email,
+        emailVerified: true,
+        firstName: "Google",
+        lastName: "User",
+      });
+
+      expect(result.created).toBe(true);
+      expect(result.user.isVerified).toBe(true);
+      await expect(
+        prisma.cart.findUnique({ where: { userId: result.user.id } }),
+      ).resolves.not.toBeNull();
+      await expect(
+        prisma.oAuthAccount.findUnique({
+          where: {
+            provider_providerSubject: {
+              provider: "GOOGLE",
+              providerSubject: subject,
+            },
+          },
+        }),
+      ).resolves.toMatchObject({ userId: result.user.id });
+    });
+
+    it("links a verified provider identity to an existing user", async () => {
+      const email = `oauth-link-${Date.now()}@test.com`;
+      const user = await repository.createUser({
+        email,
+        password: "h",
+        firstName: "Local",
+        lastName: "User",
+      });
+      const subject = `google-link-${Date.now()}`;
+
+      const result = await repository.resolveOAuthIdentity({
+        provider: "GOOGLE",
+        subject,
+        email,
+        emailVerified: true,
+        firstName: "Google",
+        lastName: "User",
+      });
+
+      expect(result.created).toBe(false);
+      expect(result.user.id).toBe(user.id);
+      await expect(
+        prisma.oAuthAccount.findUnique({
+          where: {
+            provider_providerSubject: {
+              provider: "GOOGLE",
+              providerSubject: subject,
+            },
+          },
+        }),
+      ).resolves.toMatchObject({ userId: user.id });
+    });
+
+    it("rejects an unverified provider from linking an existing user", async () => {
+      const email = `oauth-untrusted-${Date.now()}@test.com`;
+      await repository.createUser({
+        email,
+        password: "h",
+        firstName: "Local",
+        lastName: "User",
+      });
+
+      await expect(
+        repository.resolveOAuthIdentity({
+          provider: "FACEBOOK",
+          subject: `facebook-${Date.now()}`,
+          email,
+          emailVerified: false,
+          firstName: "Facebook",
+          lastName: "User",
+        }),
+      ).rejects.toThrow("OAuth identity email verification is required");
+    });
+
+    it("handles concurrent callbacks for one provider subject", async () => {
+      const suffix = Date.now();
+      const identity = {
+        provider: "GOOGLE" as const,
+        subject: `google-race-${suffix}`,
+        email: `oauth-race-${suffix}@test.com`,
+        emailVerified: true,
+        firstName: "Google",
+        lastName: "Race",
+      };
+
+      const results = await Promise.all([
+        repository.resolveOAuthIdentity(identity),
+        repository.resolveOAuthIdentity(identity),
+      ]);
+
+      expect(new Set(results.map((result) => result.user.id)).size).toBe(1);
+      expect(
+        await prisma.oAuthAccount.count({
+          where: {
+            provider: identity.provider,
+            providerSubject: identity.subject,
+          },
+        }),
+      ).toBe(1);
+      expect(
+        await prisma.user.count({ where: { email: identity.email } }),
+      ).toBe(1);
+    });
+  });
 });

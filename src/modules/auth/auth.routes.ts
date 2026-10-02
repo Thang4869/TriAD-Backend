@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { validate } from "@shared/middlewares/validation.middleware";
-import { authMiddleware } from "@/container";
+import { authMiddleware, oauthStateStore } from "@/container";
 import {
   authRateLimiter,
   totpRateLimiter,
@@ -9,6 +9,7 @@ import { csrfProtection } from "@shared/middlewares/csrf.middleware";
 import { authController } from "@/container";
 import passport from "./strategies/oauth2.strategy";
 import { config } from "@config/index";
+import type { OAuthProvider } from "./application/ports/oauth-identity";
 import {
   registerSchema,
   loginSchema,
@@ -19,6 +20,33 @@ import {
 } from "./dto";
 
 const router = Router();
+
+const oauthStart =
+  (provider: OAuthProvider) =>
+  async (
+    req: Parameters<import("express").RequestHandler>[0],
+    res: Parameters<import("express").RequestHandler>[1],
+    next: Parameters<import("express").RequestHandler>[2],
+  ) => {
+    const configured =
+      provider === "GOOGLE"
+        ? config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET
+        : config.FACEBOOK_APP_ID && config.FACEBOOK_APP_SECRET;
+    if (!configured) {
+      res.redirect(`${config.FRONTEND_URL}?error=oauth_unavailable`);
+      return;
+    }
+    try {
+      const state = await oauthStateStore.issue(provider);
+      passport.authenticate(provider.toLowerCase(), {
+        scope: provider === "GOOGLE" ? ["profile", "email"] : ["email"],
+        session: false,
+        state,
+      })(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  };
 
 router.post(
   "/register",
@@ -61,13 +89,7 @@ router.post(
 );
 
 // OAuth
-router.get(
-  "/google",
-  passport.authenticate("google", {
-    scope: ["profile", "email"],
-    session: false,
-  }),
-);
+router.get("/google", oauthStart("GOOGLE"));
 router.get(
   "/google/callback",
   passport.authenticate("google", {
@@ -76,10 +98,7 @@ router.get(
   }),
   authController.googleCallback,
 );
-router.get(
-  "/facebook",
-  passport.authenticate("facebook", { scope: ["email"], session: false }),
-);
+router.get("/facebook", oauthStart("FACEBOOK"));
 router.get(
   "/facebook/callback",
   passport.authenticate("facebook", {

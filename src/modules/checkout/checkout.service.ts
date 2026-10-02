@@ -10,10 +10,6 @@ import { PricingService } from "./services/pricing.service";
 import { StockReservationService } from "./services/stock-reservation.service";
 import { Order } from "@modules/orders/domain/order.entity";
 import { withSpan } from "@core/tracing/span";
-import {
-  FeatureFlag,
-  FeatureFlagPort,
-} from "@shared/application/feature-flags/feature-flag.port";
 import { ordersPlaced } from "@core/metrics/metrics.registry";
 import { IdempotencyConflictError } from "./application/errors/idempotency-conflict.error";
 import { OrderNumberGenerator } from "./application/ports/order-number-generator.port";
@@ -35,7 +31,6 @@ export class CheckoutService {
     private readonly repository: ICheckoutRepository,
     private readonly pricingService: PricingService,
     private readonly stockService: StockReservationService,
-    private readonly featureFlags: FeatureFlagPort,
     private readonly orderNumberGenerator: OrderNumberGenerator,
   ) {}
 
@@ -71,10 +66,6 @@ export class CheckoutService {
         setAttributes({
           "checkout.item_count": cart.items.length,
           "checkout.payment_method": input.paymentMethod,
-          "checkout.new_flow": this.featureFlags.isEnabled(
-            FeatureFlag.NewCheckoutFlow,
-            { userId },
-          ),
         });
 
         let attemptCount = 0;

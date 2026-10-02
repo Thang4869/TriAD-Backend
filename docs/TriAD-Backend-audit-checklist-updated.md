@@ -452,15 +452,19 @@ Static route `/uploads` và thư mục `uploads/tmp` legacy đã được loại
 
 **File liên quan:** [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [prisma-outbox-relay.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-outbox-relay.store.ts)
 
-### #44 — ⬜ OPEN
+### #44 — ✅ CLOSED
 
-**Việc cần làm:** Đo lag từ event chưa publish cũ, nhất và theo dõi dead-letter riêng. Hiện gauge trả về 0 khi batch claim rỗng, kể cả lúc event đang chờ retry/backoff.
+**Việc đã làm:** `triad_backend_outbox_lag_seconds` lấy từ snapshot DB của event chưa publish, chưa dead-letter cũ nhất; event đang backoff hoặc leased vẫn được tính. Thêm gauge `triad_backend_outbox_dead_lettered_events` cho số dead-letter chưa publish hiện tại, giữ nguyên counter chuyển trạng thái `triad_backend_outbox_events_dead_lettered_total`. Thêm alert cho backlog dead-letter unresolved.
+
+**Evidence:** `tests/integration/outbox.observability-retry.test.ts` PASS với row published, active claimable, active leased/backoff và dead-lettered; empty claim sau khi lease claim vẫn trả lag active và dead-letter count đúng.
 
 **File liên quan:** [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [metrics.registry.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/metrics/metrics.registry.ts)
 
-### #45 — ⬜ OPEN
+### #45 — ✅ CLOSED
 
-**Việc cần làm:** Đưa lỗi handler vào callback, `withRetry` hoặc bỏ retry ngay tại chỗ và dựa vào outbox retry. Hiện `eventBus.publish()` trả `{success:false}` nên `withRetry()` không retry trường hợp handler trả thất bại; lỗi chỉ được ném sau khi callback kết thúc.
+**Việc đã làm:** Kết quả `EventBus.publish()` có `success: false` giờ được chuyển thành exception bên trong callback `withRetry`, nên hai retries cho tối đa ba publish attempts ngay trong cùng delivery. Handler đã thành công được tracker bỏ qua ở lần retry sau; chỉ khi immediate retry cạn mới tăng durable attempts/failure và áp dụng backoff.
+
+**Evidence:** Unit và PostgreSQL integration tests chứng minh transient recovery không tăng attempts/failure counter, sibling thành công chỉ chạy một lần, còn persistent failure chạy ba lần và chỉ tăng durable attempts một lần.
 
 **File liên quan:** [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [event-bus.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/event-bus/event-bus.ts)
 

@@ -16,6 +16,7 @@ import {
   outboxEventsFailed,
   outboxEventsDeadLettered,
   outboxLagSeconds,
+  outboxDeadLetteredEvents,
 } from "@core/metrics/metrics.registry";
 import crypto from "crypto";
 
@@ -102,13 +103,8 @@ export class OutboxRelay {
         this.leaseDurationSeconds,
       );
 
+      await this.refreshObservability();
       outboxEventsClaimed.inc(rows.length);
-      const occurredAt = rows[0]?.occurredAt;
-      outboxLagSeconds.set(
-        occurredAt
-          ? Math.max(0, (Date.now() - new Date(occurredAt).getTime()) / 1000)
-          : 0,
-      );
 
       this.startHeartbeat(rows.map((row) => row.id));
       try {
@@ -128,27 +124,35 @@ export class OutboxRelay {
 
   private async publishRow(row: ClaimedOutboxEvent): Promise<void> {
     try {
-      const result = await withRetry(
-        () =>
-          this.eventBus.publish(deserializeDomainEvent(row.payload), {
-            eventId: row.id,
-            tracker: this.handlerTracker,
-          }),
+      await withRetry(
+        async () => {
+          const result = await this.eventBus.publish(
+            deserializeDomainEvent(row.payload),
+            {
+              eventId: row.id,
+              tracker: this.handlerTracker,
+            },
+          );
+          if (!result.success) {
+            throw new Error(
+              `Handlers failed: ${result.failedHandlers.join(", ")}`,
+            );
+          }
+          return result;
+        },
         {
           retries: 2,
           minTimeout: 50,
           maxTimeout: 500,
         },
       );
-      if (!result.success) {
-        throw new Error(`Handlers failed: ${result.failedHandlers.join(", ")}`);
-      }
-      await this.updateClaimedRow(row.id, {
+      const updated = await this.updateClaimedRow(row.id, {
         publishedAt: new Date(),
         lockedAt: null,
         lockOwner: null,
         leaseUntil: null,
       });
+      if (!updated) return;
       outboxEventsPublished.inc();
     } catch (error) {
       logger.error("OutboxRelay failed to publish event, will retry", {
@@ -232,6 +236,23 @@ export class OutboxRelay {
       this.heartbeatTimer = null;
     }
     this.activeClaimIds.clear();
+  }
+
+  private async refreshObservability(): Promise<void> {
+    try {
+      const snapshot = await this.store.getObservabilitySnapshot();
+      outboxLagSeconds.set(
+        snapshot.oldestPendingOccurredAt
+          ? Math.max(
+              0,
+              (Date.now() - snapshot.oldestPendingOccurredAt.getTime()) / 1000,
+            )
+          : 0,
+      );
+      outboxDeadLetteredEvents.set(snapshot.deadLetteredCount);
+    } catch (error) {
+      logger.warn("Outbox observability refresh failed", { error });
+    }
   }
 }
 

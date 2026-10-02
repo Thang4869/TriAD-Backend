@@ -2,6 +2,7 @@ import prisma from "@core/database/prisma";
 import { Prisma } from "@prisma/client";
 import {
   ClaimedOutboxEvent,
+  OutboxObservabilitySnapshot,
   OutboxRelayStore,
   OutboxRelayUpdate,
 } from "./outbox-relay-store.port";
@@ -77,5 +78,28 @@ export class PrismaOutboxRelayStore implements OutboxRelayStore {
       RETURNING id
     `;
     return renewed.map((row) => row.id);
+  }
+
+  async getObservabilitySnapshot(): Promise<OutboxObservabilitySnapshot> {
+    const [snapshot] = await prisma.$queryRaw<
+      Array<{
+        oldestPendingOccurredAt: Date | null;
+        deadLetteredCount: number;
+      }>
+    >`
+      SELECT
+        MIN("occurredAt") FILTER (
+          WHERE "publishedAt" IS NULL AND "deadLetteredAt" IS NULL
+        ) AS "oldestPendingOccurredAt",
+        COUNT(*) FILTER (
+          WHERE "publishedAt" IS NULL AND "deadLetteredAt" IS NOT NULL
+        )::int AS "deadLetteredCount"
+      FROM outbox_events
+    `;
+
+    return {
+      oldestPendingOccurredAt: snapshot?.oldestPendingOccurredAt ?? null,
+      deadLetteredCount: snapshot?.deadLetteredCount ?? 0,
+    };
   }
 }

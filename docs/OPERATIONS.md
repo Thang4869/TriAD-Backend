@@ -9,10 +9,24 @@
 
 ## Outbox lag or dead letters
 
-- Inspect `triad_backend_outbox_lag_seconds`, claimed/published/failed counters and `outbox_events` rows with `publishedAt IS NULL`.
+- Inspect `triad_backend_outbox_lag_seconds`, `triad_backend_outbox_dead_lettered_events`, claimed/published/failed counters and `outbox_events` rows with `publishedAt IS NULL`.
 - Verify the relay process is running and database connections are not exhausted.
 - Check `leaseUntil`, `attempts` and `lastError`. Expired leases are safe to reclaim.
 - Fix the downstream handler or dependency, then replay eligible events through the normal relay. Preserve event ids so handler idempotency remains effective.
+
+`triad_backend_outbox_lag_seconds` is the age of the oldest unpublished,
+non-dead-lettered event. It includes events waiting for retry/backoff and
+events currently leased by another relay; it is not a claimability metric.
+Published rows and unresolved dead-letter rows do not contribute to active
+lag. `triad_backend_outbox_dead_lettered_events` is the current count of
+unpublished rows with `deadLetteredAt` set. It complements, rather than
+replaces, `triad_backend_outbox_events_dead_lettered_total`, which counts
+dead-letter transitions over the process lifetime.
+
+The relay refreshes both values from an authoritative database aggregate on
+every poll, including empty claim batches. If that read fails, the relay logs
+the observability error and keeps the last valid metric values while delivery
+continues.
 
 ## Outbox delivery and relay leases
 
@@ -44,6 +58,15 @@ reclaim the row after `leaseUntil`.
 Stopping a relay stops scheduling new polls and lets the current batch finish;
 heartbeat resources are cleared when the batch completes or fails. Do not
 manually clear active claims while a handler is still running.
+
+Within one delivery attempt, handler failures returned as `success: false`
+are converted to exceptions inside the relay's `withRetry` callback. The
+default two retries therefore allow up to three immediate publish attempts.
+Successful handlers are skipped on later attempts by the handler tracker.
+Only after all immediate attempts fail does the relay increment durable
+`attempts`, apply backoff, increment the durable failure counter, and possibly
+transition the row to dead letter. A transient handler failure that recovers
+does not affect durable failure metrics.
 
 ## Saga operations
 

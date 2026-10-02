@@ -65,3 +65,11 @@ groups:
         annotations:
           summary: Outbox failures may be dead-lettering events
           description: Inspect outbox_events for attempts at the configured retry ceiling.
+      - alert: TriadOutboxDeadLetterBacklog
+        expr: triad_backend_outbox_dead_lettered_events > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Unresolved outbox dead-letter events exist
+          description: One or more unpublished outbox events remain in the dead-letter state.

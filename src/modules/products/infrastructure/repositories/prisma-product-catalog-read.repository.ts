@@ -7,6 +7,7 @@ import type {
 } from "../../application/product-catalog-read.port";
 import type { ProductListItemResponse } from "../../products.mapper";
 import type { ProductFilter } from "../../domain/specifications/product-specification";
+import { toSafeMoneyNumber } from "@shared/infrastructure/money-number";
 
 export class PrismaProductCatalogReadRepository implements ProductCatalogReadPort {
   async findMany(
@@ -86,7 +87,7 @@ export class PrismaProductCatalogReadRepository implements ProductCatalogReadPor
       id: row.productId,
       name: row.name,
       description: row.description,
-      price: row.price,
+      price: toSafeMoneyNumber(row.price),
       stock: row.stock,
       category: row.category,
       images: row.images,

@@ -12,12 +12,17 @@ import type {
 import type { CheckoutTransaction } from "../../application/ports/checkout-transaction";
 import type {
   OrderWithItems,
+  SavedCheckoutOrder,
   UserCartForCheckout,
 } from "../../application/ports/checkout-models";
 import type { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import { IdempotencyConflictError } from "../../application/errors/idempotency-conflict.error";
 import { ConflictError } from "@/shared/utils/errors";
 import type { DomainEvent } from "@shared/domain/events/domain-event";
+import {
+  toSafeDecimalNumber,
+  toSafeMoneyNumber,
+} from "@shared/infrastructure/money-number";
 
 const TRANSACTION_TIMEOUT_MS = 10_000;
 type PersistEvents = typeof persistEvents;
@@ -62,17 +67,18 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
   ) {}
 
   async findOrderWithItems(orderId: string): Promise<OrderWithItems | null> {
-    return prisma.order.findUnique({
+    const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: { items: { include: { product: true } } },
-    }) as unknown as Promise<OrderWithItems | null>;
+    });
+    return order ? toOrderWithItems(order) : null;
   }
 
   async findOrderByIdempotencyKey(
     userId: string,
     idempotencyKey: string,
   ): Promise<OrderWithItems | null> {
-    return prisma.order.findFirst({
+    const order = await prisma.order.findFirst({
       where: {
         userId,
         idempotencyKey,
@@ -84,13 +90,14 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
           },
         },
       },
-    }) as unknown as Promise<OrderWithItems | null>;
+    });
+    return order ? toOrderWithItems(order) : null;
   }
 
   async findUserCartForCheckout(
     userId: string,
   ): Promise<UserCartForCheckout | null> {
-    return prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
         cart: {
@@ -98,6 +105,22 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
         },
       },
     });
+    if (!user) return null;
+    return {
+      ...user,
+      cart: user.cart
+        ? {
+            ...user.cart,
+            items: user.cart.items.map((item) => ({
+              ...item,
+              product: {
+                ...item.product,
+                price: toSafeMoneyNumber(item.product.price),
+              },
+            })),
+          }
+        : null,
+    };
   }
 
   async runInTransaction<T>(
@@ -128,12 +151,22 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     productIds: string[],
   ): Promise<LockedProductRow[]> {
     const prismaTx = toPrismaTx(tx);
-    return prismaTx.$queryRaw<LockedProductRow[]>`
+    const rows = await prismaTx.$queryRaw<
+      Array<
+        Omit<LockedProductRow, "price"> & {
+          price: Prisma.Decimal | number | string;
+        }
+      >
+    >`
       SELECT id, name, price, stock, version, "isActive"
       FROM products
       WHERE id = ANY(${productIds})
       FOR UPDATE
     `;
+    return rows.map((row) => ({
+      ...row,
+      price: toSafeMoneyNumber(row.price),
+    }));
   }
 
   async decrementProductStock(
@@ -170,7 +203,17 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     code: string,
   ): Promise<DiscountRecord | null> {
     const prismaTx = toPrismaTx(tx);
-    return prismaTx.discount.findUnique({ where: { code } });
+    const discount = await prismaTx.discount.findUnique({ where: { code } });
+    return discount
+      ? {
+          ...discount,
+          value: toSafeDecimalNumber(discount.value),
+          minOrderAmount:
+            discount.minOrderAmount == null
+              ? null
+              : toSafeMoneyNumber(discount.minOrderAmount),
+        }
+      : null;
   }
 
   async incrementDiscountUsage(
@@ -201,7 +244,7 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     tx: CheckoutTransaction,
     order: OrderAggregate,
     idempotencyKey?: string,
-  ): Promise<Order> {
+  ): Promise<SavedCheckoutOrder> {
     const prismaTx = toPrismaTx(tx);
     let created: Order;
 
@@ -266,7 +309,7 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
       new Map([[order.id, 0]]),
     );
 
-    return created;
+    return toSavedCheckoutOrder(created);
   }
 
   async createOrderItems(
@@ -287,7 +330,7 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     skip: number,
     take: number,
   ): Promise<OrderWithItems[]> {
-    return prisma.order.findMany({
+    const orders = await prisma.order.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
       skip,
@@ -301,7 +344,8 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
           },
         },
       },
-    }) as unknown as Promise<OrderWithItems[]>;
+    });
+    return orders.map(toOrderWithItems);
   }
 
   async countOrdersByUser(userId: string): Promise<number> {
@@ -312,7 +356,7 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
     orderId: string,
     userId: string,
   ): Promise<OrderWithItems | null> {
-    return prisma.order.findFirst({
+    const order = await prisma.order.findFirst({
       where: { id: orderId, userId },
       include: {
         items: {
@@ -323,6 +367,84 @@ export class PrismaCheckoutRepository implements ICheckoutRepository {
           },
         },
       },
-    }) as unknown as Promise<OrderWithItems | null>;
+    });
+    return order ? toOrderWithItems(order) : null;
   }
+}
+
+type CheckoutOrderRecord = {
+  id: string;
+  orderNumber: string;
+  userId: string;
+  status: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  subtotal: Prisma.Decimal;
+  tax: Prisma.Decimal;
+  shippingFee: Prisma.Decimal;
+  total: Prisma.Decimal;
+  discountAmount: Prisma.Decimal;
+  discountCode: string | null;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  customerAddress: string;
+  notes: string | null;
+  idempotencyKey: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  version: number;
+  items: Array<{
+    id: string;
+    orderId: string;
+    productId: string;
+    quantity: number;
+    price: Prisma.Decimal;
+    total: Prisma.Decimal;
+    product: {
+      id: string;
+      name: string;
+      images: string[];
+      slug: string;
+    };
+  }>;
+};
+
+function toOrderWithItems(order: CheckoutOrderRecord): OrderWithItems {
+  return {
+    ...toSavedCheckoutOrder(order),
+    items: order.items.map((item) => ({
+      ...item,
+      price: toSafeMoneyNumber(item.price),
+      total: toSafeMoneyNumber(item.total),
+    })),
+  };
+}
+
+function toSavedCheckoutOrder(
+  order: Omit<CheckoutOrderRecord, "items"> | CheckoutOrderRecord,
+): SavedCheckoutOrder {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    userId: order.userId,
+    status: order.status,
+    paymentMethod: order.paymentMethod,
+    paymentStatus: order.paymentStatus,
+    subtotal: toSafeMoneyNumber(order.subtotal),
+    tax: toSafeMoneyNumber(order.tax),
+    shippingFee: toSafeMoneyNumber(order.shippingFee),
+    total: toSafeMoneyNumber(order.total),
+    discountAmount: toSafeMoneyNumber(order.discountAmount),
+    discountCode: order.discountCode,
+    customerName: order.customerName,
+    customerEmail: order.customerEmail,
+    customerPhone: order.customerPhone,
+    customerAddress: order.customerAddress,
+    notes: order.notes,
+    idempotencyKey: order.idempotencyKey,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    version: order.version,
+  };
 }

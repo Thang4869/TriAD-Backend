@@ -126,6 +126,8 @@ Runtime read-side đã được nối thật: Catalog đọc `product_catalog_pr
 
 ## P1. Kiến trúc: làm cho các tuyên bố trong README thành sự thật
 
+- [x] **P1 #19 — Money finite guards, deterministic rounding, and safe monetary persistence.** VND được biểu diễn trong domain/API bằng số nguyên an toàn; `Math.round` là chính sách half-up; PostgreSQL dùng `numeric(18,0)` cho tiền và `numeric(18,4)` cho giá trị discount đa nghĩa. Decimal được kiểm tra finite/safe tại infrastructure boundary, SQL dashboard giữ aggregation exact, migration `20261002160000_make_money_exact` đã apply và integration/quality gates đều PASS.
+
 ### CQRS và outbox
 
 - [x] **C1.** **KEEP projection/read-model — đã hoàn tất.** Catalog, order history và dashboard đều có read port/adapter được bind trong composition root. Dashboard dùng singleton projection cho summary, order-history projection cho order analytics, product-catalog projection cho product analytics; `newUsers30Days` dùng query hẹp trên `users` vì chưa có user projection. Divergence integration test chứng minh read path không đọc write tables; legacy `DashboardRepository` đã xoá.

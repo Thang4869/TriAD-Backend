@@ -5,6 +5,7 @@ import type {
   OrderHistoryReadPort,
   OrderHistoryView,
 } from "../../application/order-history-read.port";
+import { toSafeMoneyNumber } from "@shared/infrastructure/money-number";
 
 type ProjectionItem = {
   productId: string;
@@ -73,10 +74,10 @@ export class PrismaOrderHistoryReadRepository implements OrderHistoryReadPort {
       orderNumber: row.orderNumber,
       status: row.status as OrderStatus,
       paymentStatus: row.paymentStatus,
-      subtotal: row.subtotal,
-      tax: row.tax,
-      shippingFee: row.shippingFee,
-      total: row.total,
+      subtotal: toSafeMoneyNumber(row.subtotal),
+      tax: toSafeMoneyNumber(row.tax),
+      shippingFee: toSafeMoneyNumber(row.shippingFee),
+      total: toSafeMoneyNumber(row.total),
       items: mappedItems,
       placedAt: row.placedAt,
       updatedAt: row.updatedAt,

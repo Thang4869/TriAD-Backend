@@ -9,6 +9,12 @@ import { Money } from "@shared/value-objects/money";
 // (very large amounts, amounts that round awkwardly, zero, etc).
 
 const nonNegativeAmount = fc.integer({ min: 0, max: 1_000_000_000 });
+const safeFactor = fc.double({
+  min: 0,
+  max: 100,
+  noNaN: true,
+  noDefaultInfinity: true,
+});
 
 describe("Money (property-based)", () => {
   it("never exposes a negative value, for any non-negative constructor input", () => {
@@ -105,6 +111,16 @@ describe("Money (property-based)", () => {
       fc.property(nonNegativeAmount, nonNegativeAmount, (a, b) => {
         const result = new Money(a).lessThan(new Money(b));
         expect(result).toBe(Math.round(a) < Math.round(b));
+      }),
+    );
+  });
+
+  it("multiply() always returns a finite safe non-negative integer", () => {
+    fc.assert(
+      fc.property(nonNegativeAmount, safeFactor, (amount, factor) => {
+        const result = new Money(amount).multiply(factor).getValue();
+        expect(Number.isSafeInteger(result)).toBe(true);
+        expect(result).toBeGreaterThanOrEqual(0);
       }),
     );
   });

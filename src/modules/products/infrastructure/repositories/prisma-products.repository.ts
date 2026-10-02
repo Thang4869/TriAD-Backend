@@ -18,6 +18,7 @@ import type {
   ProductWithShortReviews,
 } from "../../application/product-models";
 import type { ProductFilter } from "../../domain/specifications/product-specification";
+import { toSafeMoneyNumber } from "@shared/infrastructure/money-number";
 
 // ---------- Prisma implementation ----------
 
@@ -30,7 +31,7 @@ export class PrismaProductsRepository implements IProductsRepository {
   async findManyWithRatings(
     query: ProductListQuery,
   ): Promise<ProductWithRatingReviews[]> {
-    return prisma.product.findMany({
+    const products = await prisma.product.findMany({
       where: query.where,
       orderBy: query.orderBy,
       skip: query.skip,
@@ -41,6 +42,10 @@ export class PrismaProductsRepository implements IProductsRepository {
         },
       },
     });
+    return products.map((product) => ({
+      ...product,
+      price: toSafeMoneyNumber(product.price),
+    }));
   }
 
   async count(where: ProductFilter): Promise<number> {
@@ -52,7 +57,7 @@ export class PrismaProductsRepository implements IProductsRepository {
   async findByIdWithReviews(
     id: string,
   ): Promise<ProductWithFullReviews | null> {
-    return prisma.product.findUnique({
+    const product = await prisma.product.findUnique({
       where: { id },
       include: {
         reviews: {
@@ -70,12 +75,18 @@ export class PrismaProductsRepository implements IProductsRepository {
         },
       },
     });
+    return product
+      ? {
+          ...product,
+          price: toSafeMoneyNumber(product.price),
+        }
+      : null;
   }
 
   async findBySlugWithReviews(
     slug: string,
   ): Promise<ProductWithShortReviews | null> {
-    return prisma.product.findUnique({
+    const product = await prisma.product.findUnique({
       where: { slug },
       include: {
         reviews: {
@@ -88,6 +99,12 @@ export class PrismaProductsRepository implements IProductsRepository {
         },
       },
     });
+    return product
+      ? {
+          ...product,
+          price: toSafeMoneyNumber(product.price),
+        }
+      : null;
   }
 
   async findBySlugId(slug: string): Promise<ProductIdRecord | null> {
@@ -111,22 +128,30 @@ export class PrismaProductsRepository implements IProductsRepository {
   }
 
   async findManyAdmin(query: ProductListQuery): Promise<ProductRecord[]> {
-    return prisma.product.findMany({
+    const products = await prisma.product.findMany({
       where: query.where,
       orderBy: query.orderBy,
       skip: query.skip,
       take: query.take,
     });
+    return products.map((product) => ({
+      ...product,
+      price: toSafeMoneyNumber(product.price),
+    }));
   }
 
   async findById(id: string): Promise<ProductRecord | null> {
-    return prisma.product.findUnique({ where: { id } });
+    const product = await prisma.product.findUnique({ where: { id } });
+    return product
+      ? { ...product, price: toSafeMoneyNumber(product.price) }
+      : null;
   }
 
   async create(data: CreateProductData): Promise<ProductRecord> {
-    return prisma.product.create({
+    const product = await prisma.product.create({
       data: { ...data, isActive: true },
     });
+    return { ...product, price: toSafeMoneyNumber(product.price) };
   }
 
   async createWithEvents(
@@ -148,15 +173,16 @@ export class PrismaProductsRepository implements IProductsRepository {
         new Map([[aggregate.id, created.version]]),
       );
 
-      return created;
+      return { ...created, price: toSafeMoneyNumber(created.price) };
     });
   }
 
   async update(id: string, data: UpdateProductData): Promise<ProductRecord> {
-    return prisma.product.update({
+    const product = await prisma.product.update({
       where: { id },
       data: { ...data, version: { increment: 1 } },
     });
+    return { ...product, price: toSafeMoneyNumber(product.price) };
   }
 
   async updateWithEvents(
@@ -176,15 +202,16 @@ export class PrismaProductsRepository implements IProductsRepository {
         new Map([[id, updated.version]]),
       );
 
-      return updated;
+      return { ...updated, price: toSafeMoneyNumber(updated.price) };
     });
   }
 
   async setActive(id: string, isActive: boolean): Promise<ProductRecord> {
-    return prisma.product.update({
+    const product = await prisma.product.update({
       where: { id },
       data: { isActive, version: { increment: 1 } },
     });
+    return { ...product, price: toSafeMoneyNumber(product.price) };
   }
 
   async setActiveWithEvents(
@@ -204,7 +231,7 @@ export class PrismaProductsRepository implements IProductsRepository {
         new Map([[id, updated.version]]),
       );
 
-      return updated;
+      return { ...updated, price: toSafeMoneyNumber(updated.price) };
     });
   }
 
@@ -221,7 +248,7 @@ export class PrismaProductsRepository implements IProductsRepository {
     skip: number,
     take: number,
   ): Promise<FullTextSearchResult[]> {
-    return prisma.$queryRaw<FullTextSearchResult[]>`
+    const products = await prisma.$queryRaw<FullTextSearchResult[]>`
       SELECT
         "id", "name", "description", "price", "stock",
         "category", "images", "slug",
@@ -232,6 +259,10 @@ export class PrismaProductsRepository implements IProductsRepository {
       ORDER BY rank DESC
       OFFSET ${skip} LIMIT ${take}
     `;
+    return products.map((product) => ({
+      ...product,
+      price: toSafeMoneyNumber(product.price),
+    }));
   }
 
   async countFullTextSearch(query: string): Promise<number> {

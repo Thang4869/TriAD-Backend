@@ -1,10 +1,25 @@
+export const MONEY_CURRENCY = "VND";
+export const MONEY_ROUNDING_POLICY = "half-up" as const;
+
 export class Money {
   private readonly amount: number;
-  private readonly currency: string = "VND";
+  private readonly currency: string;
 
-  constructor(amount: number, currency: string = "VND") {
+  constructor(amount: number, currency: string = MONEY_CURRENCY) {
+    if (!Number.isFinite(amount)) {
+      throw new Error("Amount must be finite");
+    }
     if (amount < 0) throw new Error("Amount cannot be negative");
-    this.amount = Math.round(amount);
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      throw new Error("Invalid currency");
+    }
+
+    const normalizedAmount = Math.round(amount);
+    if (!Number.isSafeInteger(normalizedAmount)) {
+      throw new Error("Amount must be a safe integer");
+    }
+
+    this.amount = normalizedAmount;
     this.currency = currency;
   }
 
@@ -27,6 +42,9 @@ export class Money {
   }
 
   multiply(factor: number): Money {
+    if (!Number.isFinite(factor) || factor < 0) {
+      throw new Error("Factor must be finite and non-negative");
+    }
     return new Money(this.amount * factor, this.currency);
   }
 

@@ -2,6 +2,7 @@ import prisma from "@core/database/prisma";
 
 import type { IWishlistRepository } from "../../application/ports/wishlist.repository.port";
 import type { WishlistItemWithProduct } from "../../application/ports/wishlist-models";
+import { toSafeMoneyNumber } from "@shared/infrastructure/money-number";
 
 const PRODUCT_SUMMARY_SELECT = {
   id: true,
@@ -21,13 +22,20 @@ export class PrismaWishlistRepository implements IWishlistRepository {
     skip: number,
     take: number,
   ): Promise<WishlistItemWithProduct[]> {
-    return prisma.wishlistItem.findMany({
+    const items = await prisma.wishlistItem.findMany({
       where: { userId },
       include: { product: { select: PRODUCT_SUMMARY_SELECT } },
       orderBy: { createdAt: "desc" },
       skip,
       take,
     });
+    return items.map((item) => ({
+      ...item,
+      product: {
+        ...item.product,
+        price: toSafeMoneyNumber(item.product.price),
+      },
+    }));
   }
 
   async countByUser(userId: string): Promise<number> {
@@ -54,10 +62,17 @@ export class PrismaWishlistRepository implements IWishlistRepository {
     userId: string,
     productId: string,
   ): Promise<WishlistItemWithProduct> {
-    return prisma.wishlistItem.create({
+    const item = await prisma.wishlistItem.create({
       data: { userId, productId },
       include: { product: { select: PRODUCT_SUMMARY_SELECT } },
     });
+    return {
+      ...item,
+      product: {
+        ...item.product,
+        price: toSafeMoneyNumber(item.product.price),
+      },
+    };
   }
 
   async delete(userId: string, productId: string): Promise<void> {

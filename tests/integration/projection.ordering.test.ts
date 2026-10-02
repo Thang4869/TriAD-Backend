@@ -41,10 +41,13 @@ describe("projection ordering (integration, real DB)", () => {
       prisma.productCatalogProjection.findUnique({ where: { productId } }),
     ).resolves.toMatchObject({
       name: "new",
-      price: 20,
       stock: 2,
       sourceVersion: 2,
     });
+    const persisted = await prisma.productCatalogProjection.findUnique({
+      where: { productId },
+    });
+    expect(persisted?.price.toString()).toBe("20");
 
     await prisma.productCatalogProjection.delete({ where: { productId } });
   });

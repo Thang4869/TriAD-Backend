@@ -32,7 +32,15 @@ describe("image-process.job", () => {
 
     vi.mocked(productsRepository.findById).mockResolvedValue({
       id: "prod-1",
+      name: "Test Product",
+      description: null,
+      price: 100,
+      stock: 10,
+      category: "test",
       images: ["old.jpg"],
+      slug: "test-product",
+      isActive: true,
+      version: 0,
     } as any);
 
     vi.mocked(productsRepository.updateWithEvents).mockResolvedValue({} as any);

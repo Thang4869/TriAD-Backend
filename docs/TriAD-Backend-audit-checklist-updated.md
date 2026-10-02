@@ -165,9 +165,9 @@ integration tests, contract tests, build, Prisma validation và diff check PASS.
 
 **File liên quan:** [pricing.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/services/pricing.service.ts), [CheckoutRenderer.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutRenderer.js)
 
-### #19 — ⬜ OPEN
+### #19 — ✅ CLOSED
 
-**Việc cần làm:** Củng cố `Money`: từ chối `NaN`, `Infinity`, số lượng/chỉ số không hợp lệ; thống nhất quy tắc làm tròn và kiểu lưu tiền. Schema hiện dùng `Float`.
+**Việc đã làm:** `Money` dùng VND integer-safe, từ chối giá trị không hữu hạn, âm và ngoài `Number.isSafeInteger`; `add`, `subtract` và `multiply` giữ invariant overflow/non-negative/currency. Chính sách làm tròn canonical là half-up (`Math.round`). Các cột tiền đã chuyển sang PostgreSQL `numeric(18,0)` qua migration `20261002160000_make_money_exact`; `Discount.value` dùng `numeric(18,4)` để giữ phần trăm, còn `minOrderAmount` là `numeric(18,0)`. Prisma Decimal chỉ tồn tại ở infrastructure boundary và được map thành số JSON an toàn trước domain/API/event. Dashboard aggregation giữ `numeric` trong SQL và kiểm tra safe integer ở boundary.
 
 **File liên quan:** [money.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/value-objects/money.ts), [schema.prisma](https://github.com/Thang4869/TriAD-Backend/blob/main/prisma/schema.prisma)
 

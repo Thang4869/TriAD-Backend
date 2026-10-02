@@ -128,7 +128,16 @@ describe("AdminProductService.adminFindAll", () => {
 describe("AdminProductService.create", () => {
   it("tạo mới khi slug chưa tồn tại", async () => {
     const repository = createRepository();
-    const data = { slug: "ao-moi", name: "Áo mới" } as never;
+    const data = {
+      slug: "ao-moi",
+      name: "Áo mới",
+      description: null,
+      price: 100_000,
+      stock: 10,
+      category: "Áo",
+      images: [],
+      isActive: true,
+    } as never;
 
     await createService(repository).service.create(data);
 

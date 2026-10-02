@@ -1,4 +1,5 @@
 import prisma from "@core/database/prisma";
+import { Prisma } from "@prisma/client";
 import { OrderStatus } from "@modules/orders/domain/order-status";
 import type {
   DashboardLowStockProduct,
@@ -7,6 +8,7 @@ import type {
   DashboardTopSellingProduct,
   GrossOrderValueByDay,
 } from "../../application/dashboard-read.port";
+import { toSafeMoneyNumber } from "@shared/infrastructure/money-number";
 
 export class PrismaDashboardReadRepository implements DashboardReadPort {
   async getGrossOrderValue(sinceDate: Date): Promise<number> {
@@ -18,7 +20,7 @@ export class PrismaDashboardReadRepository implements DashboardReadPort {
       _sum: { total: true },
     });
 
-    return result._sum.total ?? 0;
+    return result._sum.total == null ? 0 : toSafeMoneyNumber(result._sum.total);
   }
 
   async getOrderStatusBreakdown(): Promise<DashboardOrderStatusCount[]> {
@@ -36,10 +38,12 @@ export class PrismaDashboardReadRepository implements DashboardReadPort {
   async getGrossOrderValueByDay(
     sinceDate: Date,
   ): Promise<GrossOrderValueByDay[]> {
-    return prisma.$queryRaw<GrossOrderValueByDay[]>`
+    const rows = await prisma.$queryRaw<
+      Array<GrossOrderValueByDay & { grossOrderValue: Prisma.Decimal }>
+    >`
       SELECT
         TO_CHAR(DATE_TRUNC('day', "placedAt"), 'YYYY-MM-DD') AS date,
-        COALESCE(SUM("total"), 0)::float AS "grossOrderValue",
+        COALESCE(SUM("total"), 0)::numeric AS "grossOrderValue",
         COUNT(*)::int AS "orderCount"
       FROM "order_history_projection"
       WHERE "placedAt" >= ${sinceDate}
@@ -47,18 +51,24 @@ export class PrismaDashboardReadRepository implements DashboardReadPort {
       GROUP BY DATE_TRUNC('day', "placedAt")
       ORDER BY DATE_TRUNC('day', "placedAt") ASC
     `;
+    return rows.map((row) => ({
+      ...row,
+      grossOrderValue: toSafeMoneyNumber(row.grossOrderValue),
+    }));
   }
 
   async getTopSellingProducts(
     limit: number,
     sinceDate: Date,
   ): Promise<DashboardTopSellingProduct[]> {
-    return prisma.$queryRaw<DashboardTopSellingProduct[]>`
+    const rows = await prisma.$queryRaw<
+      Array<DashboardTopSellingProduct & { totalOrderValue: Prisma.Decimal }>
+    >`
       SELECT
         item->>'productId' AS "productId",
         item->>'productName' AS "name",
         SUM((item->>'quantity')::int)::int AS "totalQuantitySold",
-        SUM((item->>'quantity')::numeric * (item->>'unitPrice')::numeric)::float
+        SUM((item->>'quantity')::numeric * (item->>'unitPrice')::numeric)::numeric
           AS "totalOrderValue"
       FROM "order_history_projection" order_projection
       CROSS JOIN LATERAL jsonb_array_elements(order_projection."items") AS item
@@ -68,6 +78,10 @@ export class PrismaDashboardReadRepository implements DashboardReadPort {
       ORDER BY "totalQuantitySold" DESC
       LIMIT ${limit}
     `;
+    return rows.map((row) => ({
+      ...row,
+      totalOrderValue: toSafeMoneyNumber(row.totalOrderValue),
+    }));
   }
 
   async getLowStockProducts(

@@ -69,6 +69,8 @@ import { AdminProductService } from "./modules/products/services/admin-product.s
 import { CatalogService } from "./modules/products/services/catalog.service";
 import { EnvironmentFeatureFlags } from "@core/feature-flags/environment-feature-flags";
 import { RedisTokenStore } from "@modules/auth/infrastructure/token-store/redis-token-store";
+import { RedisOAuthStateStore } from "@modules/auth/infrastructure/token-store/redis-oauth-state-store";
+import { registerOAuthStrategies } from "@modules/auth/strategies/oauth2.strategy";
 import {
   createAuthMiddleware,
   createOptionalAuthMiddleware,
@@ -129,6 +131,10 @@ container.register(TOKENS.AuthRepository, () => new PrismaAuthRepository());
 container.register(TOKENS.AuthSessionUser, () => new PrismaAuthRepository());
 
 container.register(TOKENS.TokenStore, () => new RedisTokenStore());
+container.register(
+  TOKENS.OAuthStateStore,
+  (c) => new RedisOAuthStateStore(c.resolve(TOKENS.TokenStore)),
+);
 container.register(TOKENS.CartRepository, () => new PrismaCartRepository());
 container.register(
   TOKENS.CheckoutRepository,
@@ -256,7 +262,6 @@ container.register(
       c.resolve(TOKENS.CheckoutRepository),
       c.resolve(TOKENS.PricingService),
       c.resolve(TOKENS.StockReservationService),
-      c.resolve(TOKENS.FeatureFlags),
       c.resolve(TOKENS.OrderNumberGenerator),
     ),
 );
@@ -361,6 +366,11 @@ container.register(
 
 container.register(TOKENS.FeatureFlags, () => new EnvironmentFeatureFlags());
 
+registerOAuthStrategies(
+  container.resolve(TOKENS.AuthService),
+  container.resolve(TOKENS.OAuthStateStore),
+);
+
 // ---------- Wire domain events to their handlers ----------
 const eventBus = container.resolve(TOKENS.EventBus);
 const orderPlacedHandler = container.resolve(TOKENS.OrderPlacedHandler);
@@ -424,6 +434,7 @@ for (const eventName of [
 export { eventBus };
 export const productsController = container.resolve(TOKENS.ProductsController);
 export const authController = container.resolve(TOKENS.AuthController);
+export const oauthStateStore = container.resolve(TOKENS.OAuthStateStore);
 export const cartController = container.resolve(TOKENS.CartController);
 export const checkoutController = container.resolve(TOKENS.CheckoutController);
 export const ordersController = container.resolve(TOKENS.OrdersController);

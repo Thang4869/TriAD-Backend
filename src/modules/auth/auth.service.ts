@@ -5,7 +5,6 @@ import { AuthUser } from "./application/ports/auth-user";
 import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
 import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
 import type {
-  CreateOAuthUserData,
   CreateUserData,
   IAuthRepository,
 } from "./application/ports/auth.repository.port";
@@ -20,6 +19,8 @@ import {
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import config from "@config";
 import { User as UserEntity } from "../users/domain/user.entity";
+import type { OAuthIdentity } from "./application/ports/oauth-identity";
+import { OAuthIdentityUntrustedError } from "./application/errors/oauth-identity.errors";
 
 export interface AuthTokens {
   accessToken: string;
@@ -152,14 +153,22 @@ export class AuthService {
     return this.tokenService.refreshToken(refreshToken);
   }
 
-  async findOrCreateOAuthUser(data: CreateOAuthUserData): Promise<AuthUser> {
-    const existingUser = await this.repository.findUserByEmail(data.email);
+  async resolveOAuthIdentity(data: OAuthIdentity): Promise<AuthUser> {
+    const resolution = await this.repository.resolveOAuthIdentity(data);
 
-    if (existingUser) {
-      return existingUser;
+    if (resolution.created) {
+      const user = UserEntity.registered(toEntityData(resolution.user));
+      await this.publishEvents(user);
+      if (!resolution.user.isVerified) {
+        await this.sendVerificationEmail(resolution.user);
+      }
     }
 
-    return this.repository.createOAuthUser(data);
+    if (!resolution.user.isVerified) {
+      throw new OAuthIdentityUntrustedError();
+    }
+
+    return resolution.user;
   }
 
   private async sendVerificationEmail(user: AuthUser) {

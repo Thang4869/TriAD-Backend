@@ -26,6 +26,7 @@ model User {
   refreshTokens RefreshToken[]
   reviews       Review[]
   wishlistItems WishlistItem[]
+  oauthAccounts OAuthAccount[]
 
   @@map("users")
 }
@@ -161,6 +162,22 @@ model RefreshToken {
 
   @@unique([familyId, token])
   @@map("refresh_tokens")
+}
+
+model OAuthAccount {
+  id                    String        @id @default(cuid())
+  userId                String
+  provider              OAuthProvider
+  providerSubject       String
+  providerEmail         String
+  providerEmailVerified Boolean       @default(false)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@index([userId])
+  @@map("oauth_accounts")
 }
 
 model Discount {
@@ -339,4 +356,9 @@ enum PaymentStatus {
 enum DiscountType {
   PERCENTAGE
   FIXED
+}
+
+enum OAuthProvider {
+  GOOGLE
+  FACEBOOK
 }

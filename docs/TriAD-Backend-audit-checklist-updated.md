@@ -1,599 +1,165 @@
-# TriAD Backend — Audit & Production Readiness Checklist
+# Checklist hoàn thiện TriAD Backend và kết nối Frontend
 
-**Phạm vi:** Backend
-[`Thang4869/TriAD-Backend`](https://github.com/Thang4869/TriAD-Backend),
-commit `f5a181e` trên `main`; Frontend
-[`Thang4869/TriAD-12`](https://github.com/Thang4869/TriAD-12), commit
-`84431df` trên `main`. Bản export backend đã được đối chiếu với các file
-quan trọng ở repository.
+**Phạm vi:** Backend [`Thang4869/TriAD-Backend`](https://github.com/Thang4869/TriAD-Backend), `main` tại commit `50bf3a1`; Frontend [`Thang4869/TriAD-12`](https://github.com/Thang4869/TriAD-12), `main` tại commit `a6f3f6c`.
 
-**Đánh giá hiện tại (mang tính tham khảo):** OOP/kiến trúc 8/10; Clean
-Code 7/10; khả năng thể hiện trình độ Tech Lead 7/10; sẵn sàng
-production 5/10. Có thể dùng dự án trong portfolio/CV với mô tả chính
-xác về những gì đã triển khai. Không thể bảo đảm 10/10 chỉ bằng việc
-hoàn tất checklist; cần bằng chứng từ test, triển khai và vận hành thực
-tế.
+**Baseline rà soát:** bản export backend ngày **02/10/2026** gồm **360 file**; GitHub `main` được dùng để đối chiếu các file bị export bỏ qua và các commit mới hơn thời điểm export. Mốc tài liệu này là **03/10/2026**, ngay trước khi bắt đầu **P1 #46**.
 
-Quy ước: **BE** = backend; **FE** = frontend. Các đường dẫn dưới đây là
-đường dẫn đầy đủ tới file tương ứng trên GitHub. Mỗi ô là một việc cần
-kiểm tra hoặc sửa. Trạng thái bên dưới đã được cập nhật theo các thay
-đổi và kiểm thử đã thực hiện đến 01/10/2026.
+**Nguyên tắc:** mô tả trong checklist phải phản ánh **trạng thái hiện tại**. Mục đã sửa không tiếp tục viết bằng giọng như lỗi vẫn còn tồn tại. Một mục chỉ chuyển sang `CLOSED` khi thay đổi code và bằng chứng kiểm thử/quality gate cần thiết đã đủ cho phạm vi của mục đó.
 
-## Trạng thái nhanh
+## Quy ước trạng thái
 
-| Trạng thái               | Ý nghĩa                                                                           |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| ✅ **CLOSED**            | Code + regression/integration evidence + quality gates cần thiết đã PASS          |
-| 🟡 **PARTIAL / PENDING** | Implementation đã có nhưng còn runtime/deployment verification hoặc một phần việc |
-| ⬜ **TODO / OPEN**       | Chưa triển khai hoặc chưa có trạng thái đóng                                      |
+| Trạng thái     | Ý nghĩa                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------ |
+| ✅ CLOSED      | Đã hoàn tất trong phạm vi mục và có evidence phù hợp.                                            |
+| 🟡 PARTIAL     | Đã có phần implementation/evidence nhưng vẫn còn phần kỹ thuật chưa hoàn tất.                    |
+| 🟡 PENDING     | Implementation đã hoàn tất nhưng còn phụ thuộc môi trường/runtime/external provider để xác minh. |
+| ⬜ OPEN        | Chưa triển khai hoặc chưa đủ bằng chứng để đóng.                                                 |
+| ⬜ OPEN — NEXT | Mục OPEN được chọn làm bước tiếp theo.                                                           |
 
-> **P0 hiện tại:** #1–#11 và #35–#41 đã CLOSED về code/test, bao gồm #36, #37, #38, #39 và #40; #12 vẫn chờ production verification trên Vercel + Render.
+## Trạng thái tổng quan
+
+| Nhóm               | CLOSED | PARTIAL / PENDING | OPEN   | Ghi chú                                                       |
+| ------------------ | ------ | ----------------- | ------ | ------------------------------------------------------------- |
+| P0 #1–#12          | 11     | 1                 | 0      | #12 chờ deployed Vercel + Render smoke.                       |
+| P1 #13–#26         | 12     | 1                 | 1      | #23 chờ OAuth provider smoke; #24 chờ payment/refund adapter. |
+| P2 #27–#34         | 3      | 2                 | 3      | #30/#32 partial; #31/#33/#34 open.                            |
+| P0 bổ sung #35–#41 | 7      | 0                 | 0      | Đã đóng toàn bộ.                                              |
+| P1 bổ sung #42–#55 | 5      | 0                 | 9      | #46 là mục tiếp theo; #48 đóng vì trùng #9/A2.                |
+| P2 bổ sung #56–#60 | 0      | 1                 | 4      | #56 partial; #57–#60 open.                                    |
+| **Tổng**           | **38** | **5**             | **17** | **60 mục**.                                                   |
 
 ## P0 — Production blockers
 
-### #1 — ✅ CLOSED
-
-**Việc cần làm:** Đồng bộ dữ liệu checkout: validator yêu cầu tên và email nhưng controller không gửi, khiến form không qua kiểm tra.
-
-**File liên quan:** [CheckoutValidator.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutValidator.js), [CheckoutController.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutController.js)
-
-### #2 — ✅ CLOSED
-
-**Việc cần làm:** Sửa `paymentStatus: "PAID"` được ghi ngay khi đặt đơn; đơn mới hiện có trạng thái thanh toán `PENDING`.
-
-**File liên quan:** [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts)
-
-### #3 — ✅ CLOSED
-
-**Việc cần làm:** Xác định CARD/BANKING đã xử lý; thanh toán thật chưa. Nếu chưa, chỉ mở phương thức được hỗ trợ; nếu có, bổ sung xác nhận, webhook và hoàn tiền.
-
-**File liên quan:** [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), [CheckoutController.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutController.js)
-
-### #4 — ✅ CLOSED
-
-**Việc cần làm:** Làm idempotency an toàn khi DB, đã lưu đơn nhưng Redis hoặc kết nối HTTP lỗi. Gửi lại cùng key phải trả về đơn cũ, không tạo đơn khác hoặc mắc ở trạng thái chờ.
-
-**File liên quan:** [idempotency.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/idempotency.middleware.ts), [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts)
-
-### #5 — ✅ CLOSED
-
-**Việc cần làm:** Giữ nguyên idempotency key khi frontend gửi lại cùng một lần đặt hàng; service hiện tạo UUID mới mỗi lần gọi.
-
-**File liên quan:** [CheckoutService.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutService.js)
-
-### #6 — ✅ CLOSED
-
-**Việc cần làm:** Đọc và chốt giá sản phẩm trong transaction checkout. Hiện giỏ được đọc trước transaction, rồi đơn dùng giá từ `cart.items[].product.price`; giá có thể đổi trước khi lưu đơn.
-
-**File liên quan:** [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), [prisma-checkout.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/infrastructure/repositories/prisma-checkout.repository.ts)
-
-### #7 — ✅ CLOSED
-
-**Việc cần làm:** Tạo `orderNumber` bảo đảm không trùng; giá trị hiện dựa vào `Date.now()` và DB có ràng buộc unique.
-
-**File liên quan:** [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), [schema.prisma](https://github.com/Thang4869/TriAD-Backend/blob/main/prisma/schema.prisma)
-
-### #8 — ✅ CLOSED
-
-**Việc cần làm:** Sửa luồng đổi giá: service phát sự kiện trước khi lưu giá mới. Đưa thao tác lưu và ghi outbox vào cùng transaction.
-
-**File liên quan:** [admin-product.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/services/admin-product.service.ts)
-
-### #9 — ✅ CLOSED
-
-**Việc cần làm:** Đưa sự kiện đổi trạng thái đơn vào outbox và kiểm tra trạng thái bằng cập nhật có điều kiện; hiện cập nhật DB rồi publish trực tiếp, có thể mất sự kiện hoặc gặp hai cập nhật tranh chấp.
-
-**File liên quan:** [orders.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/orders.service.ts), [prisma-orders.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/infrastructure/repositories/prisma-orders.repository.ts)
-
-### #10 — ✅ CLOSED
-
-**Việc cần làm:** Không báo outbox thành công khi kiểm tra hoặc ghi kết quả handler thất bại. `recordResult` hiện nuốt lỗi; `EventBus` dùng `Promise.allSettled` nhưng không xử lý mọi promise bị reject.
-
-**File liên quan:** [outbox-handler-tracker.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-handler-tracker.ts), [event-bus.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/event-bus/event-bus.ts)
-
-### #11 — ✅ CLOSED
-
-**Việc cần làm:** Hoàn thiện cấu hình production: compose tham chiếu `otel-collector-config.yml` nhưng file này không có trong repo; chưa truyền đủ biến SMTP/Cloudinary mà cấu hình production yêu cầu.
-
-**File liên quan:** [docker-compose.prod.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/docker-compose.prod.yml), [src/config/index.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/config/index.ts)
-
-### #12 — 🟡 PENDING
-
-**Việc cần làm:** Kiểm chứng cookie và CSRF trên; đúng hai domain triển khai., Frontend đọc `csrfToken` qua `document.cookie`; nếu FE ở `vercel.app` còn API ở `onrender.com`, JavaScript FE không đọc được cookie của API.
-
-**File liên quan:** [api.service.js](https://github.com/Thang4869/TriAD-12/blob/main/src/shared/services/api.service.js), [csrf.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/csrf.middleware.ts), [auth.controller.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/auth.controller.ts)
+| #   | Việc cần làm / kết quả hiện tại                                                                                                                                                                                                                                        | File / evidence chính                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Trạng thái                  |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| 1   | Đồng bộ contract checkout giữa `CheckoutController` và `CheckoutValidator`. Frontend hiện gửi/kiểm tra `address`, `phone`, `paymentMethod` và các trường tùy chọn phù hợp với backend; không còn yêu cầu tên/email của luồng cũ.                                       | FE: [CheckoutController.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutController.js), [CheckoutValidator.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutValidator.js), [CheckoutController.test.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/unit/modules/checkout/CheckoutController.test.js)                                                                                                                                   | ✅ CLOSED                   |
+| 2   | Đơn mới và Order History projection không còn bị gán thanh toán `PAID` ngay khi checkout. Luồng hiện tại dùng COD và bắt đầu với `paymentStatus = PENDING`.                                                                                                            | BE: [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts), [order-events.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/events/order-events.ts)                                                                                                                                                                                                                                                                | ✅ CLOSED                   |
+| 3   | Chốt phạm vi thanh toán hiện tại: frontend checkout dùng `COD`; hệ thống chưa giả lập CARD/BANKING như giao dịch đã thu tiền. Payment settlement thật và refund thật vẫn thuộc phạm vi Saga/payment integration sau này.                                               | BE: [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts); FE: [CheckoutController.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutController.js)                                                                                                                                                                                                                                                                  | ✅ CLOSED                   |
+| 4   | Idempotency checkout đã có lớp bảo vệ Redis và ràng buộc DB theo user. Replay cùng key có thể trả lại đơn đã persist; trạng thái `IN_PROGRESS` dùng TTL ngắn để tránh kẹt lâu sau crash.                                                                               | BE: [idempotency.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/idempotency.middleware.ts), [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), [prisma-checkout.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/infrastructure/repositories/prisma-checkout.repository.ts)                                                                                 | ✅ CLOSED                   |
+| 5   | Frontend tạo một `Idempotency-Key` cho mỗi checkout attempt và giữ nguyên key khi retry cùng attempt; key chỉ đổi khi mở một attempt mới.                                                                                                                              | FE: [CheckoutController.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutController.js), [CheckoutService.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutService.js)                                                                                                                                                                                                                                                                             | ✅ CLOSED                   |
+| 6   | Giá dùng để tạo Order được lấy từ snapshot sản phẩm đã khóa trong transaction, không còn dùng giá cart đọc trước transaction.                                                                                                                                          | BE: [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), [stock-reservation.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/services/stock-reservation.service.ts), [prisma-checkout.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/infrastructure/repositories/prisma-checkout.repository.ts)                                                                    | ✅ CLOSED                   |
+| 7   | `orderNumber` được sinh qua `OrderNumberGenerator` dùng `crypto.randomUUID()` và vẫn được DB bảo vệ bằng unique constraint.                                                                                                                                            | BE: [order-number-generator.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/infrastructure/order-number-generator.ts), [order-number-generator.port.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/application/ports/order-number-generator.port.ts), [schema.prisma](https://github.com/Thang4869/TriAD-Backend/blob/main/prisma/schema.prisma)                                                                                                      | ✅ CLOSED                   |
+| 8   | Các product mutation ảnh hưởng catalog ghi state và outbox atomically. Không còn publish product event trước khi persistence thành công.                                                                                                                               | BE: [admin-product.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/services/admin-product.service.ts), [prisma-products.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-products.repository.ts), [persist-domain-events.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/persist-domain-events.ts)                                                                       | ✅ CLOSED                   |
+| 9   | Đổi trạng thái Order đi qua aggregate (`confirm/ship/deliver/cancel`), optimistic version và `updateStatusWithEvents`; state change và outbox được lưu cùng transaction.                                                                                               | BE: [orders.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/orders.service.ts), [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts), [prisma-orders.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/infrastructure/repositories/prisma-orders.repository.ts)                                                                                                              | ✅ CLOSED                   |
+| 10  | Outbox không còn báo thành công khi handler/tracker thất bại. Kết quả `EventBus.publish()` được kiểm tra; lỗi handler được đưa vào retry path và handler tracker giữ idempotency theo handler.                                                                         | BE: [outbox-handler-tracker.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-handler-tracker.ts), [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [event-bus.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/event-bus/event-bus.ts)                                                                                                                                                            | ✅ CLOSED                   |
+| 11  | Production Compose và config đã có OTEL collector, SMTP, Cloudinary, CORS/frontend URL, JWT/TOTP và các biến bắt buộc; local production smoke đã khởi động API, DB, Redis, BullMQ và OutboxRelay thành công.                                                           | BE: [docker-compose.prod.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/docker-compose.prod.yml), [otel-collector-config.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/otel-collector-config.yml), [index.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/config/index.ts)                                                                                                                                                                                                     | ✅ CLOSED                   |
+| 12  | Code cross-site CSRF đã được sửa: token được giữ trong memory ở frontend và có `GET /auth/csrf` để bootstrap lại; CORS/cookie config đã hỗ trợ FE/API khác site. Còn phải smoke-test trên domain Vercel + Render thật: login, refresh, logout, CSRF và OAuth callback. | FE: [csrf.js](https://github.com/Thang4869/TriAD-12/blob/main/src/shared/utils/csrf.js), [AuthService.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/auth/AuthService.js); BE: [auth.routes.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/auth.routes.ts), [csrf.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/csrf.middleware.ts), [index.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/config/index.ts) | 🟡 PENDING — deployed smoke |
 
 ## P1 — Data correctness, reliability & architecture boundaries
 
-### #13 — ✅ CLOSED
-
-**Quyết định semantics:** Dashboard hiện biểu diễn **gross order value (GMV)**, không gọi là doanh thu đã thu tiền. GMV là tổng `Order.total` của các order có `status != CANCELLED`; COD/PENDING và REFUNDED vẫn được tính theo semantics giá trị đơn, còn CANCELLED bị loại. Hệ thống hiện chỉ checkout COD/PENDING và chưa có payment settlement chuyển order sang `PAID`, nên không lọc `paymentStatus = PAID`.
-
-**Đã hoàn tất:** `getGrossOrderValue` và `getGrossOrderValueByDay` dùng cùng điều kiện trạng thái, cùng mốc `sinceDate`, normalize aggregate rỗng về `0`; daily grouping trả `grossOrderValue`. Dashboard projection cũng lọc `CANCELLED` và lưu vào `totalGrossOrderValue`. Integration tests chứng minh COD/PENDING, REFUNDED, CANCELLED, date boundary, daily grouping và không double count.
-
-**File liên quan:** [prisma-dashboard.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/admin/dashboard/infrastructure/repositories/prisma-dashboard.repository.ts), [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts)
-
-### #14 — ✅ CLOSED
-
-**Quyết định:** **GIỮ projection/read-model.** Catalog dùng `ProductCatalogReadPort`/`PrismaProductCatalogReadRepository`; Orders dùng `OrderHistoryReadPort`/`PrismaOrderHistoryReadRepository`; Dashboard dùng `DashboardReadPort`/`PrismaDashboardReadRepository` mới, được bind qua `TOKENS.DashboardRead` trong composition root. Dashboard đọc `admin_dashboard_projection` cho summary, `order_history_projection` cho GMV/status/daily/top-selling, và `product_catalog_projection` cho low-stock. `newUsers30Days` dùng query hẹp trên `users` vì chưa có user projection. Không còn fallback sang write repository.
-
-**Evidence:** `tests/integration/projection.read-models.test.ts` chứng minh divergent write/read sources; `tests/unit/core/di/dashboard-wiring.test.ts` chứng minh DashboardService nhận adapter projection; Catalog/Orders/ProjectionHandler có regression tests tương ứng.
-
-**File liên quan:** [container.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/container.ts), [catalog.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/services/catalog.service.ts), [prisma-product-catalog-read.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-product-catalog-read.repository.ts), [orders.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/orders.service.ts), [prisma-order-history-read.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/infrastructure/repositories/prisma-order-history-read.repository.ts), [dashboard.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/admin/dashboard/dashboard.service.ts)
-
-### #15 — ✅ CLOSED
-
-**Đã hoàn tất:** mọi product mutation ảnh hưởng catalog đều có durable outbox path. Create dùng `createWithEvents`; generic update và image metadata dùng `updateWithEvents`; price/activate/deactivate giữ atomic paths hiện có; checkout stock decrement ghi `ProductUpdatedEvent` trong cùng transaction với stock/order/cart. Không còn `AdminProductService` hoặc image worker publish product event trực tiếp qua `EventBus`.
-
-**Evidence:** integration tests chứng minh create/update rollback, image worker failure propagation, checkout stock-event commit/rollback và product mutation convergence vào catalog projection. Shared `persistEvents` helper dùng chung cho typed events và aggregate events.
-
-**File liên quan:** [admin-product.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/services/admin-product.service.ts), [prisma-products.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-products.repository.ts), [product.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/domain/product.entity.ts), [projection-handler.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-handler.ts), [container.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/container.ts)
-
-### #16 — ✅ CLOSED
-
-**Đã hoàn tất:** `sourceVersion` monotonic CAS cho Product Catalog và Order
-History; duplicate/stale/out-of-order events là no-op; status-before-placement
-retryable; OrderPlaced dùng revision 0 và status events dùng committed Order
-revision; unversioned order projection events bị reject không fallback timestamp.
-
-Legacy Order History và Product Catalog rows được baseline `sourceVersion = -1`
-trong migration, sau đó rebuild authoritative nâng lên `Order.version` hoặc
-`Product.version`. Product rebuild dùng cùng CAS writer với live handler; rating
-là derived dimension riêng, được recompute authoritative với row lock ngay cả
-khi Product version không đổi.
-
-**Evidence:** `tests/integration/projection.ordering.test.ts` chứng minh legacy
-stale repair, rebuild idempotency, newer-row protection, concurrent writes và
-same-version rating repair trên PostgreSQL thật. Unit tests chứng minh P2002
-same-identity recovery, unrelated unique conflict rethrow, sourceVersion
-persistence, relay preservation và missing/unversioned event handling.
-
-**Quality gates:** Docker/Testcontainers, typecheck, lint, 817 unit tests, 109
-integration tests, contract tests, build, Prisma validation và diff check PASS.
-
-**File liên quan:** [projection-writer.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-writer.ts), [projection-rating.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-rating.ts), [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts), [rebuild-order-history-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-order-history-projection.ts), [rebuild-product-catalog-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-product-catalog-projection.ts), [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md)
-
-### #17 — ✅ CLOSED
-
-**Việc đã làm:** Backend dùng `CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD` với điều kiện `>=`. Frontend giữ estimate trước submit, còn success modal hiển thị `order.shippingFee` từ server nên không thể ghi đè kết quả cuối.
-
-**File liên quan:** [pricing.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/services/pricing.service.ts), [CheckoutRenderer.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutRenderer.js)
-
-### #18 — ✅ CLOSED
-
-**Việc đã làm:** Checkout response dùng `result.order` cho cả checkout mới và idempotent replay. Swagger công khai `subtotal`, `tax`, `shippingFee`, `discountAmount`, `discountCode` và `total`; frontend success modal hiển thị toàn bộ các trường từ order persisted.
-
-**File liên quan:** [pricing.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/services/pricing.service.ts), [CheckoutRenderer.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutRenderer.js)
-
-### #19 — ✅ CLOSED
-
-**Việc đã làm:** `Money` dùng VND integer-safe, từ chối giá trị không hữu hạn, âm và ngoài `Number.isSafeInteger`; `add`, `subtract` và `multiply` giữ invariant overflow/non-negative/currency. Chính sách làm tròn canonical là half-up (`Math.round`). Các cột tiền đã chuyển sang PostgreSQL `numeric(18,0)` qua migration `20261002160000_make_money_exact`; `Discount.value` dùng `numeric(18,4)` để giữ phần trăm, còn `minOrderAmount` là `numeric(18,0)`. Prisma Decimal chỉ tồn tại ở infrastructure boundary và được map thành số JSON an toàn trước domain/API/event. Dashboard aggregation giữ `numeric` trong SQL và kiểm tra safe integer ở boundary.
-
-**File liên quan:** [money.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/value-objects/money.ts), [schema.prisma](https://github.com/Thang4869/TriAD-Backend/blob/main/prisma/schema.prisma)
-
-### #20 — ✅ CLOSED
-
-**Việc đã làm:** `existsAndActive` chỉ trả `true` khi bản ghi có `isActive: true`; active, inactive và missing đều có test repository. `ProductImageService` tiếp tục dùng cổng này nên inactive upload bị từ chối.
-
-**File liên quan:** [prisma-products.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-products.repository.ts)
-
-### #21 — ✅ CLOSED
-
-**Việc đã làm:** `lockProductsForUpdate` khóa và trả về `id`, `name`, `price`, `stock`, `version`, `isActive`. Checkout kiểm tra snapshot này cho product tồn tại, active, quantity dương nguyên và đủ stock trước khi decrement; order dùng locked price. PostgreSQL integration tests chứng minh lock fields, rollback khi event thất bại và stock contention/serializable conflict.
-
-**File liên quan:** [stock-reservation.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/services/stock-reservation.service.ts), [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts)
-
-### #22 — ✅ CLOSED
-
-**Việc cần làm:** Đã kiểm chứng hai yêu cầu refresh đồng thời dùng cùng token và trường hợp refresh trong cùng một giây. Atomic rotation chỉ cho một request thành công; refresh token mới có `jti` để không trùng khi phát hành trong cùng một giây.
-
-**File liên quan:** [token.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/services/token.service.ts), [prisma-auth.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/infrastructure/repositories/prisma-auth.repository.ts), `tests/integration/auth.refresh-token-race.test.ts`
-
-### #23 — 🟡 IMPLEMENTATION COMPLETE / EXTERNAL PROVIDER SMOKE PENDING
-
-**Đã hoàn tất cục bộ:** OAuth dùng `provider + providerSubject` làm danh tính chuẩn với unique constraint PostgreSQL; email chỉ là thuộc tính. State có 32 byte entropy, TTL 10 phút, gắn provider và consume một lần bằng Redis Lua atomic get-and-delete. Google chỉ tin email khi profile trả về `verified === true`; Facebook không tự suy diễn verified. Email provider chưa verified không được tự động link tài khoản local; user mới được tạo ở trạng thái chưa verified và dùng lại email verification hiện có. OAuth account, User, Cart và UserRegistered event được tạo atomically; duplicate callback/race được DB unique constraint xử lý.
-
-**Còn chờ external smoke:** real Google/Facebook authorization redirect và callback, deployed callback URL, cookie và CORS behavior. Chưa có credentials/provider runtime verification trong môi trường này.
-
-**File liên quan:** [oauth2.strategy.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/strategies/oauth2.strategy.ts), [auth.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/auth.service.ts)
-
-### #24 — ⬜ OPEN
-
-**Việc cần làm:** Chỉ tích hợp Saga khi có adapter, thanh toán và hoàn tiền thật; lúc, đó kiểm thử khôi phục sau crash, chạy lại bước và compensation. Hiện tài liệu xác nhận Saga chưa ở request path production.
-
-**File liên quan:** [checkout.saga.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/application/checkout.saga.ts), [cancellation-refund.saga.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/application/cancellation-refund.saga.ts), [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md)
-
-### #25 — ✅ CLOSED
-
-**Đã hoàn tất:** Xoá `NewCheckoutFlow` vì audit xác nhận chỉ có một production checkout flow; không còn trace-only flag hoặc `FEATURE_NEW_CHECKOUT_FLOW`. Checkout transaction hiện tại giữ nguyên. `CheckoutSaga` vẫn chưa được nối vào request path production; bước confirmation của Saga được khai báo rõ ràng và việc rollout vẫn thuộc P1 #24.
-
-**File liên quan:** [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts)
-
-### #26 — ✅ CLOSED
-
-**Đã hoàn tất:** CheckoutRenderer dựng summary bằng DOM nodes và `textContent`; malicious product-name tests xác nhận không tạo `IMG`, `SCRIPT` hoặc event handler executable.
-
-**File liên quan:** [CheckoutRenderer.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutRenderer.js)
+| #   | Việc cần làm / kết quả hiện tại                                                                                                                                                                                                                       | File / evidence chính                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Trạng thái                           |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| 13  | Dashboard đã chốt semantics là **gross order value (GMV)**, không phải doanh thu đã thu tiền: cộng `Order.total` của order không `CANCELLED`; query tổng, daily và projection dùng cùng quy tắc.                                                      | BE: [prisma-dashboard-read.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/admin/dashboard/infrastructure/repositories/prisma-dashboard-read.repository.ts), [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts)                                                                                                                                                                                                                                                                                                                                                                    | ✅ CLOSED                            |
+| 14  | Giữ CQRS read-model và đã nối vào runtime: Catalog đọc `product_catalog_projection`, Orders đọc `order_history_projection`, Dashboard đọc các projection tương ứng; không fallback về write repository.                                               | BE: [prisma-product-catalog-read.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-product-catalog-read.repository.ts), [prisma-order-history-read.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/infrastructure/repositories/prisma-order-history-read.repository.ts), [prisma-dashboard-read.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/admin/dashboard/infrastructure/repositories/prisma-dashboard-read.repository.ts), [container.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/container.ts)                      | ✅ CLOSED                            |
+| 15  | Mọi product mutation ảnh hưởng catalog hiện có durable outbox path, gồm create/update/price/active-state/image metadata và stock decrement trong checkout.                                                                                            | BE: [admin-product.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/services/admin-product.service.ts), [prisma-products.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-products.repository.ts), [image-process.job.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/jobs/image-process.job.ts), [prisma-checkout.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/infrastructure/repositories/prisma-checkout.repository.ts)                                                                                           | ✅ CLOSED                            |
+| 16  | Product Catalog và Order History dùng `sourceVersion` monotonic CAS: version mới hơn apply, bằng nhau idempotent, cũ hơn no-op; legacy row baseline `-1`; rebuild dùng cùng writer và không được ghi đè version mới hơn.                              | BE: [projection-writer.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-writer.ts), [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts), [rebuild-order-history-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-order-history-projection.ts), [rebuild-product-catalog-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-product-catalog-projection.ts), [projection.ordering.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/projection.ordering.test.ts) | ✅ CLOSED                            |
+| 17  | Ngưỡng free shipping đã thống nhất ở backend với điều kiện `subtotal >= FREE_SHIPPING_THRESHOLD`; frontend chỉ hiển thị estimate trước submit và lấy `shippingFee` của server cho kết quả cuối.                                                       | BE: [pricing.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/services/pricing.service.ts); FE: [CheckoutRenderer.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutRenderer.js)                                                                                                                                                                                                                                                                                                                                                                                                                                          | ✅ CLOSED                            |
+| 18  | Checkout response trả persisted order cho cả lần tạo mới và idempotent replay; frontend success modal hiển thị `subtotal`, `tax`, `shippingFee`, `discountAmount`, `discountCode`, `total` từ server.                                                 | BE: [checkout.swagger.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/docs/checkout.swagger.ts); FE: [CheckoutRenderer.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutRenderer.js)                                                                                                                                                                                                                                                                                                                                                                                                                                            | ✅ CLOSED                            |
+| 19  | `Money` dùng VND integer-safe, guard non-finite/negative/overflow và rounding xác định; các cột tiền chính đã chuyển sang PostgreSQL `numeric`, có CHECK non-negative và adapter chuyển Prisma Decimal tại infrastructure boundary.                   | BE: [money.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/value-objects/money.ts), [money-number.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/infrastructure/money-number.ts), [migration.sql](https://github.com/Thang4869/TriAD-Backend/blob/main/prisma/migrations/20261002160000_make_money_exact/migration.sql), [migration.sql](https://github.com/Thang4869/TriAD-Backend/blob/main/prisma/migrations/20261002161000_guard_money_nonnegative/migration.sql)                                                                                                                                                                                | ✅ CLOSED                            |
+| 20  | `existsAndActive` chỉ trả `true` cho sản phẩm tồn tại và `isActive = true`; repository test bao phủ active/inactive/missing.                                                                                                                          | BE: [prisma-products.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/infrastructure/repositories/prisma-products.repository.ts), [products.repository.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/products.repository.test.ts)                                                                                                                                                                                                                                                                                                                                                                                   | ✅ CLOSED                            |
+| 21  | Checkout khóa snapshot sản phẩm và kiểm tra tồn tại, active, quantity, stock, price/version trong cùng transaction trước decrement; contention/rollback có integration evidence.                                                                      | BE: [stock-reservation.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/services/stock-reservation.service.ts), [prisma-checkout.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/infrastructure/repositories/prisma-checkout.repository.ts), [checkout.concurrent.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/checkout.concurrent.test.ts)                                                                                                                                                                                                                                  | ✅ CLOSED                            |
+| 22  | Refresh-token rotation đã được kiểm chứng với hai request đồng thời và token phát hành cùng giây: chỉ một rotation thắng; token mới có `jti` và transaction rollback nếu tạo token mới thất bại.                                                      | BE: [token.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/services/token.service.ts), [prisma-auth.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/infrastructure/repositories/prisma-auth.repository.ts), [auth.refresh-token-race.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/auth.refresh-token-race.test.ts)                                                                                                                                                                                                                                                                  | ✅ CLOSED                            |
+| 23  | OAuth local flow đã dùng `provider + providerSubject`, state có TTL/provider-binding/single-use và policy email verification/linking thận trọng. Còn thiếu smoke thật với Google/Facebook credentials, redirect/callback URL và cookie/CORS deployed. | BE: [oauth2.strategy.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/strategies/oauth2.strategy.ts), [redis-oauth-state-store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/infrastructure/token-store/redis-oauth-state-store.ts), [prisma-auth.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/infrastructure/repositories/prisma-auth.repository.ts)                                                                                                                                                                                                                                            | 🟡 PENDING — external provider smoke |
+| 24  | Chỉ production-wire `CheckoutSaga`/`CancellationRefundSaga` khi có payment/refund adapter thật hoặc adapter demo được xác định rõ. Khi đó phải test resume sau crash, step retry, compensation và idempotency.                                        | BE: [checkout.saga.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/application/checkout.saga.ts), [cancellation-refund.saga.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/application/cancellation-refund.saga.ts), [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md)                                                                                                                                                                                                                                                                                                                      | ⬜ OPEN                              |
+| 25  | Đã xóa flag `NewCheckoutFlow` vì không chọn behavior khác. Production hiện có một checkout transaction flow; Saga rollout vẫn thuộc #24.                                                                                                              | BE: [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), [feature-flag.port.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/application/feature-flags/feature-flag.port.ts)                                                                                                                                                                                                                                                                                                                                                                                                                              | ✅ CLOSED                            |
+| 26  | Checkout summary không còn ghép tên sản phẩm bằng `innerHTML`; renderer dùng DOM nodes + `textContent`, có malicious-name regression test.                                                                                                            | FE: [CheckoutRenderer.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutRenderer.js)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | ✅ CLOSED                            |
 
 ## P2 — Quality evidence & portfolio readiness
 
-### #27 — ✅ CLOSED
-
-**Đã hoàn tất:** CheckoutController tests dùng CheckoutValidator thật với DOM form hiện tại, kiểm tra payload `{ paymentMethod, address, phone, notes, discountCode }`, validation lỗi và optional-field normalization.
-
-**File liên quan:** [CheckoutController.test.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/unit/modules/checkout/CheckoutController.test.js), [CheckoutValidator.test.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/unit/modules/checkout/CheckoutValidator.test.js)
-
-### #28 — ✅ CLOSED
-
-**Đã hoàn tất:** Integration test dùng CartController, CartRepository, CheckoutService, CheckoutController, CheckoutValidator và CheckoutRenderer thật trên stateful fake HTTP backend; xác nhận add-cart → checkout → server order pricing/order number → cart empty, cùng failure path giữ cart.
-
-**File liên quan:** [checkout.flow.test.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/integration/checkout.flow.test.js)
-
-### #29 — ✅ CLOSED
-
-**Đã hoàn tất:** Playwright khởi động Vite đúng từ frontend repository trên port được cấu hình, phục vụ authoritative `public/pages/checkout-modal.html` và `public/pages/success-modal.html`. Current authenticated checkout flow passed locally with address/phone/notes/discount selectors, returned order number, server total and empty-cart assertions.
-
-**File liên quan:** [cart.spec.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/e2e/cart.spec.js)
-
-### #30 — ⬜ OPEN
-
-**Việc cần làm:** Thêm test tích hợp cho retry, khi mất phản hồi, hai checkout đồng thời, đổi giá trong lúc checkout, projection phát lại, Redis lỗi và worker chết giữa xử lý.
-
-**File liên quan:** [checkout.concurrent.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/checkout.concurrent.test.ts), [outbox-relay.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/unit/core/outbox/outbox-relay.test.ts)
-
-### #31 — ⬜ OPEN
-
-**Việc cần làm:** Cho CI chạy một hành trình; frontend--backend thực trên môi trường test, thay vì chỉ chạy hai bộ test độc lập.
-
-**File liên quan:** [ci.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/.github/workflows/ci.yml), [test.yml](https://github.com/Thang4869/TriAD-12/blob/main/.github/workflows/test.yml)
-
-### #32 — ⬜ OPEN
-
-**Việc cần làm:** Chạy thử chính image, production sau build: migration, khởi động, `/health/ready`, checkout và shutdown. CI hiện build image nhưng chưa chứng minh image chạy được với cấu hình production.
-
-**File liên quan:** [Dockerfile](https://github.com/Thang4869/TriAD-Backend/blob/main/Dockerfile), [ci.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/.github/workflows/ci.yml)
-
-### #33 — ⬜ OPEN
-
-**Việc cần làm:** Thử phục hồi từ backup, replay outbox và rebuild projection; ghi thời gian khôi phục và kết quả vào runbook.
-
-**File liên quan:** [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md)
-
-### #34 — ⬜ OPEN
-
-**Việc cần làm:** Cập nhật README bằng sơ đồ, đúng với luồng đang chạy, giới hạn thanh toán hiện tại, cách chạy đầy đủ FE+BE và bằng chứng test/deploy.
-
-**File liên quan:** [README.md](https://github.com/Thang4869/TriAD-Backend/blob/main/README.md), [ARCHITECTURE.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/ARCHITECTURE.md)
-
-## Tiến độ cập nhật 01/10/2026 — đối chiếu `DNEK-output(5).md`
-
-- Export `DNEK-output(5).md` được tạo lúc **07:17:57 (Asia/Saigon)** và gồm **339 files**; export đã chứa migration product-catalog projection, rebuild scripts, `PrismaProductCatalogReadRepository`, `PrismaOrderHistoryReadRepository` và wiring DI tương ứng. fileciteturn59file2L5-L8
-- **P0 đã CLOSED chắc chắn trên code/test:** #1–#11 và #35–#41. Riêng P0 #12 vẫn pending production verification.
-- **P1 #14 / C1:** ✅ **CLOSED** — Catalog, Orders và Dashboard đều đọc qua query-side ports/adapters; dashboard có divergence integration evidence và không còn legacy write-model repository/token.
-- **P1 #15:** ✅ **CLOSED** — product create, generic/price update, activate/deactivate, image metadata và checkout stock mutation đều có durable event/outbox guarantee; rollback và projection convergence đã có evidence.
-- **P1 #16:** ✅ **CLOSED** — legacy baseline `-1`, monotonic CAS/P2002 handling, Order/Product sourceVersion persistence, duplicate/out-of-order safety, status dependency retry, rating repair, rebuild/live protection và operations runbook đã có evidence; Docker-based integration và full quality gates PASS.
-- **P1 #23:** 🟡 **IMPLEMENTATION COMPLETE / EXTERNAL PROVIDER SMOKE PENDING** — provider subject identity, state replay protection, email trust/linking policy, unit tests và PostgreSQL integration tests đã hoàn tất; còn chờ Google/Facebook runtime verification.
-- **P1 #25:** ✅ **CLOSED** — dead `NewCheckoutFlow` removed; single transaction-based checkout remains and Saga production rollout stays deferred to #24.
-- **P0 #12:** 🟡 **IMPLEMENTATION COMPLETE / PRODUCTION VERIFICATION PENDING** --- code, regression tests và quality gates đã hoàn tất; còn chờ kiểm chứng trên đúng hai domain Vercel + Render sau khi deploy.
-- **#39:** content validation bằng `sharp` và cleanup static `/uploads` legacy đã hoàn tất; typecheck/lint/unit test PASS.
-- **#40:** global body limit `100kb` + HTTP `413` handling đã hoàn tất; typecheck/lint/unit test PASS.
-- Một mục chỉ được chuyển sang **CLOSED** khi thay đổi mã nguồn,
-  regression/integration test liên quan và quality gates cần thiết đều
-  PASS.
-- #8 đã có integration evidence cho cả hai nhánh: cập nhật giá +
-  outbox cùng commit; nếu persistence outbox thất bại thì transaction
-  rollback và giá cũ được giữ nguyên.
-
-### Bằng chứng bổ sung --- P0 #10 và #11 (30/09/2026)
-
-- **#10 --- CLOSED:** `recordResult()` ném lại lỗi ghi tracker;
-  `EventBus.publish()` tổng hợp mọi promise bị reject thành
-  `failedHandlers`, bao gồm lỗi kiểm tra và ghi kết quả handler. Đã bổ
-  sung ba trường hợp lỗi tracker và kiểm tra handler khác vẫn chạy.
-  Người dùng xác nhận typecheck, lint và các test
-  EventBus/tracker/relay PASS.
-- **#11 --- CLOSED trong phạm vi cấu hình và khởi động Docker
-  production trên máy local:**
-  - Compose truyền các biến frontend/CORS, SMTP và Cloudinary bắt
-    buộc; file secret không đưa vào commit.
-  - Tạo `otel-collector-config.yml`, mount read-only; Collector
-    validate thành công, không publish cổng nhận trace ra host.
-  - Dockerfile dùng Node 22 trên Debian bookworm-slim, cài OpenSSL
-    và cấp quyền `/app/logs` cho user không phải root. Image build
-    thành công.
-  - Tạo database kiểm tra riêng `triad_prod_check` trên PostgreSQL
-    hiện có; cả 8 migration đã áp dụng thành công.
-  - Tách Redis bằng service `redis-prod-check` và volume riêng,
-    tránh xử lý lại hàng đợi thử nghiệm cũ.
-  - Container API `healthy`, `/health/ready` trả `up`; log xác nhận
-    PostgreSQL, Redis, BullMQ và OutboxRelay khởi động. Log sau khi
-    tách môi trường không còn xử lý đơn thử nghiệm cũ.
-  - Phạm vi giới hạn: kiểm chứng trên Docker Desktop, vẫn sử dụng
-    PostgreSQL đã có trong cùng project; chưa chứng minh compose
-    khởi động độc lập trên máy sạch, triển khai public, luồng upload
-    Cloudinary hoặc email end-to-end có kiểm soát. OTEL dùng debug
-    exporter, chưa có nơi lưu/tra cứu trace lâu dài và chưa xác minh
-    trace end-to-end.
-  - Lần chạy trước khi tách môi trường đã xử lý outbox thử nghiệm
-    bằng SMTP thật; không coi đó là kiểm thử email có kiểm soát.
-- **#9 --- CLOSED:** `OrdersService.updateOrderStatus` dùng
-  conditional update theo `version`, tăng version khi cập nhật;
-  `OrderStatusChanged` được ghi vào outbox trong cùng Prisma
-  transaction. Request dùng version cũ bị conflict; nếu ghi outbox
-  thất bại thì status/version rollback. Unit/integration tests,
-  typecheck và lint đều PASS; thay đổi đã được commit.
-
-### Bằng chứng bổ sung --- P0 #35 / A3 (01/10/2026)
-
-- **#35 / A3 --- CLOSED:**
-  - `PrismaCheckoutRepository.runInTransaction()` bắt Prisma `P2034` tại adapter và dịch thành `ConflictError` trước khi trả lỗi về `CheckoutService`.
-  - `CheckoutService.executeWithRetry()` giữ exponential backoff và đã bổ sung jitter để giảm retry đồng nhịp khi có contention.
-  - Unit test xác minh retry + jitter; adapter test xác minh `P2034` → `ConflictError`.
-  - `tests/integration/checkout.concurrent.test.ts` không còn mock `executeWithRetry()`; test tạo hai transaction PostgreSQL `Serializable` cùng đọc rồi cạnh tranh ghi, xác minh một transaction thành công và transaction còn lại được dịch thành `ConflictError`.
-  - Người dùng xác nhận các bước kiểm thử liên quan PASS.
-
-### Bằng chứng bổ sung --- P0 #37 / B1 (01/10/2026)
-
-- **#37 / B1 --- CLOSED:**
-  - `revokeRefreshToken()` dùng conditional update theo `revokedAt IS NULL`; chỉ request đầu tiên có thể claim token.
-  - `rotateRefreshToken()` thực hiện revoke token cũ + create token mới trong cùng Prisma transaction.
-  - Nếu create token mới thất bại, transaction rollback và token cũ vẫn có `revokedAt = null`.
-  - Refresh JWT mới có `jti`, tránh tạo token trùng khi rotation xảy ra trong cùng một giây.
-  - Concurrent `TokenService.refreshToken()` integration test với PostgreSQL thật xác minh chỉ một request thành công.
-  - Unit tests, integration tests, typecheck và lint đều PASS.
-
-### Bằng chứng bổ sung --- P0 #12 (01/10/2026)
-
-- **#12 --- IMPLEMENTATION COMPLETE / PRODUCTION VERIFICATION PENDING:**
-  - Frontend không còn phụ thuộc `document.cookie` để đọc CSRF cookie của API cross-site.
-  - Login, refresh, verify-email và verify-TOTP nhận CSRF token từ response backend; logout xoá token phía frontend.
-  - Backend có authenticated `GET /auth/csrf`; frontend bootstrap dùng endpoint này để phục hồi CSRF token sau reload và sau OAuth redirect.
-  - Production CORS dùng allowlist và `credentials: true`.
-  - `COOKIE_DOMAIN` đã được đưa vào validated config; với `*.vercel.app` + `*.onrender.com` phải để unset để cookie backend là host-only.
-  - Frontend regression tests và production build PASS. Backend 95/95 test files, 887/887 tests, typecheck và lint PASS.
-  - Chưa CLOSED vì dự án chưa deploy Vercel + Render; cần smoke test cookie/CORS/CSRF trên hai domain thật ở deployment phase.
-
-## Thứ tự thực hiện
-
-1.  **#39/B8 và #40/B5 đã CLOSED.** Commit/push nhóm thay đổi security/cleanup hiện tại.
-2.  **#12** giữ trạng thái production-verification pending cho giai đoạn deploy Vercel + Render.
-3.  **P1 #14 / C1: ✅ CLOSED.** Hướng **GIỮ projection/read-model** đã được nối đầy đủ cho Catalog, Orders và Dashboard; divergence evidence đã có.
-4.  Tiếp tục #42--#55 theo dependency sau khi C1 được chốt.
-5.  Thực hiện P2 và các diễn tập runtime/E2E để chứng minh hành vi
-    production, recovery và CI.
-6.  Đánh giá lại OOP, Clean Code, Tech Lead và production readiness dựa
-    trên code + test + deploy evidence; không suy ra điểm tuyệt đối chỉ
-    từ số checkbox đã đóng.
-
-**Tiêu chí hoàn thành:** khách đặt được đơn từ frontend; dữ liệu tiền,
-trạng thái và tồn kho nhất quán khi có lỗi hoặc yêu cầu đồng thời; CI
-xanh; image production khởi động được; có bằng chứng khôi phục sau sự
-cố. Đạt đủ các tiêu chí này sẽ cải thiện đánh giá rõ rệt, nhưng không có
-cam kết điểm tuyệt đối 10/10.
-
-## Bổ sung sau khi đối chiếu checklist đánh giá thứ hai
-
-Nguồn đối chiếu: `TriAD-Backend-Improvement-Checklist.md` do người dùng
-cung cấp. Tài liệu đó xem bản export cũ 309 file và chưa xem một số file
-cấu hình; các mục dưới đây đã được đối chiếu lại với repository backend
-`main` commit `f5a181e` tại thời điểm rà soát trước nhóm thay đổi #39/#40. Những việc trùng với mục 1--34 được giữ ở vị
-trí cũ, không tạo mục trùng. Các mục chưa kiểm thử runtime được diễn đạt
-là **kiểm chứng**.
-
-### P0 bổ sung — Transaction & access risks
-
-### #35 — ✅ CLOSED
-
-**Việc cần làm:** Dịch `P2034`/serialization conflict từ Prisma thành lỗi retryable ngay trong adapter trước khi trả lỗi về `CheckoutService`; `CheckoutService` retry bằng exponential backoff + jitter và có contention test thật trên PostgreSQL `Serializable`.
-
-**File liên quan:** [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), [prisma-checkout.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/infrastructure/repositories/prisma-checkout.repository.ts), [prisma-error-classifier.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/database/prisma-error-classifier.ts)
-
-### #36 — ✅ CLOSED
-
-**Việc cần làm:** Bắt lỗi Redis trong middleware async của Express 4 và chuyển qua `next(error)`; dùng TTL ngắn cho `IN_PROGRESS` và cơ chế khôi phục khi process chết. Redis failures trước response được chuyển sang error middleware; lỗi ghi/xóa cache sau response được log để quan sát.
-
-**File liên quan:** [idempotency.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/idempotency.middleware.ts), [src/config/index.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/config/index.ts)
-
-### #37 — ✅ CLOSED
-
-**Việc cần làm:** Refresh-token rotation đã được chuyển sang thao tác atomic. Repository chỉ revoke token khi `revokedAt IS NULL`; revoke token cũ và tạo token mới nằm trong cùng Prisma transaction. Hai request refresh đồng thời với cùng token chỉ cho phép một request thành công. Refresh token mới có `jti` để bảo đảm uniqueness ngay cả khi rotate trong cùng một giây; nếu tạo token mới thất bại thì transaction rollback và token cũ vẫn active.
-
-**File liên quan:** [token.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/services/token.service.ts), [auth.repository.port.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/application/ports/auth.repository.port.ts), [prisma-auth.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/infrastructure/repositories/prisma-auth.repository.ts), `tests/integration/auth.refresh-token-race.test.ts`, `tests/integration/auth.repository.test.ts`, `tests/unit/modules/auth/token.service.test.ts`
-
-**Evidence:** concurrent refresh race test PASS; repository atomic-claim test PASS; rollback integration test PASS; unit tests, typecheck và lint PASS.
-
-### #38 — ✅ CLOSED
-
-**Việc đã làm:** `/metrics` và `/api/docs` chỉ được mount khi `!config.isProduction`. Ở production hai route rơi xuống `notFoundHandler` và trả `404`; development/test vẫn giữ quyền truy cập.
-
-**Evidence:** có integration test production-route cho cả `/metrics` và `/api/docs`; typecheck/lint/test liên quan PASS. Thay đổi đã có trên GitHub qua commit `cc8eb56` (`fix(security): protect metrics and api docs in production`).
-
-**File liên quan:** [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), [metrics.routes.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/metrics/metrics.routes.ts), `tests/integration/production-routes.test.ts`
-
-### #39 — ✅ CLOSED
-
-**Việc đã làm:** upload không còn chỉ tin `mimetype` do client gửi. Sau Multer, `validateUploadedImage` dùng `sharp(...).metadata()` để giải mã/nhận diện nội dung thật và chỉ chấp nhận `jpeg`, `png`, `webp`. Fake image/unsupported format bị từ chối bằng `BadRequestError`.
-
-Static route `/uploads` và thư mục `uploads/tmp` legacy đã được loại bỏ sau khi xác nhận frontend không còn consumer và luồng ảnh hiện dùng `CloudinaryImageStorage`.
-
-**Evidence:** unit tests upload middleware, typecheck và lint PASS; tìm kiếm runtime reference không còn `/uploads`.
-
-**File liên quan:** [upload.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/upload.middleware.ts), [products.routes.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/products/products.routes.ts), [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), `tests/unit/shared/middlewares/upload.middleware.test.ts`
-
-### #40 — ✅ CLOSED
-
-**Việc đã làm:** global JSON/urlencoded body limit đã giảm từ `10mb` xuống `100kb`. Upload ảnh không bị ảnh hưởng vì dùng `multipart/form-data` qua Multer với giới hạn riêng `5MB`. Error handler nhận diện `entity.too.large` và trả HTTP `413` với message `Request payload too large`.
-
-**Evidence:** unit test cho error handler, typecheck và lint PASS. #40 được xác nhận CLOSED.
-
-**File liên quan:** [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), [error-handler.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/error-handler.middleware.ts), `tests/unit/shared/middlewares/error-handler.middleware.test.ts`
-
-### #41 — ✅ CLOSED
-
-**Việc cần làm:** Sửa đầy đủ snapshot, projection: ngoài `paymentStatus`, code còn đặt `tax = 0`, `shippingFee = 0`, `subtotal = total`, `placedAt = new Date()`. Bổ sung dữ liệu event cần thiết hoặc đọc snapshot từ đơn gốc; dùng thời điểm event và backfill dữ liệu sai hiện có.
-
-**File liên quan:** [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts), [order-events.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/events/order-events.ts)
-
-### P1 bổ sung — Outbox, domain & architecture
-
-### #42 — ✅ CLOSED
-
-**Việc đã làm:** Kiểm chứng bằng test PostgreSQL thật với hai store và hai relay owner khác nhau. Same-aggregate events có thể cùng in-flight và hoàn tất ngược thứ tự; đây là chính sách được chấp nhận vì order/product projections dùng CAS `sourceVersion`, equal version idempotent, stale version bị bỏ qua, còn email/notification được bảo vệ bằng handler tracker và idempotency key. Aggregate độc lập vẫn claim/process song song. Không thêm global FIFO hoặc mutex theo aggregate.
-
-**Evidence:** `tests/integration/outbox.relay-concurrency.test.ts` PASS: same aggregate reverse completion converges to the newer projection version; different aggregates remain concurrent; no event is owned by both relays.
-
-**File liên quan:** [prisma-outbox-relay.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-outbox-relay.store.ts), [projection-handler.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/projection-handler.ts)
-
-### #43 — ✅ CLOSED
-
-**Việc đã làm:** Relay có options timing nhưng giữ mặc định production poll 2s, batch 50, max attempts 10, lease 60s. Heartbeat gia hạn toàn bộ rows còn pending trong batch; `updateClaimed` trả kết quả ownership và chỉ ghi khi owner còn giữ lease. Khi relay chết, heartbeat dừng và lease hết hạn để relay khác reclaim; stale owner không thể publish/clear/rewrite claim của relay mới.
-
-**Evidence:** `tests/integration/outbox.relay-concurrency.test.ts` PASS với lease ngắn: handler chậm quá lease ban đầu vẫn không bị relay thứ hai lấy, abandoned lease được reclaim, stale-owner update bị từ chối. Unit tests cover defaults, heartbeat lifecycle, ownership loss and poll overlap.
-
-**File liên quan:** [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [prisma-outbox-relay.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-outbox-relay.store.ts)
-
-### #44 — ✅ CLOSED
-
-**Việc đã làm:** `triad_backend_outbox_lag_seconds` lấy từ snapshot DB của event chưa publish, chưa dead-letter cũ nhất; event đang backoff hoặc leased vẫn được tính. Thêm gauge `triad_backend_outbox_dead_lettered_events` cho số dead-letter chưa publish hiện tại, giữ nguyên counter chuyển trạng thái `triad_backend_outbox_events_dead_lettered_total`. Thêm alert cho backlog dead-letter unresolved.
-
-**Evidence:** `tests/integration/outbox.observability-retry.test.ts` PASS với row published, active claimable, active leased/backoff và dead-lettered; empty claim sau khi lease claim vẫn trả lag active và dead-letter count đúng.
-
-**File liên quan:** [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [metrics.registry.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/metrics/metrics.registry.ts)
-
-### #45 — ✅ CLOSED
-
-**Việc đã làm:** Kết quả `EventBus.publish()` có `success: false` giờ được chuyển thành exception bên trong callback `withRetry`, nên hai retries cho tối đa ba publish attempts ngay trong cùng delivery. Handler đã thành công được tracker bỏ qua ở lần retry sau; chỉ khi immediate retry cạn mới tăng durable attempts/failure và áp dụng backoff.
-
-**Evidence:** Unit và PostgreSQL integration tests chứng minh transient recovery không tăng attempts/failure counter, sibling thành công chỉ chạy một lần, còn persistent failure chạy ba lần và chỉ tăng durable attempts một lần.
-
-**File liên quan:** [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [event-bus.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/event-bus/event-bus.ts)
-
-### #46 — ⬜ OPEN
-
-**Việc cần làm:** Có đường vận hành để replay, dead-letter và dọn event đã, publish sau thời gian lưu giữ; xác nhận index claim và cơ chế chống side effect lặp.
-
-**File liên quan:** [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md), [schema.prisma](https://github.com/Thang4869/TriAD-Backend/blob/main/prisma/schema.prisma)
-
-### #47 — ⬜ OPEN
-
-**Việc cần làm:** Định phiên bản và kiểm tra, payload outbox trước khi dispatch; hiện `deserializeDomainEvent()` ép `unknown` thành `DomainEvent` và chỉ kiểm tra là object.
-
-**File liên quan:** [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [domain-event.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/events/domain-event.ts)
-
-### #48 — ⬜ OPEN
-
-**Việc cần làm:** Cập nhật trạng thái đơn qua hành, vi aggregate hoặc quy tắc domain thống nhất, lưu cùng version và outbox. `OrdersService` hiện kiểm tra bằng `Order.canTransition()` rồi ghi status trực tiếp, nên có nguy cơ tranh chấp giữa hai request.
-
-**File liên quan:** [orders.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/orders.service.ts), [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts)
-
-### #49 — ⬜ OPEN
-
-**Việc cần làm:** Tách version dùng để kiểm soát, đồng thời khỏi bộ đếm event: `AggregateRoot.raise()` hiện tự tăng version mỗi khi tạo sự kiện. Nếu version này đi xuống DB, phải định nghĩa rõ lúc hydrate và lúc update.
-
-**File liên quan:** [aggregate-root.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/aggregate-root.ts), [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts)
-
-### #50 — ⬜ OPEN
-
-**Việc cần làm:** Quy định đường đi hợp lệ tới, `REFUNDED` và trạng thái thanh toán sau refund, hoặc loại status này nếu không dùng. Hiện bảng transition không có cạnh đi vào `REFUNDED`.
-
-**File liên quan:** [order-status.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order-status.ts), [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts)
-
-### #51 — ⬜ OPEN
-
-**Việc cần làm:** Giữ invariant của `OrderItem` khi thêm lại cùng sản phẩm: hiện `addItem()` cộng số lượng nhưng âm thầm thay giá của toàn bộ dòng bằng `unitPrice` mới.
-
-**File liên quan:** [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts)
-
-### #52 — ⬜ OPEN
-
-**Việc cần làm:** Kiểm tra việc cùng phát, `OrderStatusChangedEvent` và `OrderCancelledEvent` khi hủy đơn; xác định rõ mỗi handler nghe event nào để tránh thực hiện hai lần một tác dụng.
-
-**File liên quan:** [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts), [order-events.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/events/order-events.ts)
-
-### #53 — ⬜ OPEN
-
-**Việc cần làm:** Thêm kiểm tra ranh giới phụ, thuộc trong CI, tập trung vào module domain/application không import adapter hạ tầng; sửa từng vi phạm thực tế, tránh tạo interface cho mọi class chỉ để tăng điểm OOP.
-
-**File liên quan:** [ci.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/.github/workflows/ci.yml), [container.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/container.ts)
-
-### #54 — ⬜ OPEN
-
-**Việc cần làm:** Rà soát `src/core/unit-of-work/`, rỗng và claim Unit of Work trong README: triển khai transaction boundary qua port rõ ràng nếu thực sự cần, hoặc mô tả thẳng transaction Prisma hiện dùng.
-
-**File liên quan:** [README.md](https://github.com/Thang4869/TriAD-Backend/blob/main/README.md), [checkout-transaction.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/application/ports/checkout-transaction.ts)
-
-### #55 — ⬜ OPEN
-
-**Việc cần làm:** Đưa hai kiểu lỗi, domain/application và HTTP về một quy tắc ánh xạ dễ kiểm chứng. Hiện service còn import `BadRequestError` trong khi `AppError` thuộc middleware.
-
-**File liên quan:** [errors.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/utils/errors.ts), [error-handler.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/error-handler.middleware.ts)
-
-### P2 bổ sung — Runtime, testing & documentation
-
-### #56 — ⬜ OPEN
-
-**Việc cần làm:** Bổ sung test tích hợp thật cho outbox nhiều relay, idempotency, với Redis và race refresh token; test unit/mock không chứng minh được hành vi khi crash hoặc tranh chấp.
-
-**File liên quan:** [tests/integration/checkout.concurrent.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/checkout.concurrent.test.ts), [quality-gates.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/.github/workflows/quality-gates.yml)
-
-### #57 — ⬜ OPEN
-
-**Việc cần làm:** Sửa dev Compose đang mount, `./nodemon.json` không có trong repo; kiểm tra lại lệnh dev và biến `QUEUE_REDIS_URL` có được đọc hay không.
-
-**File liên quan:** [docker-compose.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/docker-compose.yml), [package.json](https://github.com/Thang4869/TriAD-Backend/blob/main/package.json)
-
-### #58 — ⬜ OPEN
-
-**Việc cần làm:** Xem xét tách worker BullMQ và, relay khỏi tiến trình HTTP khi cần scale độc lập; hiện `server.ts` khởi động cả ba. Trước khi tách, đo tải và quyết định topology.
-
-**File liên quan:** [server.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/server.ts), [bull.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/queue/bull.ts)
-
-### #59 — ⬜ OPEN
-
-**Việc cần làm:** Đồng bộ README với code: sửa, `/api-docs` thành `/api/docs`, claim CQRS/Unit of Work/Strategy và các ADR trùng số; giữ phần ghi rõ Saga chưa ở production, bỏ mô tả "Internal / Private" nếu repo vẫn public.
-
-**File liên quan:** [README.md](https://github.com/Thang4869/TriAD-Backend/blob/main/README.md), [ARCHITECTURE.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/ARCHITECTURE.md)
-
-### #60 — ⬜ OPEN
-
-**Việc cần làm:** Dọn thông báo lỗi trỏ tới, `prisma/schema.additions.prisma` không tồn tại; xem lại dependency `@prisma/adapter-pg` 7.x đang nằm cạnh `prisma`/`@prisma/client` 5.x và chỉ giữ package thực dùng.
-
-**File liên quan:** [persist-domain-events.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/persist-domain-events.ts), [package.json](https://github.com/Thang4869/TriAD-Backend/blob/main/package.json)
-
-### Nhận định cần sửa hoặc chưa đủ căn cứ trong checklist đánh giá thứ hai
-
-- **Coverage chưa có ngưỡng** là sai:
-  [`vitest.unit.config.mts`](https://github.com/Thang4869/TriAD-Backend/blob/main/vitest.unit.config.mts)
-  đã đặt ngưỡng 90% và 100% cho domain/value objects. Có thể tăng chất
-  lượng bài test, nhưng không thêm việc "bật ngưỡng" như thể còn
-  thiếu.
-- **Resend verification chưa có rate limiter** là sai:
-  [`auth.routes.ts`](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/auth.routes.ts)
-  đã gắn `authRateLimiter`.
-- **Hai file `container.ts` là duplicate** là sai:
-  [`src/core/di/container.ts`](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/di/container.ts)
-  triển khai cơ chế container;
-  [`src/container.ts`](https://github.com/Thang4869/TriAD-Backend/blob/main/src/container.ts)
-  đăng ký dependency. Có thể chia nhỏ composition root, không nên xóa
-  một file theo tên.
-- **Port/Strategy/State pattern ở mọi nơi, mọi module đều thành
-  aggregate** là yêu cầu quá mức. Chỉ áp dụng khi có nhiều biến thể
-  hoặc invariant cần bảo vệ; một codebase nhiều abstraction không tự
-  động đạt điểm OOP cao.
-- **Mọi domain event đều phải qua outbox** là diễn đạt quá rộng. Bắt
-  buộc tính bền vững cho các event có side effect hoặc cần xử lý sau
-  commit; event nội bộ thuần đồng bộ có thể giữ trong process nếu phạm
-  vi được ghi rõ. Lỗi hiện có là các luồng phát event sau khi lưu DB
-  nhưng không có cơ chế bền vững.
-- **Port production mặc định 5000 trong Docker Compose** không phải
-  lỗi: compose đã đặt `PORT=3000` và map `3000:3000`. Lỗi thực tế là
-  thiếu cấu hình và file được mount.
-- **Đảm bảo 9--10/10 sau checklist** không có cơ sở kiểm chứng. Thành
-  công phải được đo bằng luồng end-to-end, dữ liệu đúng, triển khai
-  hoạt động và khả năng phục hồi; đánh giá cuối vẫn phụ thuộc môi
-  trường và người review.
-
-**Cập nhật thứ tự thực hiện:** P0 mục 1--12 và 35--41; tiếp đến 14,
-42--55 cùng các mục P1 liên quan; sau cùng chạy các test và diễn tập P2.
-Các mục an ninh hoặc package phụ thuộc phiên bản hiện hành cần tra
-advisory và chạy kiểm chứng trước khi nâng cấp.
+| #   | Việc cần làm / kết quả hiện tại                                                                                                                                                                                                                                                        | File / evidence chính                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Trạng thái |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 27  | Unit test CheckoutController dùng `CheckoutValidator` thật và payload hiện tại (`address`, `phone`, optional fields, COD); không còn mock validator che contract mismatch.                                                                                                             | FE: [CheckoutController.test.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/unit/modules/checkout/CheckoutController.test.js), [CheckoutValidator.js](https://github.com/Thang4869/TriAD-12/blob/main/src/modules/checkout/CheckoutValidator.js)                                                                                                                                                                                                                                                                                                            | ✅ CLOSED  |
+| 28  | Frontend integration test chạy CartController + CheckoutController/Validator/Renderer thật trên stateful fake HTTP backend; kiểm tra add cart → checkout → server order → clear cart và failure path giữ cart.                                                                         | FE: [checkout.flow.test.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/integration/checkout.flow.test.js)                                                                                                                                                                                                                                                                                                                                                                                                                                                   | ✅ CLOSED  |
+| 29  | Playwright checkout test đã dùng form/auth flow hiện tại và xác nhận order number, server total, cart empty. Test này vẫn route mock API; nó không thay thế full FE↔BE E2E của #31.                                                                                                    | FE: [cart.spec.js](https://github.com/Thang4869/TriAD-12/blob/main/tests/e2e/cart.spec.js)                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | ✅ CLOSED  |
+| 30  | Đã có PostgreSQL contention/P2034, concurrent checkout, refresh race, projection ordering/rebuild, multi-relay lease/reclaim và outbox retry tests. Còn thiếu Redis-idempotency integration, lost-response HTTP retry, synchronized price-change-vs-checkout và kill-process recovery. | BE: [checkout.concurrent.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/checkout.concurrent.test.ts), [outbox.relay-concurrency.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/outbox.relay-concurrency.test.ts), [outbox.observability-retry.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/outbox.observability-retry.test.ts), [projection.ordering.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/projection.ordering.test.ts) | 🟡 PARTIAL |
+| 31  | Thêm một CI journey chạy frontend và backend cùng nhau trên test environment, không chỉ chạy hai repository test độc lập hoặc browser test với API mock.                                                                                                                               | BE: [ci.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/.github/workflows/ci.yml); FE: [test.yml](https://github.com/Thang4869/TriAD-12/blob/main/.github/workflows/test.yml)                                                                                                                                                                                                                                                                                                                                                                                | ⬜ OPEN    |
+| 32  | Production image/Compose đã build và chạy cục bộ. Cần tự động hóa smoke của **image vừa build** trong CI: migrate, start, `/health/ready`, một API flow đại diện và graceful shutdown.                                                                                                 | BE: [Dockerfile](https://github.com/Thang4869/TriAD-Backend/blob/main/Dockerfile), [ci.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/.github/workflows/ci.yml), [docker-compose.prod.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/docker-compose.prod.yml)                                                                                                                                                                                                                                                                                    | 🟡 PARTIAL |
+| 33  | Diễn tập restore backup, replay outbox và rebuild projection trên dữ liệu kiểm thử; ghi RTO/RPO quan sát được, bước phục hồi và kết quả vào runbook.                                                                                                                                   | BE: [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md), [rebuild-order-history-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/scripts/rebuild-order-history-projection.ts), [rebuild-product-catalog-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/scripts/rebuild-product-catalog-projection.ts)                                                                                                                                                                                     | ⬜ OPEN    |
+| 34  | Đưa README/ARCHITECTURE về đúng behavior đang chạy: giới hạn payment/Saga, cách chạy FE+BE, route thật, các claim pattern/DDD và evidence test/deploy. Đây là mục umbrella; các lỗi cụ thể ở #59.                                                                                      | BE: [README.md](https://github.com/Thang4869/TriAD-Backend/blob/main/README.md), [ARCHITECTURE.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/ARCHITECTURE.md)                                                                                                                                                                                                                                                                                                                                                                                          | ⬜ OPEN    |
+
+## P0 bổ sung — Transaction & access risks
+
+| #   | Việc cần làm / kết quả hiện tại                                                                                                                                                                       | File / evidence chính                                                                                                                                                                                                                                                                                                                                                                                                             | Trạng thái |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 35  | Prisma `P2034`/serialization conflict được dịch thành `ConflictError` ngay trong checkout adapter; service retry exponential backoff + jitter và có contention test PostgreSQL `Serializable`.        | BE: [prisma-checkout.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/infrastructure/repositories/prisma-checkout.repository.ts), [checkout.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/checkout.service.ts), [checkout.concurrent.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/checkout.concurrent.test.ts) | ✅ CLOSED  |
+| 36  | Idempotency middleware bắt Redis errors đúng async boundary; `IN_PROGRESS` và `COMPLETED` có TTL khác nhau; lỗi trước response đi qua error middleware, lỗi cache sau response được log.              | BE: [idempotency.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/idempotency.middleware.ts), [index.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/config/index.ts), [idempotency.middleware.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/unit/shared/middlewares/idempotency.middleware.test.ts)                                                 | ✅ CLOSED  |
+| 37  | Refresh rotation là atomic transaction: claim/revoke token cũ có điều kiện `revokedAt IS NULL`, chỉ tạo token mới khi claim thắng; race cùng token chỉ có một request thành công.                     | BE: [prisma-auth.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/infrastructure/repositories/prisma-auth.repository.ts), [token.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/auth/services/token.service.ts), [auth.refresh-token-race.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/auth.refresh-token-race.test.ts)      | ✅ CLOSED  |
+| 38  | `/metrics` và `/api/docs` không được mount ở production; production trả 404, development/test vẫn truy cập được; có integration test route.                                                           | BE: [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), [production-routes.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/production-routes.test.ts)                                                                                                                                                                                                                      | ✅ CLOSED  |
+| 39  | Upload ảnh được decode/inspect bằng `sharp().metadata()` thay vì tin `mimetype`; format giả/không hỗ trợ bị từ chối. Static `/uploads` legacy đã được loại khỏi app.                                  | BE: [upload.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/upload.middleware.ts), [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), [upload.middleware.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/unit/shared/middlewares/upload.middleware.test.ts)                                                                                | ✅ CLOSED  |
+| 40  | Global JSON/urlencoded limit đã giảm xuống `100kb`; multipart image giữ limit riêng; body quá lớn map thành HTTP 413.                                                                                 | BE: [app.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/app.ts), [error-handler.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/error-handler.middleware.ts), [error-handler.middleware.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/unit/shared/middlewares/error-handler.middleware.test.ts)                                                    | ✅ CLOSED  |
+| 41  | Order projection snapshot dùng dữ liệu authoritative của event/order cho payment/pricing/time thay vì hardcode `PAID`, `tax=0`, `subtotal=total` hay `new Date()`; rebuild path xử lý dữ liệu legacy. | BE: [prisma-projection.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-projection.store.ts), [order-events.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/events/order-events.ts), [rebuild-order-history-projection.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/rebuild-order-history-projection.ts)                              | ✅ CLOSED  |
+
+## P1 bổ sung — Outbox, domain & architecture
+
+| #   | Việc cần làm / kết quả hiện tại                                                                                                                                                                                                            | File / evidence chính                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Trạng thái                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| 42  | Đã xác nhận relay **không bảo đảm FIFO vật lý theo aggregate**. Same-aggregate events có thể hoàn tất ngược thứ tự; projection hội tụ bằng `sourceVersion` CAS và side-effect handlers cần idempotency riêng.                              | BE: [prisma-outbox-relay.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-outbox-relay.store.ts), [outbox.relay-concurrency.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/outbox.relay-concurrency.test.ts), [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md)                                                                                                 | ✅ CLOSED                   |
+| 43  | Outbox relay có lease heartbeat cho toàn batch; stale owner không thể publish/clear/rewrite claim sau khi mất lease; abandoned lease được relay khác reclaim.                                                                              | BE: [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [prisma-outbox-relay.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-outbox-relay.store.ts), [outbox.relay-concurrency.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/outbox.relay-concurrency.test.ts)                                                                                  | ✅ CLOSED                   |
+| 44  | Outbox lag lấy từ event unpublished/non-dead-letter cũ nhất kể cả khi đang lease/backoff; có dead-letter backlog gauge và alert riêng.                                                                                                     | BE: [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [metrics.registry.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/metrics/metrics.registry.ts), [alerts.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/ops/prometheus/alerts.yml), [outbox.observability-retry.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/outbox.observability-retry.test.ts) | ✅ CLOSED                   |
+| 45  | `EventBus.publish()` trả `success:false` được chuyển thành exception **bên trong** immediate retry callback. Handler đã thành công được tracker bỏ qua ở retry sau; durable attempts chỉ tăng sau khi immediate retries cạn.               | BE: [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [event-bus.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/event-bus/event-bus.ts), [outbox.observability-retry.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/outbox.observability-retry.test.ts)                                                                                                  | ✅ CLOSED                   |
+| 46  | Bổ sung lifecycle vận hành cho outbox: công cụ replay dead-letter có kiểm soát, cleanup published events theo retention, xác nhận/điều chỉnh claim indexes và giữ event ID/idempotency để replay không lặp side effect.                    | BE: [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [prisma-outbox-relay.store.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/prisma-outbox-relay.store.ts), [schema.prisma](https://github.com/Thang4869/TriAD-Backend/blob/main/prisma/schema.prisma), [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md)                                         | ⬜ OPEN — NEXT              |
+| 47  | Thêm schema validation và versioning cho outbox payload trước dispatch. `deserializeDomainEvent()` hiện mới xác nhận payload là object rồi ép sang `DomainEvent`; cần reject/quarantine payload sai schema/version một cách quan sát được. | BE: [outbox-relay.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/outbox-relay.ts), [domain-event.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/events/domain-event.ts)                                                                                                                                                                                                                                                | ⬜ OPEN                     |
+| 48  | Nội dung cũ trùng #9/A2. Order status hiện đã đi qua aggregate + optimistic version + transactional outbox; giữ #48 chỉ để bảo toàn số thứ tự, không coi đây là backlog riêng.                                                             | BE: [orders.service.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/orders.service.ts), [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts), [prisma-orders.repository.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/infrastructure/repositories/prisma-orders.repository.ts)                                                                        | ✅ CLOSED — duplicate #9/A2 |
+| 49  | Tách/định nghĩa rõ persisted concurrency version và event sequence. `AggregateRoot.raise()` hiện làm tăng `version`; cần tránh việc số event vô tình trở thành optimistic-lock version nếu hai khái niệm có semantics khác nhau.           | BE: [aggregate-root.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/aggregate-root.ts), [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts)                                                                                                                                                                                                                                         | ⬜ OPEN                     |
+| 50  | Chốt semantics refund: định nghĩa transition hợp lệ tới `REFUNDED` và quan hệ với `paymentStatus`, hoặc bỏ order status này nếu refund chỉ thuộc payment state.                                                                            | BE: [order-status.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order-status.ts), [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts), [order.constant.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/constants/order.constant.ts)                                                                                                                   | ⬜ OPEN                     |
+| 51  | Giữ invariant của OrderItem khi thêm lại cùng product: không được cộng quantity rồi âm thầm thay `unitPrice` của toàn dòng; yêu cầu cùng giá hoặc định nghĩa hành vi rõ.                                                                   | BE: [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts)                                                                                                                                                                                                                                                                                                                                                        | ⬜ OPEN                     |
+| 52  | Rà semantics khi `cancel()` phát cả `OrderStatusChangedEvent` và `OrderCancelledEvent`; document trách nhiệm từng event/handler và chứng minh không gây duplicate side effect.                                                             | BE: [order.entity.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/domain/order.entity.ts), [order-events.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/events/order-events.ts), [order-status-changed.handler.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/orders/event-handlers/order-status-changed.handler.ts)                                                                           | ⬜ OPEN                     |
+| 53  | Thêm architecture boundary checks trong CI (`dependency-cruiser` hoặc `eslint-plugin-boundaries`) dựa trên rule thực tế: domain không import infra; application không phụ thuộc adapter/cross-cutting concrete ngoài port được chấp nhận.  | BE: [ci.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/.github/workflows/ci.yml), [container.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/container.ts)                                                                                                                                                                                                                                                                                           | ⬜ OPEN                     |
+| 54  | Giải quyết claim Unit of Work: `src/core/unit-of-work/` đang rỗng trong baseline; hoặc triển khai UoW/transaction context thật, hoặc bỏ claim/thư mục và mô tả chính xác Prisma transaction boundary đang dùng.                            | BE: [README.md](https://github.com/Thang4869/TriAD-Backend/blob/main/README.md), [checkout-transaction.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/modules/checkout/application/ports/checkout-transaction.ts)                                                                                                                                                                                                                                              | ⬜ OPEN                     |
+| 55  | Tách error taxonomy domain/application khỏi HTTP transport. Nhiều service hiện import `BadRequestError`/`NotFoundError` mà các class này kế thừa `AppError` mang HTTP status; mapping HTTP nên tập trung ở presentation/error handler.     | BE: [errors.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/utils/errors.ts), [error-handler.middleware.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/middlewares/error-handler.middleware.ts), [domain-error.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/shared/domain/errors/domain-error.ts)                                                                                                                   | ⬜ OPEN                     |
+
+## P2 bổ sung — Runtime, testing & documentation
+
+| #   | Việc cần làm / kết quả hiện tại                                                                                                                                                                                                                                             | File / evidence chính                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Trạng thái |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 56  | Integration evidence hiện đã bao phủ multi-relay, refresh race, Orders repo, P2034/Serializable, projection ordering/read-models và outbox observability. Còn thiếu Redis idempotency thật và crash window sau side effect nhưng trước `publishedAt`.                       | BE: [outbox.relay-concurrency.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/outbox.relay-concurrency.test.ts), [auth.refresh-token-race.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/auth.refresh-token-race.test.ts), [checkout.concurrent.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/checkout.concurrent.test.ts), [projection.ordering.test.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/tests/integration/projection.ordering.test.ts) | 🟡 PARTIAL |
+| 57  | Dọn dev Compose: bỏ `version: "3.8"` nếu không cần, xử lý mount `./nodemon.json` đang không có trong repo, bind Postgres/Redis về localhost nếu chỉ dùng local, và bỏ/đưa `QUEUE_REDIS_URL` vào config nếu biến này không được đọc.                                         | BE: [docker-compose.yml](https://github.com/Thang4869/TriAD-Backend/blob/main/docker-compose.yml), [package.json](https://github.com/Thang4869/TriAD-Backend/blob/main/package.json), [index.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/config/index.ts)                                                                                                                                                                                                                                                                                       | ⬜ OPEN    |
+| 58  | Đánh giá topology worker. `server.ts` hiện chạy HTTP + BullMQ worker + OutboxRelay trong một process; nếu cần scale/rolling deploy độc lập, thêm worker entrypoint hoặc runtime flags sau khi có load evidence.                                                             | BE: [server.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/server.ts), [bull.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/queue/bull.ts)                                                                                                                                                                                                                                                                                                                                                                                      | ⬜ OPEN    |
+| 59  | Đồng bộ README với code: `/api/docs`, Unit of Work/Strategy/Mapper/Outbox claims, duplicated `ADR-003`, duplicated section number `10`, Saga chưa production-wired, repo public/license và mức tự nhận `Production-ready`/`Tech Lead Level` phải đi kèm evidence phù hợp.   | BE: [README.md](https://github.com/Thang4869/TriAD-Backend/blob/main/README.md), [ARCHITECTURE.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/ARCHITECTURE.md), [OPERATIONS.md](https://github.com/Thang4869/TriAD-Backend/blob/main/docs/OPERATIONS.md)                                                                                                                                                                                                                                                                                          | ⬜ OPEN    |
+| 60  | Dọn dependency/log debt: sửa log trỏ tới `prisma/schema.additions.prisma` không tồn tại; xử lý lệch `@prisma/adapter-pg` 7.x với Prisma 5.22; chuyển `@types/*` runtime khỏi `dependencies`; rà `body-parser`, alias stack và các retry/circuit-breaker package chồng chéo. | BE: [persist-domain-events.ts](https://github.com/Thang4869/TriAD-Backend/blob/main/src/core/outbox/persist-domain-events.ts), [package.json](https://github.com/Thang4869/TriAD-Backend/blob/main/package.json)                                                                                                                                                                                                                                                                                                                                                 | ⬜ OPEN    |
+
+## Những nhận định cũ đã được chỉnh lại
+
+| Nhận định cũ                                            | Kết luận sau rà soát                                                                                                                                                 |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| “Coverage chưa có ngưỡng.”                              | `vitest.unit.config.mts` đã đặt 90% cho lines/statements/branches/functions và 100% cho domain/value objects.                                                        |
+| “Resend verification chưa có rate limiter.”             | `auth.routes.ts` đã gắn `authRateLimiter`; không tạo backlog giả cho việc này.                                                                                       |
+| “Hai file `container.ts` là duplicate.”                 | `src/core/di/container.ts` là DI engine; `src/container.ts` là composition root. Vấn đề thật là composition root lớn/coupled, không phải trùng file.                 |
+| “Mọi domain event đều phải qua outbox.”                 | Chỉ bắt buộc durability cho event/side effect cần sống qua process crash hoặc chạy sau commit. Auth/Reviews direct publish vẫn cần được phân loại theo tiêu chí này. |
+| “Docker production sai vì app mặc định chạy port 5000.” | Production Compose đặt `PORT=3000` và map `3000:3000`; port không còn là lỗi. Các gap còn lại nằm ở migration orchestration/resource policy/runtime smoke.           |
+| “Hoàn tất checklist sẽ bảo đảm 10/10.”                  | Không có cơ sở để bảo đảm điểm tuyệt đối. Đánh giá cuối còn phụ thuộc deployed behavior, recovery/load evidence và external review.                                  |
+
+## Phạm vi evidence của lần đồng bộ này
+
+| Nguồn                                      | Đã dùng để xác minh                                                                                       | Giới hạn                                                                                                 |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Backend export 02/10/2026                  | `src/`, `tests/`, `docs/`, Prisma schema/migrations, Compose, package/TS/Vitest config.                   | Không chứa hidden files/workflows và có thể cũ hơn `main`.                                               |
+| Backend GitHub `main` `50bf3a1`            | README, Dockerfile, `.github/workflows`, `.env.example`, `.dockerignore` và các file thay đổi sau export. | Không tự suy ra runtime deployed chỉ từ source.                                                          |
+| Frontend GitHub `main` `a6f3f6c`           | Checkout controller/service/validator/renderer, auth/CSRF flow và các test #1/#5/#12/#17/#18/#26–#29.     | Playwright hiện mock API; full FE↔BE CI vẫn là #31.                                                      |
+| Evidence đã ghi trong project/conversation | Local production Compose smoke, unit/integration passes và các regression tests theo từng mục.            | Lần đồng bộ tài liệu này không chạy lại toàn bộ CI và không có Google/Facebook/Vercel/Render smoke thật. |
+
+## Thứ tự thực hiện từ thời điểm hiện tại
+
+| Bước | Mục                           | Mục tiêu                                                                                                                    |
+| ---- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 1    | **#46 / C6**                  | Outbox replay + dead-letter lifecycle + retention cleanup + index/idempotency operational path.                             |
+| 2    | **#47 / C8**                  | Schema validation và versioning cho event payload trước dispatch.                                                           |
+| 3    | **#49–#55**                   | Làm sạch version semantics, refund/order invariants, event semantics, architecture boundaries, UoW claim và error taxonomy. |
+| 4    | **#12 / #23**                 | Đóng deployed/external smoke khi có Vercel + Render và OAuth credentials thật; không chặn #46.                              |
+| 5    | **#30 / #32 / #56**           | Hoàn tất Redis-idempotency integration, crash/lost-response evidence và runtime smoke của production image trong CI.        |
+| 6    | **#31 / #33 / #34 / #57–#60** | Full FE↔BE CI, recovery drill, docs/README, dev/prod packaging và dependency cleanup.                                       |
+| 7    | **#24**                       | Chỉ production-wire Saga khi payment/refund adapter đã có và semantics thanh toán được chốt.                                |
+
+## Tiêu chí hoàn thành dự án ở mức portfolio/production evidence
+
+| Tiêu chí                                                | Trạng thái hiện tại                                                                                                   |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Checkout đúng dữ liệu và không oversell dưới cạnh tranh | Đã có locking/Serializable/optimistic version và integration evidence; tiếp tục bổ sung lost-response/crash evidence. |
+| Outbox không mất event và có lifecycle vận hành         | Core relay/retry/lease/observability đã mạnh; **#46/#47 vẫn OPEN**.                                                   |
+| Read-model hội tụ và rebuild an toàn                    | Đã có sourceVersion CAS, authoritative rebuild và ordering tests.                                                     |
+| Auth/CSRF/OAuth an toàn trên môi trường thật            | Code đã khá đầy đủ; #12/#23 còn deployed/external smoke.                                                              |
+| CI chứng minh image production và FE↔BE journey         | #31/#32 còn OPEN/PARTIAL.                                                                                             |
+| Recovery/runbook có bằng chứng                          | #33 còn OPEN.                                                                                                         |
+| README/CV khớp hoàn toàn với code                       | #34/#59 và các mục docs liên quan còn OPEN.                                                                           |
+
+> **Mục tiếp theo:** **P1 #46**. Không triển khai #46 trong lần cập nhật tài liệu này.

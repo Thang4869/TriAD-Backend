@@ -19,6 +19,7 @@ export class PrismaOutboxRelayStore implements OutboxRelayStore {
         SELECT id
         FROM outbox_events
         WHERE "publishedAt" IS NULL
+          AND "deadLetteredAt" IS NULL
           AND attempts < ${maxAttempts}
           AND ("leaseUntil" IS NULL OR "leaseUntil" < NOW())
         ORDER BY "occurredAt" ASC

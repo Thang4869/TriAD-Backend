@@ -34,7 +34,7 @@ model Product {
   id           String                   @id @default(cuid())
   name         String
   description  String?
-  price        Float
+  price        Decimal                  @db.Decimal(18, 0)
   stock        Int                      @default(0)
   version      Int                      @default(0)
   category     String
@@ -84,11 +84,11 @@ model Order {
   status          OrderStatus   @default(PENDING)
   paymentMethod   PaymentMethod
   paymentStatus   PaymentStatus @default(PENDING)
-  subtotal        Float
-  tax             Float         @default(0)
-  shippingFee     Float         @default(0)
-  total           Float
-  discountAmount  Float         @default(0)
+  subtotal        Decimal       @db.Decimal(18, 0)
+  tax             Decimal       @default(0) @db.Decimal(18, 0)
+  shippingFee     Decimal       @default(0) @db.Decimal(18, 0)
+  total           Decimal       @db.Decimal(18, 0)
+  discountAmount  Decimal       @default(0) @db.Decimal(18, 0)
   discountCode    String?
   customerName    String
   customerEmail   String
@@ -111,8 +111,8 @@ model OrderItem {
   orderId   String
   productId String
   quantity  Int
-  price     Float
-  total     Float
+  price     Decimal @db.Decimal(18, 0)
+  total     Decimal @db.Decimal(18, 0)
   order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product   Product @relation(fields: [productId], references: [id])
 
@@ -167,8 +167,8 @@ model Discount {
   id             String       @id @default(uuid())
   code           String       @unique
   type           DiscountType
-  value          Float
-  minOrderAmount Float?
+  value          Decimal      @db.Decimal(18, 4)
+  minOrderAmount Decimal?     @db.Decimal(18, 0)
   maxUses        Int?
   usedCount      Int          @default(0)
   expiresAt      DateTime?
@@ -254,7 +254,7 @@ model ProductCatalogProjection {
   productId     String   @id
   name          String
   description   String?
-  price         Float
+  price         Decimal  @db.Decimal(18, 0)
   stock         Int
   category      String
   images        String[]
@@ -278,10 +278,10 @@ model OrderHistoryProjection {
   orderNumber   String
   status        OrderStatus
   paymentStatus PaymentStatus
-  subtotal      Float
-  tax           Float
-  shippingFee   Float
-  total         Float
+  subtotal      Decimal       @db.Decimal(18, 0)
+  tax           Decimal       @db.Decimal(18, 0)
+  shippingFee   Decimal       @db.Decimal(18, 0)
+  total         Decimal       @db.Decimal(18, 0)
   items         Json
   placedAt      DateTime
   sourceVersion Int
@@ -294,7 +294,7 @@ model OrderHistoryProjection {
 
 model AdminDashboardProjection {
   id                   String   @id
-  totalGrossOrderValue Float    @default(0)
+  totalGrossOrderValue Decimal  @default(0) @db.Decimal(18, 0)
   totalOrders          Int      @default(0)
   pendingOrders        Int      @default(0)
   completedOrders      Int      @default(0)

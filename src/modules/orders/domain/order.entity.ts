@@ -141,12 +141,11 @@ export class Order extends AggregateRoot {
   }
 
   get total(): Money {
-    const raw =
-      this.subtotal.getValue() +
-      this._tax.getValue() +
-      this._shippingFee.getValue() -
-      this._discountAmount.getValue();
-    return new Money(Math.max(0, raw));
+    const gross = this.subtotal.add(this._tax).add(this._shippingFee);
+    if (this._discountAmount.getValue() > gross.getValue()) {
+      throw new InvalidDiscountError("Discount cannot exceed order total");
+    }
+    return gross.subtract(this._discountAmount);
   }
 
   private assertMutable(): void {
@@ -165,7 +164,7 @@ export class Order extends AggregateRoot {
     unitPrice: Money,
   ): void {
     this.assertMutable();
-    if (quantity <= 0) {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new InvalidOrderItemError("Quantity must be positive");
     }
     const existing = this._items.find((item) => item.productId === productId);

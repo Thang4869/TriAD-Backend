@@ -1,4 +1,5 @@
 import prisma from "@core/database/prisma";
+import { Prisma } from "@prisma/client";
 import {
   ClaimedOutboxEvent,
   OutboxRelayStore,
@@ -43,13 +44,38 @@ export class PrismaOutboxRelayStore implements OutboxRelayStore {
     id: string,
     owner: string,
     data: OutboxRelayUpdate,
-  ): Promise<void> {
-    await prisma.outboxEvent.updateMany({
+  ): Promise<boolean> {
+    const result = await prisma.outboxEvent.updateMany({
       where: {
         id,
         lockOwner: owner,
+        publishedAt: null,
+        deadLetteredAt: null,
+        leaseUntil: { gt: new Date() },
       },
       data,
     });
+    return result.count === 1;
+  }
+
+  async renewClaims(
+    owner: string,
+    ids: string[],
+    lockLeaseSeconds: number,
+  ): Promise<string[]> {
+    if (ids.length === 0) return [];
+
+    const renewed = await prisma.$queryRaw<Array<{ id: string }>>`
+      UPDATE outbox_events
+      SET "lockedAt" = NOW(),
+          "leaseUntil" = NOW() + (${lockLeaseSeconds} || ' seconds')::interval
+      WHERE id IN (${Prisma.join(ids)})
+        AND "lockOwner" = ${owner}
+        AND "publishedAt" IS NULL
+        AND "deadLetteredAt" IS NULL
+        AND "leaseUntil" > NOW()
+      RETURNING id
+    `;
+    return renewed.map((row) => row.id);
   }
 }

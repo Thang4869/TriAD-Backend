@@ -141,9 +141,9 @@ Runtime read-side đã được nối thật: Catalog đọc `product_catalog_pr
   - `OPERATIONS.md` chưa có hướng dẫn cụ thể khi nào/cách nào chạy lệnh backfill này.
   - `sourceVersion` để xử lý event sai thứ tự vẫn chưa có cho `orderHistoryProjection` (chỉ `productCatalogProjection` có `sourceVersion`); `updateOrderStatus` vẫn dùng `updateMany` im lặng khi không tìm thấy row.
   - Dashboard (`refreshDashboard`) vẫn tính lại toàn bộ từ đầu mỗi lần, chưa theo delta; đây là vấn đề hiệu năng/read-model còn lại, không còn là vấn đề revenue semantics của L1.
-- [ ] **C3.** Outbox đảm bảo thứ tự theo aggregate (không claim event nếu còn event cũ chưa publish của cùng aggregate). Với nhiều relay instance, thứ tự hiện không được bảo đảm.
+- [x] **C3.** **P1 #42 đã đóng.** Outbox không hứa physical FIFO theo aggregate giữa nhiều relay instance. Test PostgreSQL chứng minh cùng aggregate có thể hoàn tất ngược thứ tự, nhưng projections hội tụ nhờ `sourceVersion` CAS, equal version idempotent và stale version no-op; handler tracker/idempotency keys bảo vệ side effects. Consumer mới cần tự mang invariant ordering phù hợp.
 - [ ] **C4.** `outboxLagSeconds` đang tính trên row vừa claim, nên khi mọi event đang backoff nó hiện 0. Đổi thành `now - min(occurredAt)` của các event chưa publish (truy vấn riêng), thêm gauge cho số dead-letter.
-- [ ] **C5.** Lease 60 giây cho batch 50 row xử lý tuần tự có thể hết hạn giữa chừng. Đặt lease theo từng row, hoặc heartbeat, hoặc giảm batch.
+- [x] **C5.** **P1 #43 đã đóng.** Giữ production defaults poll 2s, batch 50, lease 60s; relay heartbeat gia hạn toàn bộ claimed pending rows. Store chỉ renew/update khi owner khớp, row chưa publish và lease còn hiệu lực; stale owner mất quyền observable qua kết quả boolean/count. Test hai relay chứng minh active work không bị steal sau lease ban đầu và abandoned claim vẫn reclaim được.
 - [ ] **C6.** Có công cụ replay dead-letter (CLI hoặc endpoint admin), job dọn row đã publish, và index phù hợp cho truy vấn claim _(cần kiểm tra schema)_.
 - [ ] **C7.** `withRetry` bọc `eventBus.publish` không có tác dụng vì `publish` không throw mà trả `result`. Bỏ hoặc sửa. Handler có side-effect (email) phải idempotent bằng `jobId = eventId + handler`.
 - [ ] **C8.** Validate payload khi deserialize event bằng zod thay vì ép kiểu, và thêm `schemaVersion` cho event.

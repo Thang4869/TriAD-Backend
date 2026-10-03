@@ -171,6 +171,41 @@ Expected indexes:
 These indexes are intentionally defined in SQL migration rather than
 `schema.prisma` because they use PostgreSQL partial-index predicates.
 
+## Outbox payload schema and versioning
+
+New outbox payloads are persisted with `schemaVersion: 1`. The relay validates
+the serialized event envelope before dispatching it to `EventBus`.
+
+Validation currently requires:
+
+- a supported integer `schemaVersion`;
+- non-empty `eventName` and `aggregateId`;
+- payload `eventName` and `aggregateId` to match the authoritative outbox row;
+- a valid `occurredAt` value;
+- non-negative integer `version` / `sourceVersion` when present;
+- object-shaped `metadata` when present.
+
+Rows created before schema versioning was introduced may omit
+`schemaVersion`; they are treated as legacy schema version 1 so existing
+pending outbox data is not invalidated solely by the rollout.
+
+An unsupported version or malformed payload is never dispatched to event
+handlers. The validation error follows the normal relay failure lifecycle:
+immediate retry, one durable `attempts` increment after immediate retries are
+exhausted, backoff, and eventually dead-lettering at the configured maximum
+attempt count. Because dispatch never starts, no handler result is written for
+that invalid event.
+
+Do not manually edit an invalid payload merely to bypass validation. First
+identify whether the producer wrote an invalid envelope, whether an unsupported
+schema version requires a compatible reader/upcaster, or whether the row is
+corrupt. Use `lastError` and the dead-letter workflow above to diagnose and
+recover the event deliberately.
+
+`schemaVersion` is an infrastructure serialization contract. It is intentionally
+not added to `DomainEvent`; handlers continue to receive the deserialized domain
+event without the envelope-only `schemaVersion` field.
+
 ## Outbox delivery and relay leases
 
 Outbox delivery is at-least-once, not exactly-once. A process can finish a

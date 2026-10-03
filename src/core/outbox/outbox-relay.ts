@@ -8,7 +8,7 @@ import {
   EventBus,
   HandlerExecutionTracker,
 } from "@shared/domain/event-bus/event-bus";
-import { DomainEvent } from "@shared/domain/events/domain-event";
+import { deserializeOutboxEvent } from "./outbox-event-schema";
 import { withRetry } from "@core/circuit-breaker/circuit-breaker";
 import {
   outboxEventsClaimed,
@@ -127,7 +127,10 @@ export class OutboxRelay {
       await withRetry(
         async () => {
           const result = await this.eventBus.publish(
-            deserializeDomainEvent(row.payload),
+            deserializeOutboxEvent(row.payload, {
+              eventName: row.eventName,
+              aggregateId: row.aggregateId,
+            }),
             {
               eventId: row.id,
               tracker: this.handlerTracker,
@@ -254,15 +257,4 @@ export class OutboxRelay {
       logger.warn("Outbox observability refresh failed", { error });
     }
   }
-}
-
-function deserializeDomainEvent(payload: unknown): DomainEvent {
-  if (!payload || typeof payload !== "object") {
-    throw new Error("Invalid outbox event payload");
-  }
-  const event = payload as DomainEvent;
-  return {
-    ...event,
-    occurredAt: new Date(event.occurredAt),
-  };
 }

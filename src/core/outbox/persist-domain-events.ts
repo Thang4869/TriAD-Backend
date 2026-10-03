@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { AggregateRoot } from "@shared/domain/aggregate-root";
 import type { DomainEvent } from "@shared/domain/events/domain-event";
 import { logger } from "@core/logger/winston";
+import { CURRENT_OUTBOX_EVENT_SCHEMA_VERSION } from "./outbox-event-schema";
 
 export async function persistEvents(
   tx: Prisma.TransactionClient,
@@ -16,6 +17,7 @@ export async function persistEvents(
         eventName: event.eventName,
         aggregateId: event.aggregateId,
         payload: {
+          schemaVersion: CURRENT_OUTBOX_EVENT_SCHEMA_VERSION,
           ...event,
           ...(sourceVersions?.has(event.aggregateId)
             ? { sourceVersion: sourceVersions.get(event.aggregateId) }

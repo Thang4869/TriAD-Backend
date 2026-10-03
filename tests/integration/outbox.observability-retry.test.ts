@@ -21,6 +21,7 @@ function outboxEvent(
     eventName,
     aggregateId: id,
     payload: {
+      schemaVersion: 1,
       eventName,
       aggregateId: id,
       occurredAt: occurredAt.toISOString(),
@@ -166,5 +167,113 @@ describe("outbox observability and retry (integration, real DB)", () => {
       lastError: "Handlers failed: PersistentHandler",
     });
     expect(calls).toBe(3);
+  });
+  it("does not dispatch an unsupported schema version and records a durable failure", async () => {
+    const eventName = "UnsupportedSchemaIntegration";
+    const eventId = "unsupported-schema-integration";
+
+    await prisma.outboxEvent.create({
+      data: {
+        ...outboxEvent(eventId, eventName, new Date(Date.now() - 1_000)),
+        payload: {
+          schemaVersion: 999,
+          eventName,
+          aggregateId: eventId,
+          occurredAt: new Date(Date.now() - 1_000).toISOString(),
+        },
+      },
+    });
+
+    let calls = 0;
+
+    const eventBus = new EventBus();
+    eventBus.subscribe(eventName, "MustNotRunHandler", async () => {
+      calls += 1;
+    });
+
+    await new OutboxRelay(
+      new PrismaOutboxRelayStore(),
+      new PrismaOutboxHandlerTracker(),
+      eventBus,
+      {
+        leaseDurationSeconds: 5,
+        heartbeatIntervalMs: 1_000,
+      },
+    ).pollOnce();
+
+    expect(calls).toBe(0);
+
+    await expect(
+      prisma.outboxEvent.findUnique({
+        where: { id: eventId },
+      }),
+    ).resolves.toMatchObject({
+      publishedAt: null,
+      attempts: 1,
+      deadLetteredAt: null,
+      lastError: "Unsupported outbox event schemaVersion: 999",
+    });
+
+    await expect(
+      prisma.outboxHandlerLog.count({
+        where: { outboxEventId: eventId },
+      }),
+    ).resolves.toBe(0);
+  });
+
+  it("dead-letters a malformed payload without invoking its handler", async () => {
+    const eventName = "MalformedPayloadIntegration";
+    const eventId = "malformed-payload-integration";
+
+    await prisma.outboxEvent.create({
+      data: {
+        ...outboxEvent(eventId, eventName, new Date(Date.now() - 1_000), {
+          attempts: 9,
+        }),
+        payload: {
+          schemaVersion: 1,
+          eventName,
+          aggregateId: eventId,
+          occurredAt: "not-a-date",
+        },
+      },
+    });
+
+    let calls = 0;
+
+    const eventBus = new EventBus();
+    eventBus.subscribe(eventName, "MustNotRunHandler", async () => {
+      calls += 1;
+    });
+
+    await new OutboxRelay(
+      new PrismaOutboxRelayStore(),
+      new PrismaOutboxHandlerTracker(),
+      eventBus,
+      {
+        leaseDurationSeconds: 5,
+        heartbeatIntervalMs: 1_000,
+      },
+    ).pollOnce();
+
+    expect(calls).toBe(0);
+
+    await expect(
+      prisma.outboxEvent.findUnique({
+        where: { id: eventId },
+      }),
+    ).resolves.toMatchObject({
+      publishedAt: null,
+      attempts: 10,
+      deadLetteredAt: expect.any(Date),
+      leaseUntil: null,
+      lastError: "Invalid outbox event occurredAt: not-a-date",
+    });
+
+    await expect(
+      prisma.outboxHandlerLog.count({
+        where: { outboxEventId: eventId },
+      }),
+    ).resolves.toBe(0);
   });
 });

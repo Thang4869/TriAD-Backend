@@ -76,15 +76,33 @@ describe("Order.addItem", () => {
     expect(order.subtotal.getValue()).toBe(200_000);
   });
 
-  it("cộng dồn số lượng khi thêm trùng productId và dùng giá mới nhất", () => {
+  it("cộng dồn số lượng khi thêm cùng productId và cùng unitPrice", () => {
     const order = newOrder();
+
     order.addItem("p1", "Áo", 2, new Money(100_000));
-    order.addItem("p1", "Áo", 3, new Money(120_000));
+    order.addItem("p1", "Áo", 3, new Money(100_000));
 
     expect(order.items).toHaveLength(1);
     expect(order.items[0].quantity).toBe(5);
-    expect(order.items[0].unitPrice.getValue()).toBe(120_000);
-    expect(order.subtotal.getValue()).toBe(600_000);
+    expect(order.items[0].unitPrice.getValue()).toBe(100_000);
+    expect(order.subtotal.getValue()).toBe(500_000);
+  });
+
+  it("từ chối merge cùng productId khi unitPrice khác nhau", () => {
+    const order = newOrder();
+
+    order.addItem("p1", "Áo", 2, new Money(100_000));
+
+    expect(() => order.addItem("p1", "Áo", 3, new Money(120_000))).toThrow(
+      new InvalidOrderItemError(
+        "Cannot merge order items with different unit prices",
+      ),
+    );
+
+    expect(order.items).toHaveLength(1);
+    expect(order.items[0].quantity).toBe(2);
+    expect(order.items[0].unitPrice.getValue()).toBe(100_000);
+    expect(order.subtotal.getValue()).toBe(200_000);
   });
 
   it("từ chối số lượng <= 0", () => {

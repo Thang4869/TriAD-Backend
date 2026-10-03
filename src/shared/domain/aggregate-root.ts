@@ -6,6 +6,13 @@ export abstract class AggregateRoot<TId extends string = string> {
 
   protected constructor(public readonly id: TId) {}
 
+  /**
+   * Persisted optimistic-concurrency version.
+   *
+   * This value represents the version stored by the persistence layer.
+   * Raising domain events must never mutate it. Event ordering is represented
+   * by the order of entries in the domain-event buffer, not by this version.
+   */
   get version(): number {
     return this._version;
   }
@@ -16,7 +23,6 @@ export abstract class AggregateRoot<TId extends string = string> {
 
   protected raise(event: DomainEvent): void {
     this._domainEvents.push(event);
-    this._version++;
   }
 
   pullEvents(): DomainEvent[] {

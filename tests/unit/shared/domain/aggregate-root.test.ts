@@ -28,11 +28,13 @@ describe("AggregateRoot", () => {
     expect(agg.version).toBe(0);
   });
 
-  it("increments the version each time an event is raised", () => {
+  it("does not change persisted version when domain events are raised", () => {
     const agg = new Sample();
+
     agg.doSomething();
     agg.doSomething();
-    expect(agg.version).toBe(2);
+
+    expect(agg.version).toBe(0);
     expect(agg.domainEvents).toHaveLength(2);
   });
 
@@ -48,19 +50,25 @@ describe("AggregateRoot", () => {
     expect(agg.pullEvents()).toEqual([]);
   });
 
-  it("does not roll the version back when events are pulled", () => {
+  it("pulling events does not affect persisted version", () => {
     const agg = new Sample();
+
     agg.doSomething();
     agg.pullEvents();
-    expect(agg.version).toBe(1);
+
+    expect(agg.version).toBe(0);
   });
 
-  it("restores the version coming from persistence", () => {
+  it("keeps the persisted version stable when new events are raised", () => {
     const agg = new Sample();
+
     agg.restoreVersion(7);
     expect(agg.version).toBe(7);
+
     agg.doSomething();
-    expect(agg.version).toBe(8);
+
+    expect(agg.version).toBe(7);
+    expect(agg.domainEvents).toHaveLength(1);
   });
 
   it("keeps event buffers independent per instance", () => {

@@ -169,12 +169,19 @@ export class Order extends AggregateRoot {
     }
     const existing = this._items.find((item) => item.productId === productId);
     if (existing) {
+      if (existing.unitPrice.getValue() !== unitPrice.getValue()) {
+        throw new InvalidOrderItemError(
+          "Cannot merge order items with different unit prices",
+        );
+      }
+
       const idx = this._items.indexOf(existing);
+
       this._items[idx] = new OrderItem(
-        productId,
-        productName,
+        existing.productId,
+        existing.productName,
         existing.quantity + quantity,
-        unitPrice,
+        existing.unitPrice,
       );
     } else {
       this._items.push(
@@ -281,7 +288,6 @@ export class Order extends AggregateRoot {
       [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],
       [OrderStatus.DELIVERED]: [],
       [OrderStatus.CANCELLED]: [],
-      [OrderStatus.REFUNDED]: [],
     };
     return transitions[current]?.includes(next) || false;
   }

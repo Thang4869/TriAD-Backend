@@ -271,4 +271,109 @@ describe("PrismaOrdersRepository.updateStatusWithEvents", () => {
 
     expect(outboxEvents).toHaveLength(0);
   });
+
+  it("cancellation emits two outbox events while DB version increments only once", async () => {
+    const persisted = await repository.findById(orderId);
+
+    expect(persisted).not.toBeNull();
+
+    // Simulate an already-versioned persisted order.
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        version: 7,
+      },
+    });
+
+    const refreshed = await repository.findById(orderId);
+
+    expect(refreshed).not.toBeNull();
+    expect(refreshed!.version).toBe(7);
+
+    const order = Order.hydrate({
+      id: refreshed!.id,
+      userId: refreshed!.userId,
+      orderNumber: refreshed!.orderNumber,
+      status: refreshed!.status,
+      createdAt: refreshed!.createdAt,
+      customerName: refreshed!.customerName,
+      customerEmail: refreshed!.customerEmail,
+      customerPhone: refreshed!.customerPhone,
+      customerAddress: refreshed!.customerAddress,
+      paymentMethod: refreshed!.paymentMethod,
+      paymentStatus: refreshed!.paymentStatus as PaymentStatus,
+      discountAmount: refreshed!.discountAmount,
+      shippingFee: refreshed!.shippingFee,
+      tax: refreshed!.tax,
+      notes: refreshed!.notes ?? undefined,
+      discountCode: refreshed!.discountCode ?? undefined,
+      items: refreshed!.items.map((item) => ({
+        productId: item.productId,
+        productName: item.product.name,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      version: refreshed!.version,
+    });
+
+    const expectedVersion = order.version;
+
+    order.cancel();
+
+    expect(expectedVersion).toBe(7);
+    expect(order.version).toBe(7);
+
+    expect(order.domainEvents.map((event) => event.eventName)).toEqual([
+      "OrderStatusChanged",
+      "OrderCancelled",
+    ]);
+
+    const updated = await repository.updateStatusWithEvents(
+      orderId,
+      expectedVersion,
+      order,
+    );
+
+    expect(updated.status).toBe(OrderStatus.CANCELLED);
+    expect(updated.version).toBe(8);
+
+    const storedOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    expect(storedOrder).toMatchObject({
+      status: OrderStatus.CANCELLED,
+      version: 8,
+    });
+
+    const outboxEvents = await prisma.outboxEvent.findMany({
+      where: {
+        aggregateId: orderId,
+        eventName: {
+          in: ["OrderStatusChanged", "OrderCancelled"],
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    expect(outboxEvents).toHaveLength(2);
+
+    expect(outboxEvents.map((event) => event.eventName)).toEqual([
+      "OrderStatusChanged",
+      "OrderCancelled",
+    ]);
+
+    for (const event of outboxEvents) {
+      expect(event.payload).toEqual(
+        expect.objectContaining({
+          aggregateId: orderId,
+          sourceVersion: 8,
+        }),
+      );
+    }
+
+    expect(order.domainEvents).toHaveLength(0);
+  });
 });

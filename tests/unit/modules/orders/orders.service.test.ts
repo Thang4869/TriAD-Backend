@@ -234,7 +234,7 @@ describe("OrdersService.updateOrderStatus", () => {
     expect(orderId).toBe("order-1");
     expect(expectedVersion).toBe(0);
     expect(aggregate.status).toBe(OrderStatus.PROCESSING);
-    expect(aggregate.version).toBe(1);
+    expect(aggregate.version).toBe(0);
 
     expect(aggregate.domainEvents).toEqual([
       expect.objectContaining({
@@ -320,5 +320,44 @@ describe("OrdersService.updateOrderStatus", () => {
         status: OrderStatus.PROCESSING,
       }),
     );
+  });
+
+  it("CANCELLED phát hai domain events nhưng giữ nguyên persisted version", async () => {
+    const repository = createRepository({
+      findById: vi.fn().mockResolvedValue({
+        ...ORDER,
+        version: 7,
+        status: OrderStatus.PENDING,
+      }),
+    });
+
+    await createService(repository).updateOrderStatus(
+      "order-1",
+      OrderStatus.CANCELLED,
+    );
+
+    expect(repository.updateStatusWithEvents).toHaveBeenCalledTimes(1);
+
+    const [orderId, expectedVersion, aggregate] = vi.mocked(
+      repository.updateStatusWithEvents,
+    ).mock.calls[0];
+
+    expect(orderId).toBe("order-1");
+    expect(expectedVersion).toBe(7);
+
+    // Domain events must not mutate the persisted concurrency version.
+    expect(aggregate.version).toBe(7);
+    expect(aggregate.status).toBe(OrderStatus.CANCELLED);
+
+    expect(aggregate.domainEvents).toEqual([
+      expect.objectContaining({
+        eventName: "OrderStatusChanged",
+        aggregateId: "order-1",
+      }),
+      expect.objectContaining({
+        eventName: "OrderCancelled",
+        aggregateId: "order-1",
+      }),
+    ]);
   });
 });

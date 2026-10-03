@@ -337,7 +337,6 @@ enum OrderStatus {
   SHIPPED
   DELIVERED
   CANCELLED
-  REFUNDED
 }
 
 enum PaymentMethod {

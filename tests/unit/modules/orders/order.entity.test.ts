@@ -76,15 +76,33 @@ describe("Order.addItem", () => {
     expect(order.subtotal.getValue()).toBe(200_000);
   });
 
-  it("cộng dồn số lượng khi thêm trùng productId và dùng giá mới nhất", () => {
+  it("cộng dồn số lượng khi thêm cùng productId và cùng unitPrice", () => {
     const order = newOrder();
+
     order.addItem("p1", "Áo", 2, new Money(100_000));
-    order.addItem("p1", "Áo", 3, new Money(120_000));
+    order.addItem("p1", "Áo", 3, new Money(100_000));
 
     expect(order.items).toHaveLength(1);
     expect(order.items[0].quantity).toBe(5);
-    expect(order.items[0].unitPrice.getValue()).toBe(120_000);
-    expect(order.subtotal.getValue()).toBe(600_000);
+    expect(order.items[0].unitPrice.getValue()).toBe(100_000);
+    expect(order.subtotal.getValue()).toBe(500_000);
+  });
+
+  it("từ chối merge cùng productId khi unitPrice khác nhau", () => {
+    const order = newOrder();
+
+    order.addItem("p1", "Áo", 2, new Money(100_000));
+
+    expect(() => order.addItem("p1", "Áo", 3, new Money(120_000))).toThrow(
+      new InvalidOrderItemError(
+        "Cannot merge order items with different unit prices",
+      ),
+    );
+
+    expect(order.items).toHaveLength(1);
+    expect(order.items[0].quantity).toBe(2);
+    expect(order.items[0].unitPrice.getValue()).toBe(100_000);
+    expect(order.subtotal.getValue()).toBe(200_000);
   });
 
   it("từ chối số lượng <= 0", () => {
@@ -268,7 +286,7 @@ describe("Order.place", () => {
       },
     ]);
 
-    expect(order.version).toBe(1);
+    expect(order.version).toBe(0);
   });
 
   it("từ chối đơn rỗng", () => {
@@ -307,14 +325,31 @@ describe("state machine", () => {
     expect(order.status).toBe(OrderStatus.PENDING);
   });
 
-  it("huỷ đơn PENDING phát cả StatusChanged và Cancelled", () => {
+  it("huỷ đơn phát generic status event trước cancellation-specific event", () => {
     const order = placedOrder();
 
     order.cancel();
 
     expect(order.status).toBe(OrderStatus.CANCELLED);
-    const names = order.pullEvents().map((e) => e.eventName);
-    expect(names).toEqual(["OrderStatusChanged", "OrderCancelled"]);
+
+    expect(order.domainEvents).toEqual([
+      expect.objectContaining({
+        eventName: "OrderStatusChanged",
+        aggregateId: "ord-1",
+        metadata: {
+          oldStatus: OrderStatus.PENDING,
+          newStatus: OrderStatus.CANCELLED,
+          userId: "user-1",
+        },
+      }),
+      expect.objectContaining({
+        eventName: "OrderCancelled",
+        aggregateId: "ord-1",
+        metadata: {
+          userId: "user-1",
+        },
+      }),
+    ]);
   });
 
   it("huỷ được đơn đang PROCESSING", () => {
@@ -356,7 +391,6 @@ describe("Order.canTransition", () => {
   it.each([
     [OrderStatus.DELIVERED, OrderStatus.PENDING],
     [OrderStatus.CANCELLED, OrderStatus.PROCESSING],
-    [OrderStatus.REFUNDED, OrderStatus.PENDING],
     [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
     [OrderStatus.PENDING, OrderStatus.DELIVERED],
   ])("chặn %s -> %s", (from, to) => {

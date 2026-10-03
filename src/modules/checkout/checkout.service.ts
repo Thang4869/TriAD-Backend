@@ -5,7 +5,10 @@ import {
   NotFoundError,
 } from "@shared/utils/errors";
 import { ICheckoutRepository } from "./application/ports/checkout.repository.port";
-import { CheckoutTransaction } from "./application/ports/checkout-transaction";
+import type {
+  CheckoutTransaction,
+  CheckoutUnitOfWork,
+} from "./application/ports/checkout-transaction";
 import { PricingService } from "./services/pricing.service";
 import { StockReservationService } from "./services/stock-reservation.service";
 import { Order } from "@modules/orders/domain/order.entity";
@@ -29,6 +32,7 @@ const BASE_DELAY_MS = 100;
 export class CheckoutService {
   constructor(
     private readonly repository: ICheckoutRepository,
+    private readonly unitOfWork: CheckoutUnitOfWork,
     private readonly pricingService: PricingService,
     private readonly stockService: StockReservationService,
     private readonly orderNumberGenerator: OrderNumberGenerator,
@@ -57,12 +61,15 @@ export class CheckoutService {
             };
           }
         }
+
         const user = await this.repository.findUserCartForCheckout(userId);
+
         if (!user || !user.cart || user.cart.items.length === 0) {
           throw new BadRequestError("Cart is empty");
         }
 
         const cart = user.cart;
+
         setAttributes({
           "checkout.item_count": cart.items.length,
           "checkout.payment_method": input.paymentMethod,
@@ -74,10 +81,12 @@ export class CheckoutService {
         try {
           persistedOrder = await this.executeWithRetry(async (tx) => {
             attemptCount += 1;
+
             const lockedProducts = await this.stockService.reserveStock(
               tx,
               cart.items,
             );
+
             const lockedProductMap = new Map(
               lockedProducts.map((product) => [product.id, product]),
             );
@@ -114,11 +123,14 @@ export class CheckoutService {
               input.discountCode,
               tx,
             );
+
             order.applyPricing(pricing);
             order.place();
 
-            await this.repository.saveNewOrder(tx, order, input.idempotencyKey);
-            await this.repository.clearCartItems(tx, cart.id);
+            await tx.saveNewOrder(order, input.idempotencyKey);
+
+            await tx.clearCartItems(cart.id);
+
             return order;
           });
         } catch (error) {
@@ -159,28 +171,42 @@ export class CheckoutService {
         const fullOrder = await this.repository.findOrderWithItems(
           persistedOrder.id,
         );
-        if (!fullOrder) throw new Error("Failed to retrieve created order");
+
+        if (!fullOrder) {
+          throw new Error("Failed to retrieve created order");
+        }
 
         ordersPlaced.inc();
 
-        return { order: fullOrder, idempotent: false };
+        return {
+          order: fullOrder,
+          idempotent: false,
+        };
       },
-      { "checkout.user_id": userId },
+      {
+        "checkout.user_id": userId,
+      },
     );
   }
 
   async getOrder(orderId: string, userId: string) {
     const order = await this.repository.findOrderByUserAndId(orderId, userId);
-    if (!order) throw new NotFoundError("Order not found");
+
+    if (!order) {
+      throw new NotFoundError("Order not found");
+    }
+
     return order;
   }
 
   async getOrders(userId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
+
     const [orders, total] = await Promise.all([
       this.repository.findOrdersByUser(userId, skip, limit),
       this.repository.countOrdersByUser(userId),
     ]);
+
     return {
       orders,
       total,
@@ -195,16 +221,20 @@ export class CheckoutService {
     retryCount = 0,
   ): Promise<T> {
     try {
-      return await this.repository.runInTransaction(operation);
+      return await this.unitOfWork.run(operation);
     } catch (error) {
       if (error instanceof ConflictError && retryCount < MAX_RETRIES) {
         const exponentialDelay = BASE_DELAY_MS * Math.pow(2, retryCount);
+
         const jitter = Math.random() * BASE_DELAY_MS;
+
         const delay = exponentialDelay + jitter;
 
         await new Promise((resolve) => setTimeout(resolve, delay));
+
         return this.executeWithRetry(operation, retryCount + 1);
       }
+
       throw error;
     }
   }

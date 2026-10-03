@@ -94,7 +94,7 @@ export class PrismaProjectionStore implements ProjectionStore {
       }),
       prisma.orderHistoryProjection.count({ where: { status: "PENDING" } }),
       prisma.orderHistoryProjection.count({
-        where: { status: { in: ["DELIVERED", "REFUNDED"] } },
+        where: { status: "DELIVERED" },
       }),
       prisma.user.count(),
       prisma.productCatalogProjection.count({ where: { isActive: true } }),

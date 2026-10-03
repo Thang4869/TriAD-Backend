@@ -47,6 +47,27 @@ export interface UserCartForCheckout {
   cart: CheckoutCart | null;
 }
 
+export interface LockedProductRow {
+  id: string;
+  stock: number;
+  version: number;
+  name: string;
+  price: number;
+  isActive: boolean;
+}
+
+export interface DiscountRecord {
+  id: string;
+  code: string;
+  isActive: boolean;
+  expiresAt: Date | null;
+  minOrderAmount: number | null;
+  maxUses: number | null;
+  usedCount: number;
+  type: "PERCENTAGE" | "FIXED";
+  value: number;
+}
+
 export interface CheckoutOrderProduct {
   id: string;
   name: string;

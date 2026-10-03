@@ -303,6 +303,13 @@ describe("PrismaProjectionStore", () => {
 
     await store.refreshDashboard();
 
+    expect(mockedPrisma.orderHistoryProjection.count).toHaveBeenNthCalledWith(
+      3,
+      {
+        where: { status: "DELIVERED" },
+      },
+    );
+
     expect(mockedPrisma.orderHistoryProjection.aggregate).toHaveBeenCalledWith({
       where: { status: { not: "CANCELLED" } },
       _sum: { total: true },

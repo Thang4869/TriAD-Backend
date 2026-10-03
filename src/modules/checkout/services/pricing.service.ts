@@ -1,6 +1,5 @@
 import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
-import { ICheckoutRepository } from "../application/ports/checkout.repository.port";
 import { CheckoutTransaction } from "../application/ports/checkout-transaction";
 import { BadRequestError, ConflictError } from "@shared/utils/errors";
 import {
@@ -16,10 +15,7 @@ export interface PricingResult {
 }
 
 export class PricingService {
-  constructor(
-    private readonly repository: ICheckoutRepository,
-    private readonly featureFlags: FeatureFlagPort,
-  ) {}
+  constructor(private readonly featureFlags: FeatureFlagPort) {}
 
   async calculatePricing(
     subtotal: Money,
@@ -35,23 +31,22 @@ export class PricingService {
     );
 
     let discountAmount = new Money(0);
-    let appliedDiscountCode: string | undefined = undefined;
+    let appliedDiscountCode: string | undefined;
 
     if (
       discountCode &&
       this.featureFlags.isEnabled(FeatureFlag.DiscountSystem)
     ) {
-      const discount = await this.repository.findDiscountByCode(
-        tx,
-        discountCode,
-      );
+      const discount = await tx.findDiscountByCode(discountCode);
 
       if (!discount || !discount.isActive) {
         throw new BadRequestError("Invalid or inactive discount code");
       }
+
       if (discount.expiresAt && discount.expiresAt < new Date()) {
         throw new BadRequestError("Discount code has expired");
       }
+
       if (
         discount.minOrderAmount != null &&
         subtotal.getValue() < discount.minOrderAmount
@@ -61,11 +56,11 @@ export class PricingService {
         );
       }
 
-      const success = await this.repository.incrementDiscountUsage(
-        tx,
+      const success = await tx.incrementDiscountUsage(
         discount.id,
         discount.maxUses,
       );
+
       if (!success) {
         throw new ConflictError(
           "Discount code just reached its usage limit. Please retry.",
@@ -78,6 +73,7 @@ export class PricingService {
           : new Money(discount.value);
 
       discountAmount = subtotal.lessThan(rawAmount) ? subtotal : rawAmount;
+
       appliedDiscountCode = discountCode;
     }
 

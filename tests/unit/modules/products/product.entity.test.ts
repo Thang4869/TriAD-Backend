@@ -200,7 +200,11 @@ describe("Product.activate / deactivate", () => {
 
 describe("Product - tích luỹ event", () => {
   it("nhiều thao tác liên tiếp tích luỹ event theo đúng thứ tự", () => {
-    const product = newProduct({ stock: 5, isActive: true });
+    const product = newProduct({
+      stock: 5,
+      isActive: true,
+      version: 7,
+    });
 
     product.changePrice(new Money(200_000));
     product.reduceStock(5);
@@ -211,6 +215,6 @@ describe("Product - tích luỹ event", () => {
       "ProductStockDepleted",
       "ProductDeactivated",
     ]);
-    expect(product.version).toBe(3);
+    expect(product.version).toBe(7);
   });
 });

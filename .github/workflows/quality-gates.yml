@@ -30,6 +30,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm run architecture:check
       - run: npx prisma migrate deploy
       - run: npm run typecheck
       - run: npm run test:contract -- --reporter=dot

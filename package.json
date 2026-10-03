@@ -6,11 +6,14 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
+    "architecture:check": "depcruise --config .dependency-cruiser.cjs -- src",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "vitest run --config vitest.workspace.mts",
     "build": "tsc -p tsconfig.build.json && tsc-alias",
     "start": "node -r tsconfig-paths/register dist/server.js",
     "dev": "cross-env TS_NODE_BASEURL=./ kill-port 5000 && cross-env TS_NODE_BASEURL=./ TS_NODE_FILES=true nodemon --exec ts-node -r tsconfig-paths/register src/server.ts",
+    "kill-port": "kill-port 5000",
     "test:coverage": "vitest run --config vitest.workspace.mts --coverage",
     "test:unit": "vitest run --config vitest.workspace.mts --project unit",
     "test:unit:coverage": "vitest run --config vitest.workspace.mts --project unit --coverage",
@@ -30,8 +33,6 @@
     "prisma:studio": "prisma studio",
     "prisma:generate": "prisma generate && tsc-alias",
     "prisma:reset": "prisma migrate reset --force && ts-node scripts/seed.ts",
-    "kill-port": "kill-port 5000",
-    "format:check": "prettier --check .",
     "prepare": "if [ -d .git ]; then husky install; fi"
   },
   "dependencies": {
@@ -109,6 +110,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "@vitest/ui": "^4.1.11",
     "cross-env": "^10.1.0",
+    "dependency-cruiser": "^18.5.0",
     "eslint": "^8.56.0",
     "fast-check": "^3.22.0",
     "husky": "^8.0.3",

@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import { Prisma } from "@prisma/client";
 import prisma from "@core/database/prisma";
-import { PrismaCheckoutRepository } from "@modules/checkout/infrastructure/repositories/prisma-checkout.repository";
+import { PrismaCheckoutUnitOfWork } from "@modules/checkout/infrastructure/prisma-checkout-unit-of-work";
 import { ConflictError } from "@shared/utils/errors";
 
 vi.mock("@core/database/prisma", () => ({
@@ -10,9 +11,13 @@ vi.mock("@core/database/prisma", () => ({
   },
 }));
 
-describe("PrismaCheckoutRepository", () => {
+describe("PrismaCheckoutUnitOfWork", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("translates Prisma P2034 transaction conflicts into ConflictError", async () => {
-    const repository = new PrismaCheckoutRepository();
+    const unitOfWork = new PrismaCheckoutUnitOfWork();
 
     const prismaError = new Prisma.PrismaClientKnownRequestError(
       "Transaction failed due to a write conflict",
@@ -24,15 +29,15 @@ describe("PrismaCheckoutRepository", () => {
 
     vi.mocked(prisma.$transaction).mockRejectedValueOnce(prismaError);
 
-    await expect(
-      repository.runInTransaction(async () => "ok"),
-    ).rejects.toBeInstanceOf(ConflictError);
+    await expect(unitOfWork.run(async () => "ok")).rejects.toBeInstanceOf(
+      ConflictError,
+    );
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it("rethrows non-P2034 Prisma errors unchanged", async () => {
-    const repository = new PrismaCheckoutRepository();
+    const unitOfWork = new PrismaCheckoutUnitOfWork();
 
     const prismaError = new Prisma.PrismaClientKnownRequestError(
       "Unique constraint failed",
@@ -44,8 +49,6 @@ describe("PrismaCheckoutRepository", () => {
 
     vi.mocked(prisma.$transaction).mockRejectedValueOnce(prismaError);
 
-    await expect(repository.runInTransaction(async () => "ok")).rejects.toBe(
-      prismaError,
-    );
+    await expect(unitOfWork.run(async () => "ok")).rejects.toBe(prismaError);
   });
 });

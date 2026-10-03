@@ -1,40 +1,37 @@
 import { describe, expect, it } from "vitest";
-import prisma from "@core/database/prisma";
-import { PrismaCheckoutRepository } from "@modules/checkout/infrastructure/repositories/prisma-checkout.repository";
-import { ConflictError } from "@shared/utils/errors";
-import type { Prisma } from "@prisma/client";
-import type { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
 
-function toPrismaTx(tx: CheckoutTransaction): Prisma.TransactionClient {
-  return tx as unknown as Prisma.TransactionClient;
-}
+import prisma from "@core/database/prisma";
+import { PrismaCheckoutUnitOfWork } from "@modules/checkout/infrastructure/prisma-checkout-unit-of-work";
+import { ConflictError } from "@shared/utils/errors";
 
 describe("Checkout transaction contention (integration, real DB)", () => {
-  const repository = new PrismaCheckoutRepository();
+  const unitOfWork = new PrismaCheckoutUnitOfWork();
 
   it("translates a real SERIALIZABLE write conflict into ConflictError", async () => {
     const suffix = `${Date.now()}-${Math.random()}`;
 
-    const product = await prisma.product.create({
+    const discount = await prisma.discount.create({
       data: {
-        name: `Contention Product ${suffix}`,
-        description: "Serializable contention test",
-        price: 100,
-        stock: 10,
-        category: "test",
-        slug: `contention-${suffix}`,
-        images: [],
+        code: `CONTENTION-${suffix}`,
+        isActive: true,
+        expiresAt: null,
+        minOrderAmount: null,
+        maxUses: null,
+        usedCount: 0,
+        type: "FIXED",
+        value: 10,
       },
     });
 
     let bothTransactionsHaveRead = 0;
+
     let releaseReads!: () => void;
 
     const readsCompleted = new Promise<void>((resolve) => {
       releaseReads = resolve;
     });
 
-    const waitUntilBothHaveRead = async () => {
+    const waitUntilBothHaveRead = async (): Promise<void> => {
       bothTransactionsHaveRead += 1;
 
       if (bothTransactionsHaveRead === 2) {
@@ -44,32 +41,20 @@ describe("Checkout transaction contention (integration, real DB)", () => {
       await readsCompleted;
     };
 
-    const competingWrite = (amount: number) =>
-      repository.runInTransaction(async (tx) => {
-        const prismaTx = toPrismaTx(tx);
+    const competingWrite = () =>
+      unitOfWork.run(async (tx) => {
+        const current = await tx.findDiscountByCode(discount.code);
 
-        const current = await prismaTx.product.findUniqueOrThrow({
-          where: { id: product.id },
-          select: {
-            stock: true,
-            version: true,
-          },
-        });
+        expect(current).not.toBeNull();
 
         await waitUntilBothHaveRead();
 
-        return prismaTx.product.update({
-          where: { id: product.id },
-          data: {
-            stock: current.stock - amount,
-            version: current.version + 1,
-          },
-        });
+        return tx.incrementDiscountUsage(discount.id, null);
       });
 
     const results = await Promise.allSettled([
-      competingWrite(1),
-      competingWrite(2),
+      competingWrite(),
+      competingWrite(),
     ]);
 
     const fulfilled = results.filter((result) => result.status === "fulfilled");
@@ -79,15 +64,17 @@ describe("Checkout transaction contention (integration, real DB)", () => {
     );
 
     expect(fulfilled).toHaveLength(1);
+
     expect(rejected).toHaveLength(1);
 
     expect(rejected[0].reason).toBeInstanceOf(ConflictError);
 
-    const updated = await prisma.product.findUniqueOrThrow({
-      where: { id: product.id },
+    const updated = await prisma.discount.findUniqueOrThrow({
+      where: {
+        id: discount.id,
+      },
     });
 
-    expect([8, 9]).toContain(updated.stock);
-    expect(updated.version).toBe(1);
+    expect(updated.usedCount).toBe(1);
   });
 });

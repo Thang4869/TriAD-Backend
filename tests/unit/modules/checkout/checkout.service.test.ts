@@ -1,13 +1,18 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import { CheckoutService } from "@modules/checkout/checkout.service";
 import { ICheckoutRepository } from "@modules/checkout/application/ports/checkout.repository.port";
+import type {
+  CheckoutTransaction,
+  CheckoutUnitOfWork,
+} from "@modules/checkout/application/ports/checkout-transaction";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
+import { PricingService } from "@/modules/checkout/services/pricing.service";
 import {
   BadRequestError,
   ConflictError,
   NotFoundError,
 } from "@shared/utils/errors";
-import { PricingService } from "@/modules/checkout/services/pricing.service";
 import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
 
 const discount = {
@@ -42,7 +47,12 @@ const baseUser = {
       {
         productId: "prod-1",
         quantity: 2,
-        product: { id: "prod-1", name: "Glass", price: 100, stock: 10 },
+        product: {
+          id: "prod-1",
+          name: "Glass",
+          price: 100,
+          stock: 10,
+        },
       },
     ],
   },
@@ -59,70 +69,125 @@ const mockOrder = {
       quantity: 2,
       price: 100,
       total: 200,
-      product: { id: "prod-1", name: "Glass", images: [], slug: "glass" },
+      product: {
+        id: "prod-1",
+        name: "Glass",
+        images: [],
+        slug: "glass",
+      },
     },
   ],
 };
 
+function defaultLockedProduct() {
+  return {
+    id: baseUser.cart.items[0].productId,
+    stock: baseUser.cart.items[0].product.stock,
+    version: 0,
+    name: baseUser.cart.items[0].product.name,
+    price: baseUser.cart.items[0].product.price,
+    isActive: true,
+  };
+}
+
+function createTransaction(
+  overrides: Partial<CheckoutTransaction> = {},
+): CheckoutTransaction {
+  return {
+    lockProductsForUpdate: vi.fn().mockResolvedValue([defaultLockedProduct()]),
+
+    decrementProductStock: vi.fn().mockResolvedValue(true),
+
+    persistProductEvent: vi.fn().mockResolvedValue(undefined),
+
+    findDiscountByCode: vi.fn().mockResolvedValue(null),
+
+    incrementDiscountUsage: vi.fn().mockResolvedValue(true),
+
+    clearCartItems: vi.fn().mockResolvedValue(undefined),
+
+    saveNewOrder: vi.fn().mockResolvedValue({
+      id: "order-1",
+      orderNumber: "ORD-123",
+    }),
+
+    ...overrides,
+  } as unknown as CheckoutTransaction;
+}
+
 function createFakeRepository(
   overrides: Partial<ICheckoutRepository> = {},
 ): ICheckoutRepository {
-  const defaultLocked = [
-    {
-      id: baseUser.cart.items[0].productId,
-      stock: baseUser.cart.items[0].product.stock,
-      version: 0,
-      name: baseUser.cart.items[0].product.name,
-      price: baseUser.cart.items[0].product.price,
-    },
-  ];
   return {
     findOrderWithItems: vi.fn().mockResolvedValue(null),
     findOrderByIdempotencyKey: vi.fn().mockResolvedValue(null),
     findUserCartForCheckout: vi.fn().mockResolvedValue(null),
-    runInTransaction: vi.fn().mockImplementation(async (fn) => fn({} as any)),
-    lockProductsForUpdate: vi.fn().mockResolvedValue(defaultLocked),
+
+    lockProductsForUpdate: vi.fn().mockResolvedValue([defaultLockedProduct()]),
+
     decrementProductStock: vi.fn().mockResolvedValue(true),
     persistProductEvent: vi.fn().mockResolvedValue(undefined),
+
     findDiscountByCode: vi.fn().mockResolvedValue(null),
     incrementDiscountUsage: vi.fn().mockResolvedValue(true),
+
     clearCartItems: vi.fn().mockResolvedValue(undefined),
+
     findOrdersByUser: vi.fn().mockResolvedValue([]),
     countOrdersByUser: vi.fn().mockResolvedValue(0),
     findOrderByUserAndId: vi.fn().mockResolvedValue(null),
-    saveNewOrder: vi
-      .fn()
-      .mockResolvedValue({ id: "order-1", orderNumber: "ORD-123" }),
+
+    saveNewOrder: vi.fn().mockResolvedValue({
+      id: "order-1",
+      orderNumber: "ORD-123",
+    }),
+
     ...overrides,
-  };
+  } as ICheckoutRepository;
 }
 
 describe("CheckoutService", () => {
   let repository: ICheckoutRepository;
+  let transaction: CheckoutTransaction;
+  let unitOfWork: CheckoutUnitOfWork;
   let pricingService: PricingService;
   let service: CheckoutService;
   let mockStockService: StockReservationService;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+
+    transaction = createTransaction();
+
+    unitOfWork = {
+      run: vi
+        .fn()
+        .mockImplementation(
+          async (work: (tx: CheckoutTransaction) => Promise<unknown>) =>
+            work(transaction),
+        ),
+    } as CheckoutUnitOfWork;
+
+    repository = createFakeRepository();
+
+    unitOfWork.run = vi
+      .fn()
+      .mockImplementation(
+        async (fn: (tx: CheckoutTransaction) => Promise<unknown>) =>
+          fn(transaction),
+      ) as unknown as CheckoutUnitOfWork["run"];
+
     mockStockService = {
-      reserveStock: vi.fn().mockResolvedValue([
-        {
-          id: baseUser.cart.items[0].productId,
-          stock: baseUser.cart.items[0].product.stock,
-          version: 0,
-          name: baseUser.cart.items[0].product.name,
-          price: baseUser.cart.items[0].product.price,
-        },
-      ]),
+      reserveStock: vi.fn().mockResolvedValue([defaultLockedProduct()]),
     } as unknown as StockReservationService;
 
-    vi.clearAllMocks();
-    repository = createFakeRepository();
-    pricingService = new PricingService(repository, {
+    pricingService = new PricingService({
       isEnabled: () => true,
     });
+
     service = new CheckoutService(
       repository,
+      unitOfWork,
       pricingService,
       mockStockService,
       {
@@ -131,28 +196,50 @@ describe("CheckoutService", () => {
     );
   });
 
-  function mockFindOrderSuccess() {
+  function mockFindOrderSuccess(): void {
     repository.findOrderWithItems = vi.fn().mockResolvedValue(mockOrder);
   }
 
   it("should handle checkout without idempotency key", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
     mockFindOrderSuccess();
-    const inputWithoutIdempotency = { ...baseInput, idempotencyKey: "" };
+
+    const inputWithoutIdempotency = {
+      ...baseInput,
+      idempotencyKey: "",
+    };
+
     await service.checkout("user-1", inputWithoutIdempotency);
   });
 
   it("should apply percentage discount correctly", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
     mockFindOrderSuccess();
-    const discountPercent = { ...discount, type: "PERCENTAGE", value: 20 };
-    repository.findDiscountByCode = vi.fn().mockResolvedValue(discountPercent);
-    repository.incrementDiscountUsage = vi.fn().mockResolvedValue(true);
-    await service.checkout("user-1", { ...baseInput, discountCode: "SAVE20" });
-    expect(repository.saveNewOrder).toHaveBeenCalledWith(
-      expect.any(Object),
+
+    const discountPercent = {
+      ...discount,
+      type: "PERCENTAGE" as const,
+      value: 20,
+    };
+
+    transaction = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(discountPercent),
+
+      incrementDiscountUsage: vi.fn().mockResolvedValue(true),
+    });
+
+    await service.checkout("user-1", {
+      ...baseInput,
+      discountCode: "SAVE20",
+    });
+
+    expect(transaction.saveNewOrder).toHaveBeenCalledWith(
       expect.objectContaining({
-        _discountAmount: expect.objectContaining({ amount: 40 }),
+        _discountAmount: expect.objectContaining({
+          amount: 40,
+        }),
       }),
       expect.any(String),
     );
@@ -160,13 +247,27 @@ describe("CheckoutService", () => {
 
   it("should handle discount code with maxUses and not exceed limit", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
     mockFindOrderSuccess();
-    const discountLimited = { ...discount, maxUses: 2, usedCount: 1 };
-    repository.findDiscountByCode = vi.fn().mockResolvedValue(discountLimited);
-    repository.incrementDiscountUsage = vi.fn().mockResolvedValue(true);
-    await service.checkout("user-1", { ...baseInput, discountCode: "LIMITED" });
-    expect(repository.incrementDiscountUsage).toHaveBeenCalledWith(
-      expect.any(Object),
+
+    const discountLimited = {
+      ...discount,
+      maxUses: 2,
+      usedCount: 1,
+    };
+
+    transaction = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(discountLimited),
+
+      incrementDiscountUsage: vi.fn().mockResolvedValue(true),
+    });
+
+    await service.checkout("user-1", {
+      ...baseInput,
+      discountCode: "LIMITED",
+    });
+
+    expect(transaction.incrementDiscountUsage).toHaveBeenCalledWith(
       discountLimited.id,
       2,
     );
@@ -174,12 +275,16 @@ describe("CheckoutService", () => {
 
   it("throws non-ConflictError immediately without retrying", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
     const nonConflictError = new BadRequestError("some other error");
-    repository.runInTransaction = vi.fn().mockRejectedValue(nonConflictError);
+
+    unitOfWork.run = vi.fn().mockRejectedValue(nonConflictError);
+
     await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
       BadRequestError,
     );
-    expect(repository.runInTransaction).toHaveBeenCalledTimes(1);
+
+    expect(unitOfWork.run).toHaveBeenCalledTimes(1);
   });
 
   describe("checkout", () => {
@@ -201,10 +306,14 @@ describe("CheckoutService", () => {
       });
 
       expect(repository.findUserCartForCheckout).not.toHaveBeenCalled();
-      expect(repository.runInTransaction).not.toHaveBeenCalled();
+
+      expect(unitOfWork.run).not.toHaveBeenCalled();
+
       expect(mockStockService.reserveStock).not.toHaveBeenCalled();
-      expect(repository.saveNewOrder).not.toHaveBeenCalled();
-      expect(repository.clearCartItems).not.toHaveBeenCalled();
+
+      expect(transaction.saveNewOrder).not.toHaveBeenCalled();
+
+      expect(transaction.clearCartItems).not.toHaveBeenCalled();
     });
 
     it("returns the existing order when a concurrent checkout wins the idempotency race", async () => {
@@ -215,7 +324,7 @@ describe("CheckoutService", () => {
 
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
 
-      repository.runInTransaction = vi
+      unitOfWork.run = vi
         .fn()
         .mockRejectedValue(new IdempotencyConflictError());
 
@@ -238,7 +347,8 @@ describe("CheckoutService", () => {
         idempotent: true,
       });
 
-      expect(repository.runInTransaction).toHaveBeenCalledTimes(1);
+      expect(unitOfWork.run).toHaveBeenCalledTimes(1);
+
       expect(repository.findOrderWithItems).not.toHaveBeenCalled();
     });
 
@@ -250,7 +360,7 @@ describe("CheckoutService", () => {
 
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
 
-      repository.runInTransaction = vi
+      unitOfWork.run = vi
         .fn()
         .mockRejectedValue(new IdempotencyConflictError());
 
@@ -259,14 +369,19 @@ describe("CheckoutService", () => {
       ).rejects.toBeInstanceOf(IdempotencyConflictError);
 
       expect(repository.findOrderByIdempotencyKey).toHaveBeenCalledTimes(2);
+
       expect(repository.findOrderWithItems).not.toHaveBeenCalled();
     });
 
     it("throws if cart is empty", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue({
         ...baseUser,
-        cart: { ...baseUser.cart, items: [] },
+        cart: {
+          ...baseUser.cart,
+          items: [],
+        },
       });
+
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
         BadRequestError,
       );
@@ -274,8 +389,7 @@ describe("CheckoutService", () => {
 
     it("throws if order was persisted but cannot be re-fetched right after (data-integrity guard)", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-      // findOrderWithItems mặc định trả null (xem createFakeRepository) để mô
-      // phỏng tình huống order vừa lưu xong nhưng không đọc lại được ngay.
+
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
         "Failed to retrieve created order",
       );
@@ -290,27 +404,37 @@ describe("CheckoutService", () => {
             {
               ...baseUser.cart.items[0],
               quantity: 10,
-              product: { ...baseUser.cart.items[0].product, price: 60000 },
+              product: {
+                ...baseUser.cart.items[0].product,
+                price: 60_000,
+              },
             },
           ],
         },
       };
+
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(bigCart);
+
       mockFindOrderSuccess();
+
       mockStockService.reserveStock = vi.fn().mockResolvedValue([
         {
           id: baseUser.cart.items[0].productId,
           stock: 10,
           version: 0,
           name: "Glass",
-          price: 60000,
+          price: 60_000,
+          isActive: true,
         },
       ]);
+
       await service.checkout("user-1", baseInput);
-      expect(repository.saveNewOrder).toHaveBeenCalledWith(
-        expect.any(Object),
+
+      expect(transaction.saveNewOrder).toHaveBeenCalledWith(
         expect.objectContaining({
-          _shippingFee: expect.objectContaining({ amount: 0 }),
+          _shippingFee: expect.objectContaining({
+            amount: 0,
+          }),
         }),
         expect.any(String),
       );
@@ -318,15 +442,21 @@ describe("CheckoutService", () => {
 
     it("applies discount code correctly", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
       mockFindOrderSuccess();
-      repository.findDiscountByCode = vi.fn().mockResolvedValue(discount);
-      repository.incrementDiscountUsage = vi.fn().mockResolvedValue(true);
+
+      transaction = createTransaction({
+        findDiscountByCode: vi.fn().mockResolvedValue(discount),
+
+        incrementDiscountUsage: vi.fn().mockResolvedValue(true),
+      });
+
       await service.checkout("user-1", {
         ...baseInput,
         discountCode: "SAVE10",
       });
-      expect(repository.saveNewOrder).toHaveBeenCalledWith(
-        expect.any(Object),
+
+      expect(transaction.saveNewOrder).toHaveBeenCalledWith(
         expect.objectContaining({
           _discountAmount: expect.objectContaining({
             amount: expect.any(Number),
@@ -338,43 +468,65 @@ describe("CheckoutService", () => {
 
     it("throws if discount code is inactive", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-      repository.findDiscountByCode = vi
-        .fn()
-        .mockResolvedValue({ ...discount, isActive: false });
+
+      transaction = createTransaction({
+        findDiscountByCode: vi.fn().mockResolvedValue({
+          ...discount,
+          isActive: false,
+        }),
+      });
+
       await expect(
-        service.checkout("user-1", { ...baseInput, discountCode: "INACTIVE" }),
+        service.checkout("user-1", {
+          ...baseInput,
+          discountCode: "INACTIVE",
+        }),
       ).rejects.toThrow(BadRequestError);
     });
 
     it("throws if discount code expired", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-      repository.findDiscountByCode = vi.fn().mockResolvedValue({
-        ...discount,
-        expiresAt: new Date(Date.now() - 1000),
+
+      transaction = createTransaction({
+        findDiscountByCode: vi.fn().mockResolvedValue({
+          ...discount,
+          expiresAt: new Date(Date.now() - 1000),
+        }),
       });
+
       await expect(
-        service.checkout("user-1", { ...baseInput, discountCode: "EXPIRED" }),
+        service.checkout("user-1", {
+          ...baseInput,
+          discountCode: "EXPIRED",
+        }),
       ).rejects.toThrow(BadRequestError);
     });
 
     it("throws if order amount below minOrderAmount", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-      repository.findDiscountByCode = vi
-        .fn()
-        .mockResolvedValue({ ...discount, minOrderAmount: 500 });
+
+      transaction = createTransaction({
+        findDiscountByCode: vi.fn().mockResolvedValue({
+          ...discount,
+          minOrderAmount: 500,
+        }),
+      });
+
       await expect(
-        service.checkout("user-1", { ...baseInput, discountCode: "MIN" }),
+        service.checkout("user-1", {
+          ...baseInput,
+          discountCode: "MIN",
+        }),
       ).rejects.toThrow(BadRequestError);
     });
 
     it("throws NotFoundError if a cart product is missing from the locked products", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-      // lockProductsForUpdate trả về mảng rỗng
-      repository.lockProductsForUpdate = vi.fn().mockResolvedValue([]);
-      // stockService.reserveStock sẽ throw NotFoundError
+
       mockStockService.reserveStock = vi
         .fn()
         .mockRejectedValue(new NotFoundError("Product not found"));
+
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
         NotFoundError,
       );
@@ -382,20 +534,11 @@ describe("CheckoutService", () => {
 
     it("throws BadRequestError when locked stock is not enough for the requested quantity", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-      // lockProductsForUpdate trả về stock = 1, quantity yêu cầu là 2
-      repository.lockProductsForUpdate = vi.fn().mockResolvedValue([
-        {
-          id: baseUser.cart.items[0].productId,
-          stock: 1,
-          version: 0,
-          name: baseUser.cart.items[0].product.name,
-          price: baseUser.cart.items[0].product.price,
-        },
-      ]);
-      // stockService.reserveStock sẽ throw BadRequestError
+
       mockStockService.reserveStock = vi
         .fn()
         .mockRejectedValue(new BadRequestError("Not enough stock"));
+
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
         BadRequestError,
       );
@@ -403,15 +546,27 @@ describe("CheckoutService", () => {
 
     it("retries on stock conflict", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
       let callCount = 0;
-      repository.runInTransaction = vi.fn().mockImplementation(async (fn) => {
-        callCount++;
-        if (callCount === 1) throw new ConflictError("stock conflict");
-        return fn({} as any);
-      });
-      repository.decrementProductStock = vi.fn().mockResolvedValue(true);
+
+      unitOfWork.run = vi
+        .fn()
+        .mockImplementation(
+          async (fn: (tx: CheckoutTransaction) => Promise<unknown>) => {
+            callCount++;
+
+            if (callCount === 1) {
+              throw new ConflictError("stock conflict");
+            }
+
+            return fn(transaction);
+          },
+        ) as unknown as CheckoutUnitOfWork["run"];
+
       mockFindOrderSuccess();
+
       const result = await service.checkout("user-1", baseInput);
+
       expect(result.order.id).toBeDefined();
       expect(callCount).toBe(2);
     });
@@ -440,6 +595,7 @@ describe("CheckoutService", () => {
           stock: 10,
           version: 2,
           price: 150,
+          isActive: true,
         },
       ]);
 
@@ -447,8 +603,7 @@ describe("CheckoutService", () => {
 
       await service.checkout("user-1", baseInput);
 
-      expect(repository.saveNewOrder).toHaveBeenCalledWith(
-        expect.any(Object),
+      expect(transaction.saveNewOrder).toHaveBeenCalledWith(
         expect.objectContaining({
           _items: [
             expect.objectContaining({
@@ -471,20 +626,21 @@ describe("CheckoutService", () => {
 
       service = new CheckoutService(
         repository,
+        unitOfWork,
         pricingService,
         mockStockService,
         orderNumberGenerator,
       );
 
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
       mockFindOrderSuccess();
 
       await service.checkout("user-1", baseInput);
 
       expect(orderNumberGenerator.generate).toHaveBeenCalledTimes(1);
 
-      expect(repository.saveNewOrder).toHaveBeenCalledWith(
-        expect.any(Object),
+      expect(transaction.saveNewOrder).toHaveBeenCalledWith(
         expect.objectContaining({
           _orderNumber: expect.objectContaining({
             value: "ORD-COLLISION-SAFE-123",
@@ -498,24 +654,37 @@ describe("CheckoutService", () => {
   describe("getOrder", () => {
     it("throws if order not found", async () => {
       repository.findOrderByUserAndId = vi.fn().mockResolvedValue(null);
+
       await expect(service.getOrder("order-1", "user-1")).rejects.toThrow(
         NotFoundError,
       );
     });
 
     it("returns order if found", async () => {
-      const order = { id: "order-1" };
+      const order = {
+        id: "order-1",
+      };
+
       repository.findOrderByUserAndId = vi.fn().mockResolvedValue(order);
+
       const result = await service.getOrder("order-1", "user-1");
+
       expect(result).toBe(order);
     });
   });
 
   describe("getOrders", () => {
     it("returns paginated orders", async () => {
-      repository.findOrdersByUser = vi.fn().mockResolvedValue([{ id: "o1" }]);
+      repository.findOrdersByUser = vi.fn().mockResolvedValue([
+        {
+          id: "o1",
+        },
+      ]);
+
       repository.countOrdersByUser = vi.fn().mockResolvedValue(1);
+
       const result = await service.getOrders("user-1", 1, 10);
+
       expect(result.orders).toHaveLength(1);
       expect(result.total).toBe(1);
       expect(result.totalPages).toBe(1);
@@ -524,13 +693,21 @@ describe("CheckoutService", () => {
 
   it("sets discountCode to undefined when discountAmount is 0", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
     mockFindOrderSuccess();
-    const inputWithoutDiscount = { ...baseInput, discountCode: undefined };
+
+    const inputWithoutDiscount = {
+      ...baseInput,
+      discountCode: undefined,
+    };
+
     await service.checkout("user-1", inputWithoutDiscount);
-    expect(repository.saveNewOrder).toHaveBeenCalledWith(
-      expect.any(Object),
+
+    expect(transaction.saveNewOrder).toHaveBeenCalledWith(
       expect.objectContaining({
-        _discountAmount: expect.objectContaining({ amount: 0 }),
+        _discountAmount: expect.objectContaining({
+          amount: 0,
+        }),
         _discountCode: undefined,
       }),
       expect.any(String),
@@ -538,61 +715,106 @@ describe("CheckoutService", () => {
   });
 
   it("uses user phone when input phone is missing", async () => {
-    const userWithPhone = { ...baseUser, phone: "0987654321" };
+    const userWithPhone = {
+      ...baseUser,
+      phone: "0987654321",
+    };
+
     repository.findUserCartForCheckout = vi
       .fn()
       .mockResolvedValue(userWithPhone);
+
     mockFindOrderSuccess();
-    const inputWithoutPhone = { ...baseInput, phone: "" };
+
+    const inputWithoutPhone = {
+      ...baseInput,
+      phone: "",
+    };
+
     await service.checkout("user-1", inputWithoutPhone);
-    expect(repository.saveNewOrder).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.objectContaining({ customerPhone: "0987654321" }),
+
+    expect(transaction.saveNewOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerPhone: "0987654321",
+      }),
       expect.any(String),
     );
   });
 
   it("uses empty string when both input and user phone are missing", async () => {
-    const userWithoutPhone = { ...baseUser, phone: null };
+    const userWithoutPhone = {
+      ...baseUser,
+      phone: null,
+    };
+
     repository.findUserCartForCheckout = vi
       .fn()
       .mockResolvedValue(userWithoutPhone);
+
     mockFindOrderSuccess();
-    const inputWithoutPhone = { ...baseInput, phone: "" };
+
+    const inputWithoutPhone = {
+      ...baseInput,
+      phone: "",
+    };
+
     await service.checkout("user-1", inputWithoutPhone);
-    expect(repository.saveNewOrder).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.objectContaining({ customerPhone: "" }),
+
+    expect(transaction.saveNewOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerPhone: "",
+      }),
       expect.any(String),
     );
   });
 
   it("includes notes when provided", async () => {
-    const inputWithNotes = { ...baseInput, notes: "Please deliver after 5pm" };
+    const inputWithNotes = {
+      ...baseInput,
+      notes: "Please deliver after 5pm",
+    };
+
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
     mockFindOrderSuccess();
+
     await service.checkout("user-1", inputWithNotes);
-    expect(repository.saveNewOrder).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.objectContaining({ notes: "Please deliver after 5pm" }),
+
+    expect(transaction.saveNewOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notes: "Please deliver after 5pm",
+      }),
       expect.any(String),
     );
   });
 
   it("applies discount fixed amount capped at subtotal when rawAmount exceeds subtotal", async () => {
-    const discountFixed = { ...discount, type: "FIXED", value: 1000 };
+    const discountFixed = {
+      ...discount,
+      type: "FIXED" as const,
+      value: 1000,
+    };
+
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
     mockFindOrderSuccess();
-    repository.findDiscountByCode = vi.fn().mockResolvedValue(discountFixed);
-    repository.incrementDiscountUsage = vi.fn().mockResolvedValue(true);
+
+    transaction = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(discountFixed),
+
+      incrementDiscountUsage: vi.fn().mockResolvedValue(true),
+    });
+
     await service.checkout("user-1", {
       ...baseInput,
       discountCode: "BIGFIXED",
     });
-    expect(repository.saveNewOrder).toHaveBeenCalledWith(
-      expect.any(Object),
+
+    expect(transaction.saveNewOrder).toHaveBeenCalledWith(
       expect.objectContaining({
-        _discountAmount: expect.objectContaining({ amount: 200 }),
+        _discountAmount: expect.objectContaining({
+          amount: 200,
+        }),
       }),
       expect.any(String),
     );
@@ -609,16 +831,22 @@ describe("CheckoutService", () => {
 
     it("throws ConflictError when decrementProductStock fails due to version mismatch", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
       const conflictError = new ConflictError("Stock conflict");
+
       mockStockService.reserveStock = vi.fn().mockRejectedValue(conflictError);
-      repository.runInTransaction = vi.fn().mockImplementation(async (fn) => {
-        await fn({} as any);
-      });
+
+      unitOfWork.run = vi
+        .fn()
+        .mockImplementation(
+          async (fn: (tx: CheckoutTransaction) => Promise<unknown>) =>
+            fn(transaction),
+        ) as unknown as CheckoutUnitOfWork["run"];
 
       const promise = service.checkout("user-1", baseInput);
-      // Attach assertion NGAY để tránh unhandled rejection warning
+
       const assertion = expect(promise).rejects.toThrow(ConflictError);
-      // "Tua" toàn bộ setTimeout trong retry logic
+
       await vi.runAllTimersAsync();
       await assertion;
 
@@ -627,14 +855,19 @@ describe("CheckoutService", () => {
 
     it("throws ConflictError after exhausting all retries", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
       let callCount = 0;
-      repository.runInTransaction = vi.fn().mockImplementation(async () => {
+
+      unitOfWork.run = vi.fn().mockImplementation(async () => {
         callCount++;
+
         throw new ConflictError("stock conflict");
       });
 
       const promise = service.checkout("user-1", baseInput);
+
       const assertion = expect(promise).rejects.toThrow(ConflictError);
+
       await vi.runAllTimersAsync();
       await assertion;
 
@@ -643,40 +876,57 @@ describe("CheckoutService", () => {
 
     it("throws ConflictError if discount usage limit reached", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
-      repository.findDiscountByCode = vi
-        .fn()
-        .mockResolvedValue({ ...discount, maxUses: 1, usedCount: 1 });
-      repository.incrementDiscountUsage = vi.fn().mockResolvedValue(false);
+
+      transaction = createTransaction({
+        findDiscountByCode: vi.fn().mockResolvedValue({
+          ...discount,
+          maxUses: 1,
+          usedCount: 1,
+        }),
+
+        incrementDiscountUsage: vi.fn().mockResolvedValue(false),
+      });
 
       const promise = service.checkout("user-1", {
         ...baseInput,
         discountCode: "USED",
       });
+
       const assertion = expect(promise).rejects.toThrow(ConflictError);
+
       await vi.runAllTimersAsync();
       await assertion;
+
+      expect(transaction.incrementDiscountUsage).toHaveBeenCalled();
     });
+
     it("retries transaction conflict with exponential backoff and jitter", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+
       mockFindOrderSuccess();
 
       const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
 
-      repository.runInTransaction = vi
+      unitOfWork.run = vi
         .fn()
         .mockRejectedValueOnce(new ConflictError("Transaction conflict"))
-        .mockImplementationOnce(async (fn) => fn({} as any));
+        .mockImplementationOnce(
+          async (fn: (tx: CheckoutTransaction) => Promise<unknown>) =>
+            fn(transaction),
+        ) as unknown as CheckoutUnitOfWork["run"];
 
       const promise = service.checkout("user-1", baseInput);
 
       await vi.advanceTimersByTimeAsync(149);
 
-      expect(repository.runInTransaction).toHaveBeenCalledTimes(1);
+      expect(unitOfWork.run).toHaveBeenCalledTimes(1);
 
       await vi.advanceTimersByTimeAsync(1);
+
       await promise;
 
-      expect(repository.runInTransaction).toHaveBeenCalledTimes(2);
+      expect(unitOfWork.run).toHaveBeenCalledTimes(2);
+
       expect(randomSpy).toHaveBeenCalledTimes(1);
 
       randomSpy.mockRestore();

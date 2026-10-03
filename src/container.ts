@@ -91,6 +91,7 @@ import {
 } from "@shared/domain/events/review-events";
 import { UserRegisteredEvent } from "@shared/domain/events/user-events";
 import { registerOrderEventSubscriptions } from "@modules/orders/order-event-subscriptions";
+import { PrismaCheckoutUnitOfWork } from "@modules/checkout/infrastructure/prisma-checkout-unit-of-work";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -140,6 +141,10 @@ container.register(
   TOKENS.CheckoutRepository,
   () => new PrismaCheckoutRepository(),
 );
+container.register(
+  TOKENS.CheckoutUnitOfWork,
+  () => new PrismaCheckoutUnitOfWork(),
+);
 container.register(TOKENS.OrdersRepository, () => new PrismaOrdersRepository());
 container.register(
   TOKENS.ReviewsRepository,
@@ -166,11 +171,7 @@ container.register(
 
 container.register(
   TOKENS.PricingService,
-  (c) =>
-    new PricingService(
-      c.resolve(TOKENS.CheckoutRepository),
-      c.resolve(TOKENS.FeatureFlags),
-    ),
+  (c) => new PricingService(c.resolve(TOKENS.FeatureFlags)),
 );
 
 container.register(
@@ -230,7 +231,7 @@ container.register(
 // ---------- Checkout sub-services ----------
 container.register(
   TOKENS.StockReservationService,
-  (c) => new StockReservationService(c.resolve(TOKENS.CheckoutRepository)),
+  () => new StockReservationService(),
 );
 
 container.register(
@@ -260,6 +261,7 @@ container.register(
   (c) =>
     new CheckoutService(
       c.resolve(TOKENS.CheckoutRepository),
+      c.resolve(TOKENS.CheckoutUnitOfWork),
       c.resolve(TOKENS.PricingService),
       c.resolve(TOKENS.StockReservationService),
       c.resolve(TOKENS.OrderNumberGenerator),

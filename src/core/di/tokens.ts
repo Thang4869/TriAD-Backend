@@ -51,6 +51,7 @@ import type { HandlerExecutionTracker } from "@shared/domain/event-bus/event-bus
 import type { OutboxRelay } from "@core/outbox/outbox-relay";
 import type { OrderNumberGenerator } from "@modules/checkout/application/ports/order-number-generator.port";
 import type { ProductCatalogReadPort } from "@modules/products/application/product-catalog-read.port";
+import type { CheckoutUnitOfWork } from "@modules/checkout/application/ports/checkout-transaction";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
@@ -65,6 +66,7 @@ export const TOKENS = {
   AuthRepository: createToken<IAuthRepository>("AuthRepository"),
   CartRepository: createToken<ICartRepository>("CartRepository"),
   CheckoutRepository: createToken<ICheckoutRepository>("CheckoutRepository"),
+  CheckoutUnitOfWork: createToken<CheckoutUnitOfWork>("CheckoutUnitOfWork"),
   OrdersRepository: createToken<IOrdersRepository>("OrdersRepository"),
   OrderHistoryRead: createToken<OrderHistoryReadPort>("OrderHistoryRead"),
   ReviewsRepository: createToken<IReviewsRepository>("ReviewsRepository"),

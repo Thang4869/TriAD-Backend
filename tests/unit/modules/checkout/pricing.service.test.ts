@@ -1,23 +1,23 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import { PricingService } from "@modules/checkout/services/pricing.service";
-import { ICheckoutRepository } from "@modules/checkout/application/ports/checkout.repository.port";
+import { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
 import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
 import { BadRequestError, ConflictError } from "@shared/utils/errors";
-import { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
 
-const tx = {} as CheckoutTransaction;
 const enabledFeatureFlags = {
   isEnabled: vi.fn().mockReturnValue(true),
 };
-function createRepository(
-  overrides: Partial<ICheckoutRepository> = {},
-): ICheckoutRepository {
+
+function createTransaction(
+  overrides: Partial<CheckoutTransaction> = {},
+): CheckoutTransaction {
   return {
     findDiscountByCode: vi.fn().mockResolvedValue(null),
     incrementDiscountUsage: vi.fn().mockResolvedValue(true),
     ...overrides,
-  } as unknown as ICheckoutRepository;
+  } as unknown as CheckoutTransaction;
 }
 
 function discount(overrides: Record<string, unknown> = {}) {
@@ -30,15 +30,21 @@ function discount(overrides: Record<string, unknown> = {}) {
     expiresAt: null,
     minOrderAmount: null,
     maxUses: null,
+    usedCount: 0,
     ...overrides,
   };
 }
 
 describe("PricingService - thuế và phí ship", () => {
-  beforeEach(() => vi.clearAllMocks());
+  let tx: CheckoutTransaction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tx = createTransaction();
+  });
 
   it("thuế = subtotal × TAX_RATE", async () => {
-    const service = new PricingService(createRepository(), enabledFeatureFlags);
+    const service = new PricingService(enabledFeatureFlags);
 
     const result = await service.calculatePricing(
       new Money(1_000_000),
@@ -52,7 +58,7 @@ describe("PricingService - thuế và phí ship", () => {
   });
 
   it("tính phí ship ngay dưới ngưỡng", async () => {
-    const service = new PricingService(createRepository(), enabledFeatureFlags);
+    const service = new PricingService(enabledFeatureFlags);
 
     const result = await service.calculatePricing(
       new Money(CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD - 1),
@@ -64,7 +70,7 @@ describe("PricingService - thuế và phí ship", () => {
   });
 
   it("miễn phí ship đúng bằng ngưỡng", async () => {
-    const service = new PricingService(createRepository(), enabledFeatureFlags);
+    const service = new PricingService(enabledFeatureFlags);
 
     const result = await service.calculatePricing(
       new Money(CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD),
@@ -76,7 +82,7 @@ describe("PricingService - thuế và phí ship", () => {
   });
 
   it("miễn phí ship trên ngưỡng", async () => {
-    const service = new PricingService(createRepository(), enabledFeatureFlags);
+    const service = new PricingService(enabledFeatureFlags);
 
     const result = await service.calculatePricing(
       new Money(CHECKOUT_PRICING.FREE_SHIPPING_THRESHOLD + 1),
@@ -88,8 +94,7 @@ describe("PricingService - thuế và phí ship", () => {
   });
 
   it("không có mã giảm giá thì discountAmount = 0 và discountCode undefined", async () => {
-    const repository = createRepository();
-    const service = new PricingService(repository, enabledFeatureFlags);
+    const service = new PricingService(enabledFeatureFlags);
 
     const result = await service.calculatePricing(
       new Money(100_000),
@@ -99,210 +104,244 @@ describe("PricingService - thuế và phí ship", () => {
 
     expect(result.discountAmount.getValue()).toBe(0);
     expect(result.discountCode).toBeUndefined();
-    expect(repository.findDiscountByCode).not.toHaveBeenCalled();
+    expect(tx.findDiscountByCode).not.toHaveBeenCalled();
+    expect(tx.incrementDiscountUsage).not.toHaveBeenCalled();
   });
 });
 
 describe("PricingService - mã giảm giá hợp lệ", () => {
-  beforeEach(() => vi.clearAllMocks());
+  let tx: CheckoutTransaction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tx = createTransaction();
+  });
 
   it("giảm theo phần trăm", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi
-        .fn()
-        .mockResolvedValue(discount({ type: "PERCENTAGE", value: 10 })),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          type: "PERCENTAGE",
+          value: 10,
+        }),
+      ),
     });
 
-    const result = await new PricingService(
-      repository,
-      enabledFeatureFlags,
-    ).calculatePricing(new Money(1_000_000), "SALE10", tx);
+    const service = new PricingService(enabledFeatureFlags);
+
+    const result = await service.calculatePricing(
+      new Money(1_000_000),
+      "SALE10",
+      tx,
+    );
 
     expect(result.discountAmount.getValue()).toBe(100_000);
     expect(result.discountCode).toBe("SALE10");
   });
 
   it("giảm số tiền cố định", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi
-        .fn()
-        .mockResolvedValue(discount({ type: "FIXED", value: 50_000 })),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          type: "FIXED",
+          value: 50_000,
+        }),
+      ),
     });
 
-    const result = await new PricingService(
-      repository,
-      enabledFeatureFlags,
-    ).calculatePricing(new Money(1_000_000), "FIXED50", tx);
+    const service = new PricingService(enabledFeatureFlags);
+
+    const result = await service.calculatePricing(
+      new Money(1_000_000),
+      "FIXED50",
+      tx,
+    );
 
     expect(result.discountAmount.getValue()).toBe(50_000);
   });
 
   it("mức giảm bị chặn trần bằng subtotal (không cho tổng âm)", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi
-        .fn()
-        .mockResolvedValue(discount({ type: "FIXED", value: 999_999 })),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          type: "FIXED",
+          value: 999_999,
+        }),
+      ),
     });
 
-    const result = await new PricingService(
-      repository,
-      enabledFeatureFlags,
-    ).calculatePricing(new Money(100_000), "BIG", tx);
+    const service = new PricingService(enabledFeatureFlags);
+
+    const result = await service.calculatePricing(
+      new Money(100_000),
+      "BIG",
+      tx,
+    );
 
     expect(result.discountAmount.getValue()).toBe(100_000);
   });
 
   it("tăng usage count của mã sau khi áp dụng thành công", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi.fn().mockResolvedValue(discount({ maxUses: 100 })),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          maxUses: 100,
+        }),
+      ),
     });
 
-    await new PricingService(repository, enabledFeatureFlags).calculatePricing(
-      new Money(1_000_000),
-      "SALE10",
-      tx,
-    );
+    const service = new PricingService(enabledFeatureFlags);
 
-    expect(repository.incrementDiscountUsage).toHaveBeenCalledWith(
-      tx,
-      "disc-1",
-      100,
-    );
+    await service.calculatePricing(new Money(1_000_000), "SALE10", tx);
+
+    expect(tx.incrementDiscountUsage).toHaveBeenCalledWith("disc-1", 100);
   });
 
   it("mã còn hạn (expiresAt ở tương lai) vẫn dùng được", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi
-        .fn()
-        .mockResolvedValue(
-          discount({ expiresAt: new Date(Date.now() + 86_400_000) }),
-        ),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          expiresAt: new Date(Date.now() + 86_400_000),
+        }),
+      ),
     });
 
+    const service = new PricingService(enabledFeatureFlags);
+
     await expect(
-      new PricingService(repository, enabledFeatureFlags).calculatePricing(
-        new Money(1_000_000),
-        "SALE10",
-        tx,
-      ),
-    ).resolves.toMatchObject({ discountCode: "SALE10" });
+      service.calculatePricing(new Money(1_000_000), "SALE10", tx),
+    ).resolves.toMatchObject({
+      discountCode: "SALE10",
+    });
   });
 
   it("đạt đúng minOrderAmount thì hợp lệ", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi
-        .fn()
-        .mockResolvedValue(discount({ minOrderAmount: 500_000 })),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          minOrderAmount: 500_000,
+        }),
+      ),
     });
 
+    const service = new PricingService(enabledFeatureFlags);
+
     await expect(
-      new PricingService(repository, enabledFeatureFlags).calculatePricing(
-        new Money(500_000),
-        "SALE10",
-        tx,
-      ),
+      service.calculatePricing(new Money(500_000), "SALE10", tx),
     ).resolves.toBeDefined();
   });
 });
 
 describe("PricingService - mã giảm giá không hợp lệ", () => {
-  beforeEach(() => vi.clearAllMocks());
+  let tx: CheckoutTransaction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tx = createTransaction();
+  });
 
   it("mã không tồn tại → BadRequest", async () => {
-    const repository = createRepository();
+    const service = new PricingService(enabledFeatureFlags);
 
     await expect(
-      new PricingService(repository, enabledFeatureFlags).calculatePricing(
-        new Money(100_000),
-        "KHONGCO",
-        tx,
-      ),
+      service.calculatePricing(new Money(100_000), "KHONGCO", tx),
     ).rejects.toThrow(new BadRequestError("Invalid or inactive discount code"));
   });
 
   it("mã đã bị vô hiệu hoá → BadRequest", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi
-        .fn()
-        .mockResolvedValue(discount({ isActive: false })),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          isActive: false,
+        }),
+      ),
     });
 
+    const service = new PricingService(enabledFeatureFlags);
+
     await expect(
-      new PricingService(repository, enabledFeatureFlags).calculatePricing(
-        new Money(100_000),
-        "SALE10",
-        tx,
-      ),
+      service.calculatePricing(new Money(100_000), "SALE10", tx),
     ).rejects.toThrow(BadRequestError);
   });
 
   it("mã đã hết hạn → BadRequest", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi
-        .fn()
-        .mockResolvedValue(discount({ expiresAt: new Date("2020-01-01") })),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          expiresAt: new Date("2020-01-01"),
+        }),
+      ),
     });
 
+    const service = new PricingService(enabledFeatureFlags);
+
     await expect(
-      new PricingService(repository, enabledFeatureFlags).calculatePricing(
-        new Money(100_000),
-        "SALE10",
-        tx,
-      ),
+      service.calculatePricing(new Money(100_000), "SALE10", tx),
     ).rejects.toThrow(new BadRequestError("Discount code has expired"));
   });
 
   it("chưa đạt giá trị đơn tối thiểu → BadRequest kèm số tiền yêu cầu", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi
-        .fn()
-        .mockResolvedValue(discount({ minOrderAmount: 500_000 })),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          minOrderAmount: 500_000,
+        }),
+      ),
     });
 
+    const service = new PricingService(enabledFeatureFlags);
+
     await expect(
-      new PricingService(repository, enabledFeatureFlags).calculatePricing(
-        new Money(100_000),
-        "SALE10",
-        tx,
-      ),
+      service.calculatePricing(new Money(100_000), "SALE10", tx),
     ).rejects.toThrow(/at least 500000/);
   });
 
   it("mã vừa hết lượt dùng (race condition) → ConflictError để client retry", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi.fn().mockResolvedValue(discount({ maxUses: 1 })),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          maxUses: 1,
+        }),
+      ),
       incrementDiscountUsage: vi.fn().mockResolvedValue(false),
     });
 
+    const service = new PricingService(enabledFeatureFlags);
+
     await expect(
-      new PricingService(repository, enabledFeatureFlags).calculatePricing(
-        new Money(1_000_000),
-        "SALE10",
-        tx,
-      ),
+      service.calculatePricing(new Money(1_000_000), "SALE10", tx),
     ).rejects.toThrow(ConflictError);
   });
 
   it("mã không hợp lệ thì không tăng usage count", async () => {
-    const repository = createRepository({
-      findDiscountByCode: vi
-        .fn()
-        .mockResolvedValue(discount({ isActive: false })),
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          isActive: false,
+        }),
+      ),
     });
 
-    await new PricingService(repository, enabledFeatureFlags)
+    const service = new PricingService(enabledFeatureFlags);
+
+    await service
       .calculatePricing(new Money(100_000), "SALE10", tx)
       .catch(() => undefined);
 
-    expect(repository.incrementDiscountUsage).not.toHaveBeenCalled();
+    expect(tx.incrementDiscountUsage).not.toHaveBeenCalled();
   });
 });
 
 describe("PricingService - feature flags", () => {
-  beforeEach(() => vi.clearAllMocks());
+  let tx: CheckoutTransaction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tx = createTransaction();
+  });
 
   it("does not apply discount when DiscountSystem is disabled", async () => {
-    const repository = createRepository({
+    tx = createTransaction({
       findDiscountByCode: vi.fn().mockResolvedValue(discount()),
     });
 
@@ -310,7 +349,7 @@ describe("PricingService - feature flags", () => {
       isEnabled: vi.fn().mockReturnValue(false),
     };
 
-    const service = new PricingService(repository, disabledFeatureFlags);
+    const service = new PricingService(disabledFeatureFlags);
 
     const result = await service.calculatePricing(
       new Money(1_000_000),
@@ -321,9 +360,8 @@ describe("PricingService - feature flags", () => {
     expect(result.discountAmount.getValue()).toBe(0);
     expect(result.discountCode).toBeUndefined();
 
-    expect(repository.findDiscountByCode).not.toHaveBeenCalled();
-    expect(repository.incrementDiscountUsage).not.toHaveBeenCalled();
-
+    expect(tx.findDiscountByCode).not.toHaveBeenCalled();
+    expect(tx.incrementDiscountUsage).not.toHaveBeenCalled();
     expect(disabledFeatureFlags.isEnabled).toHaveBeenCalled();
   });
 });

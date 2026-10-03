@@ -268,7 +268,7 @@ describe("Order.place", () => {
       },
     ]);
 
-    expect(order.version).toBe(1);
+    expect(order.version).toBe(0);
   });
 
   it("từ chối đơn rỗng", () => {

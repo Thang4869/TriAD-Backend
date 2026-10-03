@@ -709,4 +709,101 @@ describe("PrismaProductsRepository (integration)", () => {
       (prisma as any).$queryRaw = originalQueryRaw;
     });
   });
+
+  it("multiple product events keep aggregate version stable while DB revision increments once", async () => {
+    const suffix = Date.now();
+
+    const created = await repository.create({
+      name: "Versioned Product",
+      description: "d",
+      price: 100,
+      stock: 5,
+      category: "versioning",
+      images: [],
+      slug: `versioned-product-${suffix}`,
+    });
+
+    await prisma.product.update({
+      where: { id: created.id },
+      data: { version: 7 },
+    });
+
+    const persisted = await repository.findById(created.id);
+
+    expect(persisted).not.toBeNull();
+    expect(persisted!.version).toBe(7);
+
+    const entity = Product.hydrate(persisted!);
+
+    entity.changePrice(new Money(200));
+    entity.reduceStock(5);
+    entity.deactivate();
+
+    expect(entity.version).toBe(7);
+
+    expect(entity.domainEvents.map((event) => event.eventName)).toEqual([
+      "ProductPriceChanged",
+      "ProductStockDepleted",
+      "ProductDeactivated",
+    ]);
+
+    const updated = await repository.updateWithEvents(
+      created.id,
+      {
+        price: 200,
+        stock: 0,
+        isActive: false,
+      },
+      entity,
+    );
+
+    expect(updated.version).toBe(8);
+
+    const stored = await prisma.product.findUnique({
+      where: { id: created.id },
+    });
+
+    expect(stored).toMatchObject({
+      version: 8,
+      stock: 0,
+      isActive: false,
+    });
+
+    expect(stored?.price.toString()).toBe("200");
+
+    const outboxEvents = await prisma.outboxEvent.findMany({
+      where: {
+        aggregateId: created.id,
+        eventName: {
+          in: [
+            "ProductPriceChanged",
+            "ProductStockDepleted",
+            "ProductDeactivated",
+          ],
+        },
+      },
+      orderBy: {
+        occurredAt: "asc",
+      },
+    });
+
+    expect(outboxEvents).toHaveLength(3);
+
+    expect(outboxEvents.map((event) => event.eventName)).toEqual([
+      "ProductPriceChanged",
+      "ProductStockDepleted",
+      "ProductDeactivated",
+    ]);
+
+    for (const event of outboxEvents) {
+      expect(event.payload).toEqual(
+        expect.objectContaining({
+          aggregateId: created.id,
+          sourceVersion: 8,
+        }),
+      );
+    }
+
+    expect(entity.domainEvents).toHaveLength(0);
+  });
 });

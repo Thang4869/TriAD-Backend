@@ -281,7 +281,6 @@ export class Order extends AggregateRoot {
       [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],
       [OrderStatus.DELIVERED]: [],
       [OrderStatus.CANCELLED]: [],
-      [OrderStatus.REFUNDED]: [],
     };
     return transitions[current]?.includes(next) || false;
   }

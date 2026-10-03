@@ -356,7 +356,6 @@ describe("Order.canTransition", () => {
   it.each([
     [OrderStatus.DELIVERED, OrderStatus.PENDING],
     [OrderStatus.CANCELLED, OrderStatus.PROCESSING],
-    [OrderStatus.REFUNDED, OrderStatus.PENDING],
     [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
     [OrderStatus.PENDING, OrderStatus.DELIVERED],
   ])("chặn %s -> %s", (from, to) => {

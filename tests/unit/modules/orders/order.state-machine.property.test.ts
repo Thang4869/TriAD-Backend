@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus } from "@modules/orders/domain/order-status";
 import { Order } from "@/modules/orders/domain/order.entity";
 
 function orderAt(status: OrderStatus): Order {
@@ -73,12 +73,8 @@ describe("Order status state machine (property-based)", () => {
     );
   });
 
-  it("terminal statuses (DELIVERED, CANCELLED, REFUNDED) never accept any further action", () => {
-    const terminal = [
-      OrderStatus.DELIVERED,
-      OrderStatus.CANCELLED,
-      OrderStatus.REFUNDED,
-    ];
+  it("terminal statuses (DELIVERED, CANCELLED) never accept any further action", () => {
+    const terminal = [OrderStatus.DELIVERED, OrderStatus.CANCELLED];
     fc.assert(
       fc.property(
         fc.constantFrom(...terminal),

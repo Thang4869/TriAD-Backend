@@ -2,7 +2,7 @@ import { BaseDomainEvent } from "./domain-event";
 import type { PaymentStatus } from "@shared/constants/order.constant";
 
 export type OrderStatus =
-  "PENDING" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED" | "REFUNDED";
+  "PENDING" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
 
 export interface OrderPlacedItemSnapshot {
   productId: string;

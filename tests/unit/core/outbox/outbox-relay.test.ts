@@ -59,6 +59,7 @@ const ROW = {
   eventName: "OrderPlaced",
   aggregateId: "order-1",
   payload: {
+    schemaVersion: 1,
     eventName: "OrderPlaced",
     aggregateId: "order-1",
     occurredAt: new Date().toISOString(),
@@ -112,6 +113,107 @@ describe("OutboxRelay.pollOnce", () => {
     expect(id).toBe("outbox-1");
     expect(owner).toEqual(expect.any(String));
     expect(data.publishedAt).toBeInstanceOf(Date);
+  });
+
+  it("does not dispatch an event with an unsupported schemaVersion", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([
+      {
+        ...ROW,
+        payload: {
+          ...ROW.payload,
+          schemaVersion: 999,
+        },
+      },
+    ] as never);
+
+    const publish = vi.fn();
+
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
+
+    expect(publish).not.toHaveBeenCalled();
+
+    expect(store.updateClaimed).toHaveBeenCalledWith(
+      "outbox-1",
+      expect.any(String),
+      expect.objectContaining({
+        attempts: { increment: 1 },
+        lastError: "Unsupported outbox event schemaVersion: 999",
+      }),
+    );
+  });
+
+  it("does not dispatch when payload eventName disagrees with the outbox row", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([
+      {
+        ...ROW,
+        payload: {
+          ...ROW.payload,
+          eventName: "OrderCancelled",
+        },
+      },
+    ] as never);
+
+    const publish = vi.fn();
+
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
+
+    expect(publish).not.toHaveBeenCalled();
+
+    expect(store.updateClaimed).toHaveBeenCalledWith(
+      "outbox-1",
+      expect.any(String),
+      expect.objectContaining({
+        attempts: { increment: 1 },
+        lastError:
+          "Outbox eventName mismatch: row=OrderPlaced, payload=OrderCancelled",
+      }),
+    );
+  });
+
+  it("continues to dispatch legacy rows without schemaVersion", async () => {
+    const { schemaVersion: _schemaVersion, ...legacyPayload } = ROW.payload;
+
+    vi.mocked(store.claimBatch).mockResolvedValue([
+      {
+        ...ROW,
+        payload: legacyPayload,
+      },
+    ] as never);
+
+    const publish = vi
+      .fn()
+      .mockResolvedValue({ success: true, failedHandlers: [] });
+
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
+
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: "OrderPlaced",
+        aggregateId: "order-1",
+        sourceVersion: 0,
+      }),
+      expect.any(Object),
+    );
+
+    expect(store.updateClaimed).toHaveBeenCalledWith(
+      "outbox-1",
+      expect.any(String),
+      expect.objectContaining({
+        publishedAt: expect.any(Date),
+      }),
+    );
   });
 
   it("xử lý tuần tự nhiều row trong một batch", async () => {

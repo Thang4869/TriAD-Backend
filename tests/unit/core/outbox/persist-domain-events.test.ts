@@ -4,6 +4,7 @@ import { persistDomainEvents } from "@core/outbox/persist-domain-events";
 import { AggregateRoot } from "@shared/domain/aggregate-root";
 import { BaseDomainEvent } from "@shared/domain/events/domain-event";
 import { logger } from "@core/logger/winston";
+import { CURRENT_OUTBOX_EVENT_SCHEMA_VERSION } from "@core/outbox/outbox-event-schema";
 
 vi.mock("@core/logger/winston", () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -73,6 +74,14 @@ describe("persistDomainEvents", () => {
       eventName: "EventA",
       aggregateId: "a1",
     });
+
+    expect(arg.data[0].payload).toEqual(
+      expect.objectContaining({
+        schemaVersion: CURRENT_OUTBOX_EVENT_SCHEMA_VERSION,
+        eventName: "EventA",
+        aggregateId: "a1",
+      }),
+    );
     expect(arg.data[1].occurredAt).toBeInstanceOf(Date);
   });
 

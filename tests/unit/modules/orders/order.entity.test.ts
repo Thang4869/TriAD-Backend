@@ -325,14 +325,31 @@ describe("state machine", () => {
     expect(order.status).toBe(OrderStatus.PENDING);
   });
 
-  it("huỷ đơn PENDING phát cả StatusChanged và Cancelled", () => {
+  it("huỷ đơn phát generic status event trước cancellation-specific event", () => {
     const order = placedOrder();
 
     order.cancel();
 
     expect(order.status).toBe(OrderStatus.CANCELLED);
-    const names = order.pullEvents().map((e) => e.eventName);
-    expect(names).toEqual(["OrderStatusChanged", "OrderCancelled"]);
+
+    expect(order.domainEvents).toEqual([
+      expect.objectContaining({
+        eventName: "OrderStatusChanged",
+        aggregateId: "ord-1",
+        metadata: {
+          oldStatus: OrderStatus.PENDING,
+          newStatus: OrderStatus.CANCELLED,
+          userId: "user-1",
+        },
+      }),
+      expect.objectContaining({
+        eventName: "OrderCancelled",
+        aggregateId: "ord-1",
+        metadata: {
+          userId: "user-1",
+        },
+      }),
+    ]);
   });
 
   it("huỷ được đơn đang PROCESSING", () => {

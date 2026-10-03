@@ -48,7 +48,6 @@ import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-placed.handler";
 import { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
 import { OrderPlacedEvent } from "@shared/domain/events/order-events";
-import { OrderStatusChangedEvent } from "@shared/domain/events/order-events";
 import {
   ProductPriceChangedEvent,
   ProductRestockedEvent,
@@ -91,6 +90,7 @@ import {
   ReviewDeletedEvent,
 } from "@shared/domain/events/review-events";
 import { UserRegisteredEvent } from "@shared/domain/events/user-events";
+import { registerOrderEventSubscriptions } from "@modules/orders/order-event-subscriptions";
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -384,21 +384,24 @@ eventBus.subscribe(
   "OrderPlacedHandler",
   orderPlacedHandler.handle.bind(orderPlacedHandler),
 );
-eventBus.subscribe(
-  OrderStatusChangedEvent.eventName,
-  "OrderStatusChangedHandler",
-  orderStatusChangedHandler.handle.bind(orderStatusChangedHandler),
-);
+// Order cancellation emits both OrderStatusChanged(CANCELLED) and
+// OrderCancelled. Generic lifecycle side effects belong only to
+// OrderStatusChanged. OrderCancelled is intentionally reserved for
+// cancellation-specific workflows and must not duplicate notification or
+// order-history projection handlers.
 eventBus.subscribe(
   OrderPlacedEvent.eventName,
   "OrderHistoryProjectionHandler",
   projectionHandler.handleOrderPlaced.bind(projectionHandler),
 );
-eventBus.subscribe(
-  OrderStatusChangedEvent.eventName,
-  "OrderHistoryStatusProjectionHandler",
-  projectionHandler.handleOrderStatusChanged.bind(projectionHandler),
-);
+registerOrderEventSubscriptions(eventBus, {
+  handleStatusNotification: orderStatusChangedHandler.handle.bind(
+    orderStatusChangedHandler,
+  ),
+
+  handleStatusProjection:
+    projectionHandler.handleOrderStatusChanged.bind(projectionHandler),
+});
 for (const eventName of [
   ProductCreatedEvent.eventName,
   ProductUpdatedEvent.eventName,

@@ -39,6 +39,13 @@ export class OrderPlacedEvent extends BaseDomainEvent {
   }
 }
 
+/**
+ * Canonical order lifecycle transition event.
+ *
+ * Generic consumers such as order-history projections and user notifications
+ * subscribe to this event, including transitions to CANCELLED.
+ */
+
 export class OrderStatusChangedEvent extends BaseDomainEvent {
   static readonly eventName = "OrderStatusChanged";
 
@@ -51,6 +58,15 @@ export class OrderStatusChangedEvent extends BaseDomainEvent {
     super(orderId, "OrderStatusChanged", { oldStatus, newStatus, userId });
   }
 }
+
+/**
+ * Cancellation-specific semantic event.
+ *
+ * This event exists for cancellation-only workflows such as stock release or
+ * payment refund. Generic status projections and notifications must continue
+ * to consume OrderStatusChangedEvent instead, otherwise cancellation could
+ * produce duplicate side effects.
+ */
 
 export class OrderCancelledEvent extends BaseDomainEvent {
   static readonly eventName = "OrderCancelled";

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { IOrdersService } from "./orders.service";
-import { ForbiddenError } from "@shared/utils/errors";
+import { AuthorizationError } from "@shared/errors/application-error";
 import { OrderStatus } from "./domain/order-status";
 import { ROLES, Role } from "@shared/types/roles";
 import { asyncHandler } from "@shared/utils/async-handler";
@@ -26,7 +26,7 @@ export class OrdersController {
 
   adminGetOrders = asyncHandler(async (req: Request, res: Response) => {
     if ((req.user as { role?: Role })?.role !== ROLES.ADMIN) {
-      throw new ForbiddenError("Admin access required");
+      throw new AuthorizationError("Admin access required");
     }
     const { status, userId } = req.query as {
       status?: OrderStatus;
@@ -44,7 +44,7 @@ export class OrdersController {
 
   adminUpdateStatus = asyncHandler(async (req: Request, res: Response) => {
     if ((req.user as { role?: Role })?.role !== ROLES.ADMIN) {
-      throw new ForbiddenError("Admin access required");
+      throw new AuthorizationError("Admin access required");
     }
     const { orderId } = req.params;
     const { status } = req.body;

@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { TokenStorePort } from "../application/ports/token-store.port";
 import { SECURITY } from "@shared/constants/security.constant";
 import { signToken, verifyToken, decodeToken } from "@shared/utils/jwt";
-import { UnauthorizedError } from "@shared/utils/errors";
+import { AuthenticationError } from "@shared/errors/application-error";
 import type { IAuthRepository } from "../application/ports/auth.repository.port";
 import { AuthUser } from "../application/ports/auth-user";
 import { AuthUserResponse } from "../auth.mapper";
@@ -23,7 +23,7 @@ export class TokenService implements AccessTokenVerifierPort {
     try {
       return verifyToken<AccessTokenClaims>(token, TokenService.ACCESS_SECRET);
     } catch {
-      throw new UnauthorizedError("Invalid token");
+      throw new AuthenticationError("Invalid token");
     }
   }
 
@@ -59,13 +59,13 @@ export class TokenService implements AccessTokenVerifierPort {
     try {
       claims = verifyToken<PreAuthClaims>(token, config.JWT_PREAUTH_SECRET);
     } catch {
-      throw new UnauthorizedError(
+      throw new AuthenticationError(
         "Invalid or expired pre-authentication token",
       );
     }
 
     if (claims.purpose !== "2fa" || !claims.sub || !claims.jti) {
-      throw new UnauthorizedError("Invalid pre-authentication token");
+      throw new AuthenticationError("Invalid pre-authentication token");
     }
 
     const key = `auth:2fa:preauth:${claims.jti}`;
@@ -73,7 +73,7 @@ export class TokenService implements AccessTokenVerifierPort {
     const consumed = await this.tokenStore.getAndDelete(key);
 
     if (consumed !== claims.sub) {
-      throw new UnauthorizedError("Pre-authentication token already used");
+      throw new AuthenticationError("Pre-authentication token already used");
     }
 
     return claims.sub;
@@ -168,25 +168,27 @@ export class TokenService implements AccessTokenVerifierPort {
         await this.authRepository.findRefreshTokenWithUser(refreshToken);
 
       if (!tokenRecord) {
-        throw new UnauthorizedError("Invalid refresh token");
+        throw new AuthenticationError("Invalid refresh token");
       }
 
       if (tokenRecord.revokedAt !== null) {
         await this.authRepository.revokeAllTokensInFamily(tokenRecord.familyId);
 
-        throw new UnauthorizedError("Token revoked - possible theft detected");
+        throw new AuthenticationError(
+          "Token revoked - possible theft detected",
+        );
       }
 
       if (tokenRecord.expiresAt < new Date()) {
-        throw new UnauthorizedError("Refresh token expired");
+        throw new AuthenticationError("Refresh token expired");
       }
 
       if (tokenRecord.familyId !== familyId) {
-        throw new UnauthorizedError("Family ID mismatch");
+        throw new AuthenticationError("Family ID mismatch");
       }
 
       if (tokenRecord.userId !== sub) {
-        throw new UnauthorizedError("User ID mismatch");
+        throw new AuthenticationError("User ID mismatch");
       }
 
       const latestToken =
@@ -205,7 +207,7 @@ export class TokenService implements AccessTokenVerifierPort {
             tokenRecord.familyId,
           );
 
-          throw new UnauthorizedError(
+          throw new AuthenticationError(
             "Token has been superseded - possible theft",
           );
         }
@@ -240,7 +242,7 @@ export class TokenService implements AccessTokenVerifierPort {
       );
 
       if (!rotated) {
-        throw new UnauthorizedError("Refresh token already used");
+        throw new AuthenticationError("Refresh token already used");
       }
 
       return {
@@ -256,11 +258,11 @@ export class TokenService implements AccessTokenVerifierPort {
         },
       };
     } catch (error) {
-      if (error instanceof UnauthorizedError) {
+      if (error instanceof AuthenticationError) {
         throw error;
       }
 
-      throw new UnauthorizedError("Invalid refresh token");
+      throw new AuthenticationError("Invalid refresh token");
     }
   }
 

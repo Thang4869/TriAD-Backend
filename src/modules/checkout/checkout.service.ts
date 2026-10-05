@@ -1,9 +1,9 @@
 import { Money } from "@shared/value-objects/money";
 import {
-  BadRequestError,
+  ValidationError,
   ConflictError,
-  NotFoundError,
-} from "@shared/utils/errors";
+  ResourceNotFoundError,
+} from "@shared/errors/application-error";
 import { ICheckoutRepository } from "./application/ports/checkout.repository.port";
 import type {
   CheckoutTransaction,
@@ -65,7 +65,7 @@ export class CheckoutService {
         const user = await this.repository.findUserCartForCheckout(userId);
 
         if (!user || !user.cart || user.cart.items.length === 0) {
-          throw new BadRequestError("Cart is empty");
+          throw new ValidationError("Cart is empty");
         }
 
         const cart = user.cart;
@@ -107,7 +107,9 @@ export class CheckoutService {
               const product = lockedProductMap.get(item.productId);
 
               if (!product) {
-                throw new NotFoundError(`Product ${item.productId} not found`);
+                throw new ResourceNotFoundError(
+                  `Product ${item.productId} not found`,
+                );
               }
 
               order.addItem(
@@ -193,7 +195,7 @@ export class CheckoutService {
     const order = await this.repository.findOrderByUserAndId(orderId, userId);
 
     if (!order) {
-      throw new NotFoundError("Order not found");
+      throw new ResourceNotFoundError("Order not found");
     }
 
     return order;

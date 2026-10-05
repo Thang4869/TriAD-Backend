@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StockReservationService } from "@modules/checkout/services/stock-reservation.service";
 import { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
 import {
-  BadRequestError,
+  ValidationError,
+  ResourceNotFoundError,
   ConflictError,
-  NotFoundError,
-} from "@shared/utils/errors";
+} from "@shared/errors/application-error";
 
 // withSpan chỉ là lớp bọc tracing — thay bằng passthrough để test tập trung vào logic.
 vi.mock("@core/tracing/span", () => ({
@@ -56,7 +56,7 @@ describe("StockReservationService.reserveStock", () => {
     const service = new StockReservationService();
 
     await expect(service.reserveStock(tx, [])).rejects.toThrow(
-      new BadRequestError("Cart is empty"),
+      new ValidationError("Cart is empty"),
     );
 
     expect(tx.lockProductsForUpdate).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe("StockReservationService.reserveStock", () => {
     );
   });
 
-  it("sản phẩm không tồn tại → NotFoundError, không trừ kho sản phẩm nào", async () => {
+  it("sản phẩm không tồn tại → ResourceNotFoundError, không trừ kho sản phẩm nào", async () => {
     tx = createTransaction({
       lockProductsForUpdate: vi.fn().mockResolvedValue([]),
     });
@@ -132,7 +132,7 @@ describe("StockReservationService.reserveStock", () => {
           quantity: 1,
         },
       ]),
-    ).rejects.toThrow(NotFoundError);
+    ).rejects.toThrow(ResourceNotFoundError);
 
     expect(tx.decrementProductStock).not.toHaveBeenCalled();
   });
@@ -172,7 +172,7 @@ describe("StockReservationService.reserveStock", () => {
             quantity,
           },
         ]),
-      ).rejects.toThrow(BadRequestError);
+      ).rejects.toThrow(ValidationError);
 
       expect(tx.decrementProductStock).not.toHaveBeenCalled();
     },
@@ -196,7 +196,7 @@ describe("StockReservationService.reserveStock", () => {
           quantity: 1,
         },
       ]),
-    ).rejects.toThrow(BadRequestError);
+    ).rejects.toThrow(ValidationError);
 
     expect(tx.decrementProductStock).not.toHaveBeenCalled();
   });
@@ -229,7 +229,7 @@ describe("StockReservationService.reserveStock", () => {
           quantity: 5,
         },
       ]),
-    ).rejects.toThrow(BadRequestError);
+    ).rejects.toThrow(ValidationError);
 
     expect(tx.decrementProductStock).not.toHaveBeenCalled();
   });

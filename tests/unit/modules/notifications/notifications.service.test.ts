@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NotificationsService } from "@modules/notifications/notifications.service";
 import type { INotificationsRepository } from "@modules/notifications/application/ports/notifications.repository.port";
-import { NotFoundError } from "@shared/utils/errors";
+import { ResourceNotFoundError } from "@shared/errors/application-error";
 import { NotificationType } from "@shared/constants/notification-type.enum";
 
 function createFakeRepository(
@@ -60,14 +60,14 @@ describe("NotificationsService", () => {
   });
 
   describe("markAsRead", () => {
-    it("ném NotFoundError khi notification không thuộc về user (chặn IDOR)", async () => {
+    it("ném ResourceNotFoundError khi notification không thuộc về user (chặn IDOR)", async () => {
       const repository = createFakeRepository({
         findByIdAndUser: vi.fn().mockResolvedValue(null),
       });
       const service = new NotificationsService(repository);
 
       await expect(service.markAsRead("n1", "user-1")).rejects.toBeInstanceOf(
-        NotFoundError,
+        ResourceNotFoundError,
       );
       expect(repository.markAsRead).not.toHaveBeenCalled();
     });

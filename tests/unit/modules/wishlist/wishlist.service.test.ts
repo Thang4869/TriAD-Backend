@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WishlistService } from "@modules/wishlist/wishlist.service";
 import type { IWishlistRepository } from "@modules/wishlist/application/ports/wishlist.repository.port";
-import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import {
+  ResourceNotFoundError,
+  ValidationError,
+} from "@shared/errors/application-error";
 
 function createFakeRepository(
   overrides: Partial<IWishlistRepository> = {},
@@ -21,7 +24,7 @@ describe("WishlistService", () => {
   beforeEach(() => vi.clearAllMocks());
 
   describe("addItem", () => {
-    it("ném NotFoundError khi product không tồn tại", async () => {
+    it("ném ResourceNotFoundError khi product không tồn tại", async () => {
       const repository = createFakeRepository({
         productExists: vi.fn().mockResolvedValue(false),
       });
@@ -29,11 +32,11 @@ describe("WishlistService", () => {
 
       await expect(
         service.addItem("user-1", "product-x"),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
       expect(repository.exists).not.toHaveBeenCalled();
     });
 
-    it("ném BadRequestError khi product đã có trong wishlist", async () => {
+    it("ném ValidationError khi product đã có trong wishlist", async () => {
       const repository = createFakeRepository({
         productExists: vi.fn().mockResolvedValue(true),
         exists: vi.fn().mockResolvedValue(true),
@@ -42,7 +45,7 @@ describe("WishlistService", () => {
 
       await expect(
         service.addItem("user-1", "product-1"),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
       expect(repository.create).not.toHaveBeenCalled();
     });
 
@@ -66,7 +69,7 @@ describe("WishlistService", () => {
   });
 
   describe("removeItem", () => {
-    it("ném NotFoundError khi item không có trong wishlist", async () => {
+    it("ném ResourceNotFoundError khi item không có trong wishlist", async () => {
       const repository = createFakeRepository({
         exists: vi.fn().mockResolvedValue(false),
       });
@@ -74,7 +77,7 @@ describe("WishlistService", () => {
 
       await expect(
         service.removeItem("user-1", "product-1"),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
       expect(repository.delete).not.toHaveBeenCalled();
     });
 

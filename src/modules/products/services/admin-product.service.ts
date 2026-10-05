@@ -1,4 +1,7 @@
-import { BadRequestError, NotFoundError } from "@shared/utils/errors";
+import {
+  ValidationError,
+  ResourceNotFoundError,
+} from "@shared/errors/application-error";
 import { Money } from "@shared/value-objects/money";
 import type {
   CreateProductData,
@@ -67,7 +70,7 @@ export class AdminProductService {
 
   async create(data: CreateProductData) {
     const existing = await this.repository.findBySlugId(data.slug);
-    if (existing) throw new BadRequestError("Slug already exists");
+    if (existing) throw new ValidationError("Slug already exists");
     const entity = Product.hydrate({
       id: crypto.randomUUID(),
       ...data,
@@ -79,11 +82,11 @@ export class AdminProductService {
 
   async update(id: string, data: UpdateProductData) {
     const product = await this.repository.findById(id);
-    if (!product) throw new NotFoundError("Product not found");
+    if (!product) throw new ResourceNotFoundError("Product not found");
 
     if (data.slug && data.slug !== product.slug) {
       const existing = await this.repository.findBySlugId(data.slug);
-      if (existing) throw new BadRequestError("Slug already exists");
+      if (existing) throw new ValidationError("Slug already exists");
     }
 
     if (data.price !== undefined && data.price !== product.price) {
@@ -101,7 +104,7 @@ export class AdminProductService {
 
   async delete(id: string) {
     const product = await this.repository.findById(id);
-    if (!product) throw new NotFoundError("Product not found");
+    if (!product) throw new ResourceNotFoundError("Product not found");
     const entity = Product.hydrate(product);
     entity.deactivate();
     return this.repository.setActiveWithEvents(id, false, entity);
@@ -109,7 +112,7 @@ export class AdminProductService {
 
   async restore(id: string) {
     const product = await this.repository.findById(id);
-    if (!product) throw new NotFoundError("Product not found");
+    if (!product) throw new ResourceNotFoundError("Product not found");
     const entity = Product.hydrate(product);
     entity.activate();
     return this.repository.setActiveWithEvents(id, true, entity);

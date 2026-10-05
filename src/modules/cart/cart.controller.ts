@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { ICartService } from "./cart.service";
-import { BadRequestError } from "@shared/utils/errors";
+import { ValidationError } from "@shared/errors/application-error";
 import { asyncHandler } from "@shared/utils/async-handler";
 import { sendSuccess, sendCreated } from "@shared/utils/api-response";
 
@@ -16,9 +16,9 @@ export class CartController {
   addItem = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;
     const { productId, quantity } = req.body;
-    if (!productId) throw new BadRequestError("productId is required");
+    if (!productId) throw new ValidationError("productId is required");
     if (!quantity || quantity <= 0)
-      throw new BadRequestError("quantity must be greater than 0");
+      throw new ValidationError("quantity must be greater than 0");
     const item = await this.service.addItem(userId, productId, quantity);
     sendCreated(res, item);
   });
@@ -28,7 +28,7 @@ export class CartController {
     const { productId } = req.params;
     const { quantity } = req.body;
     if (quantity === undefined || quantity < 0)
-      throw new BadRequestError("quantity is required and must be >= 0");
+      throw new ValidationError("quantity is required and must be >= 0");
     const result = await this.service.updateItem(userId, productId, quantity);
     sendSuccess(res, result ?? null);
   });

@@ -1,10 +1,10 @@
 import type { LockedProductRow } from "../application/ports/checkout-models";
 import { CheckoutTransaction } from "../application/ports/checkout-transaction";
 import {
-  NotFoundError,
-  BadRequestError,
+  ResourceNotFoundError,
+  ValidationError,
   ConflictError,
-} from "@shared/utils/errors";
+} from "@shared/errors/application-error";
 import { withSpan } from "@core/tracing/span";
 import { Attributes } from "@opentelemetry/api";
 import {
@@ -22,7 +22,7 @@ export class StockReservationService {
     }[],
   ): Promise<LockedProductRow[]> {
     if (cartItems.length === 0) {
-      throw new BadRequestError("Cart is empty");
+      throw new ValidationError("Cart is empty");
     }
 
     try {
@@ -65,7 +65,7 @@ export class StockReservationService {
 
     for (const item of cartItems) {
       if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-        throw new BadRequestError(
+        throw new ValidationError(
           `Invalid quantity for product ${item.productId}`,
         );
       }
@@ -73,15 +73,15 @@ export class StockReservationService {
       const product = productMap.get(item.productId);
 
       if (!product) {
-        throw new NotFoundError(`Product ${item.productId} not found`);
+        throw new ResourceNotFoundError(`Product ${item.productId} not found`);
       }
 
       if (!product.isActive) {
-        throw new BadRequestError(`Product ${product.name} is inactive`);
+        throw new ValidationError(`Product ${product.name} is inactive`);
       }
 
       if (product.stock < item.quantity) {
-        throw new BadRequestError(
+        throw new ValidationError(
           `Not enough stock for ${product.name}. Available: ${product.stock}`,
         );
       }

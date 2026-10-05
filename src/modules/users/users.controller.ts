@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { IUsersService } from "./users.service";
-import { BadRequestError } from "@shared/utils/errors";
+import { ValidationError } from "@shared/errors/application-error";
 import { asyncHandler } from "@shared/utils/async-handler";
 import { sendSuccess, sendMessage } from "@shared/utils/api-response";
 
@@ -28,7 +28,7 @@ export class UsersController {
     const userId = (req.user as { id: string }).id;
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword)
-      throw new BadRequestError("currentPassword and newPassword are required");
+      throw new ValidationError("currentPassword and newPassword are required");
     await this.service.changePassword(userId, currentPassword, newPassword);
     sendMessage(res, "Password changed successfully");
   });

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { ReviewsService } from "./reviews.service";
-import { BadRequestError } from "@shared/utils/errors";
+import { ValidationError } from "@shared/errors/application-error";
 import { asyncHandler } from "@shared/utils/async-handler";
 import { ROLES, Role } from "@shared/types/roles";
 import { sendSuccess, sendCreated } from "@shared/utils/api-response";
@@ -24,9 +24,9 @@ export class ReviewsController {
     const userId = (req.user as { id: string }).id;
     const { productId, rating, content } = req.body;
     if (!productId || !rating || !content)
-      throw new BadRequestError("productId, rating and content are required");
+      throw new ValidationError("productId, rating and content are required");
     if (rating < 1 || rating > 5)
-      throw new BadRequestError("Rating must be between 1 and 5");
+      throw new ValidationError("Rating must be between 1 and 5");
     const review = await this.service.createReview(
       userId,
       productId,
@@ -46,7 +46,7 @@ export class ReviewsController {
 
   adminGetAll = asyncHandler(async (req: Request, res: Response) => {
     if ((req.user as { role?: Role })?.role !== ROLES.ADMIN)
-      throw new BadRequestError("Admin access required");
+      throw new ValidationError("Admin access required");
     const page = req.query.page ? Number(req.query.page) : 1;
     const limit = req.query.limit ? Number(req.query.limit) : 10;
     const result = await this.service.adminGetAll(page, limit);

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TokenService } from "@modules/auth/services/token.service";
 import type { IAuthRepository } from "@modules/auth/application/ports/auth.repository.port";
 import { AuthRefreshTokenWithUser } from "@modules/auth/application/ports/auth-refresh-token";
-import { UnauthorizedError } from "@shared/utils/errors";
+import { AuthenticationError } from "@shared/errors/application-error";
 import { signToken, verifyToken, decodeToken } from "@shared/utils/jwt";
 import { SECURITY } from "@shared/constants/security.constant";
 import config from "@config";
@@ -246,7 +246,7 @@ describe("TokenService.refreshToken", () => {
 
     await expect(
       new TokenService(repo, createTokenStore()).refreshToken("khong-co"),
-    ).rejects.toThrow(UnauthorizedError);
+    ).rejects.toThrow(AuthenticationError);
   });
 
   it("phát hiện reuse: token đã revoke thì huỷ cả family", async () => {
@@ -353,14 +353,14 @@ describe("TokenService.refreshToken", () => {
     ).resolves.toBeDefined();
   });
 
-  it("gói mọi lỗi lạ thành UnauthorizedError", async () => {
+  it("gói mọi lỗi lạ thành AuthenticationError", async () => {
     vi.mocked(verifyToken).mockImplementation(() => {
       throw new Error("jwt malformed");
     });
 
     await expect(
       new TokenService(createRepo(), createTokenStore()).refreshToken("rác"),
-    ).rejects.toThrow(UnauthorizedError);
+    ).rejects.toThrow(AuthenticationError);
   });
 
   it("từ chối refresh khi token đã được request khác revoke trước", async () => {

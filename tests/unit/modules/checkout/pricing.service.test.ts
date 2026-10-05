@@ -4,7 +4,10 @@ import { PricingService } from "@modules/checkout/services/pricing.service";
 import { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
 import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
-import { BadRequestError, ConflictError } from "@shared/utils/errors";
+import {
+  ValidationError,
+  ConflictError,
+} from "@shared/errors/application-error";
 
 const enabledFeatureFlags = {
   isEnabled: vi.fn().mockReturnValue(true),
@@ -245,7 +248,7 @@ describe("PricingService - mã giảm giá không hợp lệ", () => {
 
     await expect(
       service.calculatePricing(new Money(100_000), "KHONGCO", tx),
-    ).rejects.toThrow(new BadRequestError("Invalid or inactive discount code"));
+    ).rejects.toThrow(new ValidationError("Invalid or inactive discount code"));
   });
 
   it("mã đã bị vô hiệu hoá → BadRequest", async () => {
@@ -261,7 +264,7 @@ describe("PricingService - mã giảm giá không hợp lệ", () => {
 
     await expect(
       service.calculatePricing(new Money(100_000), "SALE10", tx),
-    ).rejects.toThrow(BadRequestError);
+    ).rejects.toThrow(ValidationError);
   });
 
   it("mã đã hết hạn → BadRequest", async () => {
@@ -277,7 +280,7 @@ describe("PricingService - mã giảm giá không hợp lệ", () => {
 
     await expect(
       service.calculatePricing(new Money(100_000), "SALE10", tx),
-    ).rejects.toThrow(new BadRequestError("Discount code has expired"));
+    ).rejects.toThrow(new ValidationError("Discount code has expired"));
   });
 
   it("chưa đạt giá trị đơn tối thiểu → BadRequest kèm số tiền yêu cầu", async () => {

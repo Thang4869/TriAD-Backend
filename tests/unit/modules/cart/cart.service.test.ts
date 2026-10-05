@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CartService } from "@modules/cart/cart.service";
 import type { ICartRepository } from "@modules/cart/application/ports/cart.repository.port";
-import { BadRequestError, NotFoundError } from "@shared/utils/errors";
+import {
+  ValidationError,
+  ResourceNotFoundError,
+} from "@shared/errors/application-error";
 
 function createFakeRepository(
   overrides: Partial<ICartRepository> = {},
@@ -25,17 +28,17 @@ describe("CartService", () => {
   beforeEach(() => vi.clearAllMocks());
 
   describe("addItem", () => {
-    it("ném BadRequestError khi quantity <= 0", async () => {
+    it("ném ValidationError khi quantity <= 0", async () => {
       const repository = createFakeRepository();
       const service = new CartService(repository);
 
       await expect(
         service.addItem("user-1", "product-1", 0),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
       expect(repository.findProductStockInfo).not.toHaveBeenCalled();
     });
 
-    it("ném NotFoundError khi product không tồn tại", async () => {
+    it("ném ResourceNotFoundError khi product không tồn tại", async () => {
       const repository = createFakeRepository({
         findProductStockInfo: vi.fn().mockResolvedValue(null),
       });
@@ -43,10 +46,10 @@ describe("CartService", () => {
 
       await expect(
         service.addItem("user-1", "product-x", 1),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
-    it("ném BadRequestError khi quantity yêu cầu vượt tồn kho hiện có", async () => {
+    it("ném ValidationError khi quantity yêu cầu vượt tồn kho hiện có", async () => {
       const repository = createFakeRepository({
         findProductStockInfo: vi
           .fn()
@@ -56,7 +59,7 @@ describe("CartService", () => {
 
       await expect(
         service.addItem("user-1", "product-1", 5),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
     });
 
     it("cộng dồn quantity nếu sản phẩm đã có sẵn trong giỏ, không tạo item trùng", async () => {
@@ -80,7 +83,7 @@ describe("CartService", () => {
       expect(repository.createCartItem).not.toHaveBeenCalled();
     });
 
-    it("ném BadRequestError khi tổng quantity sau khi cộng dồn vượt tồn kho", async () => {
+    it("ném ValidationError khi tổng quantity sau khi cộng dồn vượt tồn kho", async () => {
       const repository = createFakeRepository({
         findProductStockInfo: vi
           .fn()
@@ -94,7 +97,7 @@ describe("CartService", () => {
 
       await expect(
         service.addItem("user-1", "product-1", 4),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
       expect(repository.updateCartItemQuantity).not.toHaveBeenCalled();
     });
 
@@ -124,16 +127,16 @@ describe("CartService", () => {
   });
 
   describe("updateItem", () => {
-    it("ném BadRequestError khi quantity âm", async () => {
+    it("ném ValidationError khi quantity âm", async () => {
       const repository = createFakeRepository();
       const service = new CartService(repository);
 
       await expect(
         service.updateItem("user-1", "product-1", -1),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
     });
 
-    it("ném NotFoundError khi cart không tồn tại", async () => {
+    it("ném ResourceNotFoundError khi cart không tồn tại", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue(null),
       });
@@ -141,10 +144,10 @@ describe("CartService", () => {
 
       await expect(
         service.updateItem("user-1", "product-1", 2),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
-    it("ném NotFoundError khi item không có trong giỏ", async () => {
+    it("ném ResourceNotFoundError khi item không có trong giỏ", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi
           .fn()
@@ -154,7 +157,7 @@ describe("CartService", () => {
 
       await expect(
         service.updateItem("user-1", "product-x", 2),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
     it("xoá item khi quantity = 0 thay vì gọi update", async () => {
@@ -173,7 +176,7 @@ describe("CartService", () => {
       expect(result).toBeUndefined();
     });
 
-    it("ném BadRequestError khi quantity mới vượt tồn kho", async () => {
+    it("ném ValidationError khi quantity mới vượt tồn kho", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue({
           id: "cart-1",
@@ -187,10 +190,10 @@ describe("CartService", () => {
 
       await expect(
         service.updateItem("user-1", "product-1", 5),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
     });
 
-    it("ném BadRequestError với Available: 0 khi sản phẩm không còn tồn tại", async () => {
+    it("ném ValidationError với Available: 0 khi sản phẩm không còn tồn tại", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue({
           id: "cart-1",
@@ -228,7 +231,7 @@ describe("CartService", () => {
   });
 
   describe("removeItem", () => {
-    it("ném NotFoundError khi cart không tồn tại", async () => {
+    it("ném ResourceNotFoundError khi cart không tồn tại", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue(null),
       });
@@ -236,10 +239,10 @@ describe("CartService", () => {
 
       await expect(
         service.removeItem("user-1", "product-1"),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
-    it("ném NotFoundError khi item không có trong giỏ", async () => {
+    it("ném ResourceNotFoundError khi item không có trong giỏ", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi
           .fn()
@@ -249,7 +252,7 @@ describe("CartService", () => {
 
       await expect(
         service.removeItem("user-1", "product-x"),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
       expect(repository.deleteCartItem).not.toHaveBeenCalled();
     });
 
@@ -269,14 +272,14 @@ describe("CartService", () => {
   });
 
   describe("clearCart", () => {
-    it("ném NotFoundError khi cart không tồn tại", async () => {
+    it("ném ResourceNotFoundError khi cart không tồn tại", async () => {
       const repository = createFakeRepository({
         findCartByUserId: vi.fn().mockResolvedValue(null),
       });
       const service = new CartService(repository);
 
       await expect(service.clearCart("user-1")).rejects.toBeInstanceOf(
-        NotFoundError,
+        ResourceNotFoundError,
       );
     });
 

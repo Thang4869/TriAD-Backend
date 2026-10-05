@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CatalogService } from "@modules/products/services/catalog.service";
 import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
-import { NotFoundError } from "@shared/utils/errors";
+import { ResourceNotFoundError } from "@shared/errors/application-error";
 import type { ProductCatalogReadPort } from "@modules/products/application/product-catalog-read.port";
 function productRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -244,14 +244,14 @@ describe("CatalogService.findById", () => {
     expect(result.reviews).toHaveLength(1);
   });
 
-  it("ném NotFoundError khi không tìm thấy sản phẩm", async () => {
+  it("ném ResourceNotFoundError khi không tìm thấy sản phẩm", async () => {
     const detailRead = createRepository({
       findByIdWithReviews: vi.fn().mockResolvedValue(null),
     });
 
     await expect(
       createService(createCatalogRead(), detailRead).findById("missing"),
-    ).rejects.toThrow(NotFoundError);
+    ).rejects.toThrow(ResourceNotFoundError);
   });
 });
 
@@ -272,14 +272,14 @@ describe("CatalogService.getBySlug", () => {
     expect(result.slug).toBe("ao-thun");
   });
 
-  it("slug không tồn tại ném NotFoundError", async () => {
+  it("slug không tồn tại ném ResourceNotFoundError", async () => {
     const detailRead = createRepository({
       findBySlugWithReviews: vi.fn().mockResolvedValue(null),
     });
 
     await expect(
       createService(createCatalogRead(), detailRead).getBySlug("khong-co"),
-    ).rejects.toThrow(NotFoundError);
+    ).rejects.toThrow(ResourceNotFoundError);
   });
 });
 

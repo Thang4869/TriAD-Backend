@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { UserPasswordRecord } from "@modules/users/application/ports/user-models";
 import { UsersService } from "@modules/users/users.service";
 import type { IUsersRepository } from "@modules/users/application/ports/users.repository.port";
-import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import {
+  ResourceNotFoundError,
+  ValidationError,
+} from "@shared/errors/application-error";
 
 vi.mock("bcrypt", () => ({
   default: { hash: vi.fn(), compare: vi.fn() },
@@ -30,14 +33,14 @@ describe("UsersService", () => {
   beforeEach(() => vi.clearAllMocks());
 
   describe("getProfile", () => {
-    it("ném NotFoundError khi user không tồn tại", async () => {
+    it("ném ResourceNotFoundError khi user không tồn tại", async () => {
       const repository = createFakeRepository({
         findProfileById: vi.fn().mockResolvedValue(null),
       });
       const service = new UsersService(repository);
 
       await expect(service.getProfile("missing")).rejects.toBeInstanceOf(
-        NotFoundError,
+        ResourceNotFoundError,
       );
     });
 
@@ -56,7 +59,7 @@ describe("UsersService", () => {
   });
 
   describe("updateProfile", () => {
-    it("ném NotFoundError khi user không tồn tại", async () => {
+    it("ném ResourceNotFoundError khi user không tồn tại", async () => {
       const repository = createFakeRepository({
         findById: vi.fn().mockResolvedValue(null),
       });
@@ -64,7 +67,7 @@ describe("UsersService", () => {
 
       await expect(
         service.updateProfile("missing", { firstName: "New" }),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
       expect(repository.updateProfile).not.toHaveBeenCalled();
     });
 
@@ -86,7 +89,7 @@ describe("UsersService", () => {
   });
 
   describe("changePassword", () => {
-    it("ném NotFoundError khi user không tồn tại", async () => {
+    it("ném ResourceNotFoundError khi user không tồn tại", async () => {
       const repository = createFakeRepository({
         findById: vi.fn().mockResolvedValue(null),
       });
@@ -94,10 +97,10 @@ describe("UsersService", () => {
 
       await expect(
         service.changePassword("missing", "old", "new"),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
-    it("ném BadRequestError khi mật khẩu hiện tại sai", async () => {
+    it("ném ValidationError khi mật khẩu hiện tại sai", async () => {
       (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValueOnce(false);
       const repository = createFakeRepository({
         findById: vi.fn().mockResolvedValue(baseUser),
@@ -106,7 +109,7 @@ describe("UsersService", () => {
 
       await expect(
         service.changePassword("user-1", "wrong-old-password", "new-password"),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
       expect(repository.updatePassword).not.toHaveBeenCalled();
     });
 
@@ -146,7 +149,7 @@ describe("UsersService", () => {
 
       await expect(
         service.changePassword("user-1", "anything", "new-password"),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
       expect(bcrypt.compare).toHaveBeenCalledWith("anything", "");
     });
   });

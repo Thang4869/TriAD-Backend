@@ -1,4 +1,4 @@
-import { NotFoundError } from "@shared/utils/errors";
+import { ResourceNotFoundError } from "@shared/errors/application-error";
 import {
   PAGINATION_DEFAULTS,
   resolvePagination,
@@ -53,7 +53,7 @@ export class NotificationsService implements INotificationsService {
       userId,
     );
     if (!notification) {
-      throw new NotFoundError("Notification not found");
+      throw new ResourceNotFoundError("Notification not found");
     }
     return this.repository.markAsRead(notificationId);
   }

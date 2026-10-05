@@ -1,4 +1,4 @@
-import { NotFoundError } from "@shared/utils/errors";
+import { ResourceNotFoundError } from "@shared/errors/application-error";
 import { OrderStatus } from "./domain/order-status";
 import {
   IOrdersRepository,
@@ -68,7 +68,7 @@ export class OrdersService implements IOrdersService {
   async getOrderById(orderId: string, userId: string) {
     const order = await this.readPort.findByIdAndUser(orderId, userId);
     if (!order) {
-      throw new NotFoundError("Order not found");
+      throw new ResourceNotFoundError("Order not found");
     }
     return order;
   }
@@ -87,7 +87,7 @@ export class OrdersService implements IOrdersService {
     const persisted = await this.repository.findById(orderId);
 
     if (!persisted) {
-      throw new NotFoundError("Order not found");
+      throw new ResourceNotFoundError("Order not found");
     }
 
     const order = Order.hydrate({

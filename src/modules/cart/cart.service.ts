@@ -1,4 +1,7 @@
-import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import {
+  ResourceNotFoundError,
+  ValidationError,
+} from "@shared/errors/application-error";
 import type { ICartRepository } from "./application/ports/cart.repository.port";
 import {
   CartWithItems,
@@ -38,15 +41,15 @@ export class CartService implements ICartService {
     quantity: number,
   ): Promise<CartItemWithProduct> {
     if (quantity <= 0) {
-      throw new BadRequestError("Quantity must be greater than 0");
+      throw new ValidationError("Quantity must be greater than 0");
     }
 
     const product = await this.repository.findProductStockInfo(productId);
     if (!product) {
-      throw new NotFoundError("Product not found");
+      throw new ResourceNotFoundError("Product not found");
     }
     if (product.stock < quantity) {
-      throw new BadRequestError(
+      throw new ValidationError(
         `Not enough stock. Available: ${product.stock}`,
       );
     }
@@ -58,7 +61,7 @@ export class CartService implements ICartService {
     if (existingItem) {
       const newQuantity = existingItem.quantity + quantity;
       if (newQuantity > product.stock) {
-        throw new BadRequestError(
+        throw new ValidationError(
           `Cannot add more than ${product.stock} items`,
         );
       }
@@ -77,17 +80,17 @@ export class CartService implements ICartService {
     quantity: number,
   ): Promise<CartItemWithProduct | void> {
     if (quantity < 0) {
-      throw new BadRequestError("Quantity cannot be negative");
+      throw new ValidationError("Quantity cannot be negative");
     }
 
     const cart = await this.repository.findCartWithItems(userId);
     if (!cart) {
-      throw new NotFoundError("Cart not found");
+      throw new ResourceNotFoundError("Cart not found");
     }
 
     const item = cart.items.find((i) => i.productId === productId);
     if (!item) {
-      throw new NotFoundError("Item not in cart");
+      throw new ResourceNotFoundError("Item not in cart");
     }
 
     if (quantity === 0) {
@@ -98,7 +101,7 @@ export class CartService implements ICartService {
     const product = await this.repository.findProductStockInfo(productId);
     if (!product || product.stock < quantity) {
       const available = product?.stock ?? 0;
-      throw new BadRequestError(`Not enough stock. Available: ${available}`);
+      throw new ValidationError(`Not enough stock. Available: ${available}`);
     }
 
     return this.repository.updateCartItemQuantity(item.id, quantity);
@@ -107,12 +110,12 @@ export class CartService implements ICartService {
   async removeItem(userId: string, productId: string): Promise<void> {
     const cart = await this.repository.findCartWithItems(userId);
     if (!cart) {
-      throw new NotFoundError("Cart not found");
+      throw new ResourceNotFoundError("Cart not found");
     }
 
     const item = cart.items.find((i) => i.productId === productId);
     if (!item) {
-      throw new NotFoundError("Item not in cart");
+      throw new ResourceNotFoundError("Item not in cart");
     }
 
     await this.repository.deleteCartItem(item.id);
@@ -121,7 +124,7 @@ export class CartService implements ICartService {
   async clearCart(userId: string): Promise<{ count: number }> {
     const cart = await this.repository.findCartByUserId(userId);
     if (!cart) {
-      throw new NotFoundError("Cart not found");
+      throw new ResourceNotFoundError("Cart not found");
     }
 
     const count = await this.repository.deleteCartItemsByCartId(cart.id);

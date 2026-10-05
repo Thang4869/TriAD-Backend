@@ -1,4 +1,7 @@
-import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import {
+  ResourceNotFoundError,
+  ValidationError,
+} from "@shared/errors/application-error";
 import type { IUsersRepository } from "@modules/users/application/ports/users.repository.port";
 import {
   UpdateProfileData,
@@ -22,7 +25,7 @@ export class UsersService implements IUsersService {
   async getProfile(userId: string) {
     const user = await this.repository.findProfileById(userId);
     if (!user) {
-      throw new NotFoundError("User not found");
+      throw new ResourceNotFoundError("User not found");
     }
     return user;
   }
@@ -30,7 +33,7 @@ export class UsersService implements IUsersService {
   async updateProfile(userId: string, data: UpdateProfileData) {
     const user = await this.repository.findById(userId);
     if (!user) {
-      throw new NotFoundError("User not found");
+      throw new ResourceNotFoundError("User not found");
     }
     return this.repository.updateProfile(userId, data);
   }
@@ -42,12 +45,12 @@ export class UsersService implements IUsersService {
   ) {
     const user = await this.repository.findById(userId);
     if (!user) {
-      throw new NotFoundError("User not found");
+      throw new ResourceNotFoundError("User not found");
     }
 
     const isValid = await comparePassword(currentPassword, user.password || "");
     if (!isValid) {
-      throw new BadRequestError("Current password is incorrect");
+      throw new ValidationError("Current password is incorrect");
     }
 
     const hashed = await hashPassword(newPassword);

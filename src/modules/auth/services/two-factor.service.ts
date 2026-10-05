@@ -1,6 +1,8 @@
 import speakeasy from "speakeasy";
-import { BadRequestError } from "@shared/utils/errors";
-import { UnauthorizedError } from "@shared/utils/errors";
+import {
+  ValidationError,
+  AuthenticationError,
+} from "@shared/errors/application-error";
 import { TokenStorePort } from "../application/ports/token-store.port";
 import type { IAuthRepository } from "../application/ports/auth.repository.port";
 import { TokenService } from "./token.service";
@@ -20,7 +22,7 @@ export class TwoFactorService {
   ): Promise<{ otpauthUrl: string; secret: string }> {
     const user = await this.authRepository.findUserById(userId);
     if (!user) {
-      throw new BadRequestError("User not found");
+      throw new ValidationError("User not found");
     }
 
     const issuer = config.TOTP_ISSUER;
@@ -46,7 +48,7 @@ export class TwoFactorService {
   ): Promise<{ enabled: boolean }> {
     const user = await this.authRepository.findUserById(userId);
     if (!user || !user.totpSecret) {
-      throw new BadRequestError("2FA not set up");
+      throw new ValidationError("2FA not set up");
     }
 
     const totpSecret = decryptTotpSecret(
@@ -54,7 +56,7 @@ export class TwoFactorService {
       config.TOTP_ENCRYPTION_KEY,
     );
     if (!this.verifyTotpToken(totpSecret, token)) {
-      throw new BadRequestError("Invalid TOTP token");
+      throw new ValidationError("Invalid TOTP token");
     }
 
     await this.authRepository.updateUser(userId, { is2FAEnabled: true });
@@ -73,7 +75,7 @@ export class TwoFactorService {
       await this.tokenService.consumeTwoFactorPreAuthToken(preAuthToken);
     const user = await this.authRepository.findUserById(userId);
     if (!user || !user.totpSecret || !user.is2FAEnabled) {
-      throw new UnauthorizedError("2FA is not enabled");
+      throw new AuthenticationError("2FA is not enabled");
     }
 
     const totpSecret = decryptTotpSecret(
@@ -81,7 +83,7 @@ export class TwoFactorService {
       config.TOTP_ENCRYPTION_KEY,
     );
     if (!this.verifyTotpToken(totpSecret, token)) {
-      throw new UnauthorizedError("Invalid TOTP token");
+      throw new AuthenticationError("Invalid TOTP token");
     }
 
     const timestep = Math.floor(Date.now() / 30_000);
@@ -89,7 +91,7 @@ export class TwoFactorService {
     const accepted = await this.tokenStore.setIfAbsent(replayKey, "1", 90);
 
     if (!accepted) {
-      throw new UnauthorizedError("TOTP token already used");
+      throw new AuthenticationError("TOTP token already used");
     }
 
     return this.tokenService.generateTokens(user);

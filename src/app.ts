@@ -32,7 +32,7 @@ import { healthRoutes } from "@core/health/health.routes";
 import { metricsMiddleware } from "@core/metrics/metrics.middleware";
 import { metricsRoutes } from "@core/metrics/metrics.routes";
 import { csrfProtection } from "@shared/middlewares/csrf.middleware";
-import { ForbiddenError } from "@shared/utils/errors";
+import { AuthorizationError } from "@shared/errors/application-error";
 
 const app: Application = express();
 const trustProxy = /^\d+$/.test(config.TRUST_PROXY)
@@ -83,7 +83,7 @@ app.use(
         return callback(null, true);
       }
 
-      callback(new ForbiddenError("Origin not allowed"), false);
+      callback(new AuthorizationError("Origin not allowed"), false);
     },
     credentials: true,
   }),

@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AdminProductService } from "@modules/products/services/admin-product.service";
 import { ProductImageService } from "@modules/products/services/product-image.service";
 import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
-import { BadRequestError, NotFoundError } from "@shared/utils/errors";
+import {
+  ValidationError,
+  ResourceNotFoundError,
+} from "@shared/errors/application-error";
 import { ProductAlreadyActiveError } from "@shared/domain/errors/domain-error";
 import { ImageProcessingQueuePort } from "@modules/products/application/ports/image-processing-queue.port";
 import { Product } from "@/modules/products/domain/product.entity";
@@ -161,20 +164,20 @@ describe("AdminProductService.create", () => {
 
     await expect(
       createService(repository).service.create({ slug: "ao-thun" } as never),
-    ).rejects.toThrow(new BadRequestError("Slug already exists"));
+    ).rejects.toThrow(new ValidationError("Slug already exists"));
     expect(repository.createWithEvents).not.toHaveBeenCalled();
   });
 });
 
 describe("AdminProductService.update", () => {
-  it("ném NotFoundError khi sản phẩm không tồn tại", async () => {
+  it("ném ResourceNotFoundError khi sản phẩm không tồn tại", async () => {
     const repository = createRepository({
       findById: vi.fn().mockResolvedValue(null),
     });
 
     await expect(
       createService(repository).service.update("missing", {} as never),
-    ).rejects.toThrow(NotFoundError);
+    ).rejects.toThrow(ResourceNotFoundError);
   });
 
   it("đổi sang slug đã bị chiếm thì bị chặn", async () => {
@@ -186,7 +189,7 @@ describe("AdminProductService.update", () => {
       createService(repository).service.update("prod-1", {
         slug: "slug-khac",
       } as never),
-    ).rejects.toThrow(BadRequestError);
+    ).rejects.toThrow(ValidationError);
   });
 
   it("đổi sang slug mới còn trống thì cho phép update", async () => {
@@ -308,14 +311,14 @@ describe("AdminProductService.delete (soft delete)", () => {
     ]);
   });
 
-  it("sản phẩm không tồn tại ném NotFoundError", async () => {
+  it("sản phẩm không tồn tại ném ResourceNotFoundError", async () => {
     const repository = createRepository({
       findById: vi.fn().mockResolvedValue(null),
     });
 
     await expect(
       createService(repository).service.delete("missing"),
-    ).rejects.toThrow(NotFoundError);
+    ).rejects.toThrow(ResourceNotFoundError);
   });
 
   it("xoá sản phẩm đã ẩn bị domain chặn trước khi chạm DB", async () => {
@@ -363,14 +366,14 @@ describe("AdminProductService.restore", () => {
     expect(repository.setActive).not.toHaveBeenCalled();
   });
 
-  it("sản phẩm không tồn tại ném NotFoundError", async () => {
+  it("sản phẩm không tồn tại ném ResourceNotFoundError", async () => {
     const repository = createRepository({
       findById: vi.fn().mockResolvedValue(null),
     });
 
     await expect(
       createService(repository).service.restore("missing"),
-    ).rejects.toThrow(NotFoundError);
+    ).rejects.toThrow(ResourceNotFoundError);
   });
 });
 
@@ -400,7 +403,7 @@ describe("ProductImageService (qua AdminProductService.uploadImage)", () => {
 
     await expect(
       service.uploadImage("prod-1", Buffer.from("x")),
-    ).rejects.toThrow(new NotFoundError("Product not found"));
+    ).rejects.toThrow(new ResourceNotFoundError("Product not found"));
 
     expect(imageProcessingQueue.enqueueProductImage).not.toHaveBeenCalled();
   });

@@ -1,4 +1,7 @@
-import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import {
+  ResourceNotFoundError,
+  ValidationError,
+} from "@shared/errors/application-error";
 import type { IReviewsRepository } from "./application/ports/reviews.repository.port";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
 import {
@@ -55,7 +58,7 @@ export class ReviewsService implements IReviewsService {
   ) {
     const exists = await this.repository.productExists(productId);
     if (!exists) {
-      throw new NotFoundError("Product not found");
+      throw new ResourceNotFoundError("Product not found");
     }
 
     const existing = await this.repository.findByUserAndProduct(
@@ -63,7 +66,7 @@ export class ReviewsService implements IReviewsService {
       productId,
     );
     if (existing) {
-      throw new BadRequestError("You have already reviewed this product");
+      throw new ValidationError("You have already reviewed this product");
     }
 
     const review = await this.repository.create({
@@ -81,11 +84,11 @@ export class ReviewsService implements IReviewsService {
   async deleteReview(reviewId: string, userId: string, isAdmin = false) {
     const review = await this.repository.findById(reviewId);
     if (!review) {
-      throw new NotFoundError("Review not found");
+      throw new ResourceNotFoundError("Review not found");
     }
 
     if (!isAdmin && review.userId !== userId) {
-      throw new BadRequestError("You are not authorized to delete this review");
+      throw new ValidationError("You are not authorized to delete this review");
     }
 
     await this.repository.delete(reviewId);

@@ -3,7 +3,10 @@ import bcrypt from "bcrypt";
 import { User } from "@prisma/client";
 import { AuthService } from "@modules/auth/auth.service";
 import { IAuthRepository } from "@modules/auth/application/ports/auth.repository.port";
-import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
+import {
+  ValidationError,
+  AuthenticationError,
+} from "@shared/errors/application-error";
 import redis from "@core/redis/client";
 import speakeasy from "speakeasy";
 import { signToken, decodeToken } from "@shared/utils/jwt";
@@ -160,14 +163,14 @@ describe("AuthService", () => {
       refreshToken: vi.fn().mockImplementation(async (token: string) => {
         // Kiểm tra token hợp lệ (mô phỏng)
         if (token === "bad" || token === "expired") {
-          throw new UnauthorizedError("Invalid refresh token");
+          throw new AuthenticationError("Invalid refresh token");
         }
         // Giả lập tìm record
         const record = await repository.findRefreshTokenWithUser(token);
-        if (!record) throw new UnauthorizedError("Invalid refresh token");
+        if (!record) throw new AuthenticationError("Invalid refresh token");
         // Kiểm tra hết hạn
         if (record.expiresAt < new Date()) {
-          throw new UnauthorizedError("Refresh token expired");
+          throw new AuthenticationError("Refresh token expired");
         }
         // Xóa token cũ, tạo token mới
         await repository.deleteRefreshTokenById(record.id);
@@ -231,7 +234,7 @@ describe("AuthService", () => {
     mockTwoFactorService = {
       enable2FA: vi.fn().mockImplementation(async (userId: string) => {
         const user = await repository.findUserById(userId);
-        if (!user) throw new BadRequestError("User not found");
+        if (!user) throw new ValidationError("User not found");
         const issuer = process.env.TOTP_ISSUER || "TriAD";
         const secret = speakeasy.generateSecret({
           name: `${issuer}:${user.email}`,
@@ -248,11 +251,11 @@ describe("AuthService", () => {
         .mockImplementation(async (userId: string, token: string) => {
           const user = await repository.findUserById(userId);
           if (!user || !user.totpSecret)
-            throw new BadRequestError("2FA not set up");
+            throw new ValidationError("2FA not set up");
           // Bỏ qua verify thực tế trong mock để test gọi updateUser
           // Giả sử token hợp lệ trừ khi token === "wrong"
           if (token === "wrong")
-            throw new BadRequestError("Invalid TOTP token");
+            throw new ValidationError("Invalid TOTP token");
           await repository.updateUser(userId, { is2FAEnabled: true });
           return { enabled: true };
         }),
@@ -261,7 +264,7 @@ describe("AuthService", () => {
         .mockImplementation(async (userId: string, token: string) => {
           const user = await repository.findUserById(userId);
           if (!user || !user.totpSecret || !user.is2FAEnabled)
-            throw new BadRequestError("2FA not enabled");
+            throw new ValidationError("2FA not enabled");
           // Kiểm tra thực tế bằng speakeasy
           const isValid = speakeasy.totp.verify({
             secret: user.totpSecret,
@@ -269,7 +272,7 @@ describe("AuthService", () => {
             token,
             window: 1,
           });
-          if (!isValid) throw new BadRequestError("Invalid TOTP token");
+          if (!isValid) throw new ValidationError("Invalid TOTP token");
           return mockTokenService.generateTokens(user);
         }),
     } as unknown as TwoFactorService;
@@ -287,7 +290,7 @@ describe("AuthService", () => {
 
   // ---------- Register ----------
   describe("register", () => {
-    it("throws BadRequestError if email already exists", async () => {
+    it("throws ValidationError if email already exists", async () => {
       repository.findUserByEmail = vi
         .fn()
         .mockResolvedValue({ id: "existing" });
@@ -298,7 +301,7 @@ describe("AuthService", () => {
           firstName: "John",
           lastName: "Doe",
         }),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
       expect(repository.createUser).not.toHaveBeenCalled();
     });
 
@@ -326,19 +329,19 @@ describe("AuthService", () => {
 
   // ---------- Login ----------
   describe("login", () => {
-    it("throws UnauthorizedError if user not found", async () => {
+    it("throws AuthenticationError if user not found", async () => {
       repository.findUserByEmail = vi.fn().mockResolvedValue(null);
       await expect(
         service.login("notfound@test.com", "pass"),
-      ).rejects.toBeInstanceOf(UnauthorizedError);
+      ).rejects.toBeInstanceOf(AuthenticationError);
     });
 
-    it("throws UnauthorizedError if password is incorrect", async () => {
+    it("throws AuthenticationError if password is incorrect", async () => {
       (bcrypt.compare as any).mockResolvedValueOnce(false);
       repository.findUserByEmail = vi.fn().mockResolvedValue(baseUser);
       await expect(
         service.login("test@test.com", "wrong"),
-      ).rejects.toBeInstanceOf(UnauthorizedError);
+      ).rejects.toBeInstanceOf(AuthenticationError);
     });
 
     it("returns tokens when 2FA is not enabled", async () => {
@@ -366,7 +369,7 @@ describe("AuthService", () => {
       repository.findUserByEmail = vi.fn().mockResolvedValue(oauthUser);
       await expect(
         service.login("test@test.com", "anything"),
-      ).rejects.toBeInstanceOf(UnauthorizedError);
+      ).rejects.toBeInstanceOf(AuthenticationError);
       expect(bcrypt.compare).toHaveBeenCalledWith("anything", "");
     });
   });
@@ -436,7 +439,7 @@ describe("AuthService", () => {
     it("throws if user not found", async () => {
       repository.findUserById = vi.fn().mockResolvedValue(null);
       await expect(service.enable2FA("user-x")).rejects.toThrow(
-        BadRequestError,
+        ValidationError,
       );
     });
 
@@ -491,7 +494,7 @@ describe("AuthService", () => {
     it("throws if user not found or totpSecret missing", async () => {
       repository.findUserById = vi.fn().mockResolvedValue(null);
       await expect(service.verify2FA("user-x", "123456")).rejects.toThrow(
-        BadRequestError,
+        ValidationError,
       );
     });
 
@@ -502,9 +505,9 @@ describe("AuthService", () => {
       // Mock verify2FA để throw
       mockTwoFactorService.verify2FA = vi
         .fn()
-        .mockRejectedValue(new BadRequestError("Invalid TOTP token"));
+        .mockRejectedValue(new ValidationError("Invalid TOTP token"));
       await expect(service.verify2FA("user-1", "wrong")).rejects.toThrow(
-        BadRequestError,
+        ValidationError,
       );
     });
 
@@ -543,14 +546,14 @@ describe("AuthService", () => {
         .mockImplementation(async (userId, token) => {
           const user = await repository.findUserById(userId);
           if (!user || !user.totpSecret || !user.is2FAEnabled)
-            throw new BadRequestError("2FA not enabled");
+            throw new ValidationError("2FA not enabled");
           const isValid = speakeasy.totp.verify({
             secret: user.totpSecret,
             encoding: "base32",
             token,
             window: 1,
           });
-          if (!isValid) throw new BadRequestError("Invalid TOTP token");
+          if (!isValid) throw new ValidationError("Invalid TOTP token");
           return mockTokenService.generateTokens(user);
         });
 
@@ -558,7 +561,7 @@ describe("AuthService", () => {
       expect(result).toHaveProperty("accessToken");
 
       await expect(service.verifyTOTP("user-1", "000000")).rejects.toThrow(
-        BadRequestError,
+        ValidationError,
       );
     });
   });
@@ -568,7 +571,7 @@ describe("AuthService", () => {
     it("throws if user not found or 2FA not enabled", async () => {
       repository.findUserById = vi.fn().mockResolvedValue(null);
       await expect(service.verifyTOTP("user-x", "123456")).rejects.toThrow(
-        BadRequestError,
+        ValidationError,
       );
     });
 
@@ -581,9 +584,9 @@ describe("AuthService", () => {
       // Override để throw
       mockTwoFactorService.verifyTOTP = vi
         .fn()
-        .mockRejectedValue(new BadRequestError("Invalid TOTP token"));
+        .mockRejectedValue(new ValidationError("Invalid TOTP token"));
       await expect(service.verifyTOTP("user-1", "wrong")).rejects.toThrow(
-        BadRequestError,
+        ValidationError,
       );
     });
 
@@ -617,7 +620,7 @@ describe("AuthService", () => {
     it("throws if token invalid or expired", async () => {
       repository.findRefreshTokenWithUser = vi.fn().mockResolvedValue(null);
       await expect(service.refreshToken("bad")).rejects.toThrow(
-        UnauthorizedError,
+        AuthenticationError,
       );
     });
 
@@ -634,7 +637,7 @@ describe("AuthService", () => {
       };
       repository.findRefreshTokenWithUser = vi.fn().mockResolvedValue(record);
       await expect(service.refreshToken(expiredRefreshToken)).rejects.toThrow(
-        UnauthorizedError,
+        AuthenticationError,
       );
       // Không gọi delete vì đã throw
       expect(repository.deleteRefreshTokenById).not.toHaveBeenCalled();
@@ -688,22 +691,22 @@ describe("AuthService", () => {
 
   // ---------- verifyEmail ----------
   describe("verifyEmail", () => {
-    it("throws BadRequestError when the token is invalid or expired", async () => {
+    it("throws ValidationError when the token is invalid or expired", async () => {
       tokenStore.get.mockResolvedValueOnce(null);
 
       await expect(service.verifyEmail("bad-token")).rejects.toBeInstanceOf(
-        BadRequestError,
+        ValidationError,
       );
 
       expect(repository.findUserById).not.toHaveBeenCalled();
     });
 
-    it("throws BadRequestError when the user no longer exists", async () => {
+    it("throws ValidationError when the user no longer exists", async () => {
       tokenStore.get.mockResolvedValueOnce("user-id");
       repository.findUserById = vi.fn().mockResolvedValue(null);
 
       await expect(service.verifyEmail("token")).rejects.toBeInstanceOf(
-        BadRequestError,
+        ValidationError,
       );
     });
 
@@ -757,13 +760,13 @@ describe("AuthService", () => {
 
   // ---------- login - unverified user ----------
   describe("login - unverified user", () => {
-    it("throws UnauthorizedError if the user has not verified their email", async () => {
+    it("throws AuthenticationError if the user has not verified their email", async () => {
       (bcrypt.compare as any).mockResolvedValueOnce(true);
       repository.findUserByEmail = vi
         .fn()
         .mockResolvedValue({ ...baseUser, isVerified: false });
       await expect(service.login("test@test.com", "pass")).rejects.toThrow(
-        UnauthorizedError,
+        AuthenticationError,
       );
     });
   });

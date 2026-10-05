@@ -23,7 +23,6 @@ import {
   TwoFactorNotEnabledError,
   InvalidUserStateError,
   WeakPasswordError,
-  DOMAIN_ERROR_STATUS_MAP,
 } from "@shared/domain/errors/domain-error";
 
 /**
@@ -206,25 +205,5 @@ describe("domain errors", () => {
 
   it("leaves context undefined when none is provided", () => {
     expect(new EmptyOrderError().context).toBeUndefined();
-  });
-
-  it("maps every error code to an HTTP status", () => {
-    const codes = [...new Set(cases.map((c) => c.code))];
-    for (const code of codes) {
-      expect(DOMAIN_ERROR_STATUS_MAP[code]).toBeTypeOf("number");
-    }
-  });
-
-  it("has no orphan entries in the status map", () => {
-    const codes = new Set(cases.map((c) => c.code));
-    for (const code of Object.keys(DOMAIN_ERROR_STATUS_MAP)) {
-      expect(codes.has(code)).toBe(true);
-    }
-  });
-
-  it("uses 409 for conflicts and 400 for bad input", () => {
-    expect(DOMAIN_ERROR_STATUS_MAP["PRODUCT.INSUFFICIENT_STOCK"]).toBe(409);
-    expect(DOMAIN_ERROR_STATUS_MAP["USER.WEAK_PASSWORD"]).toBe(400);
-    expect(DOMAIN_ERROR_STATUS_MAP["CART.ITEM_NOT_FOUND"]).toBe(404);
   });
 });

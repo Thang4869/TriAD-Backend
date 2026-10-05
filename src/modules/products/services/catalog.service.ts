@@ -1,4 +1,4 @@
-import { NotFoundError } from "@shared/utils/errors";
+import { ResourceNotFoundError } from "@shared/errors/application-error";
 import { Rating } from "@shared/value-objects/rating";
 import {
   ProductCatalogReadPort,
@@ -77,7 +77,7 @@ export class CatalogService {
 
   async findById(id: string) {
     const product = await this.detailRead.findByIdWithReviews(id);
-    if (!product) throw new NotFoundError("Product not found");
+    if (!product) throw new ResourceNotFoundError("Product not found");
     const rating = Rating.fromReviews(product.reviews);
     return toProductDetailResponse({
       ...product,
@@ -88,7 +88,7 @@ export class CatalogService {
 
   async getBySlug(slug: string) {
     const product = await this.detailRead.findBySlugWithReviews(slug);
-    if (!product) throw new NotFoundError("Product not found");
+    if (!product) throw new ResourceNotFoundError("Product not found");
     const rating = Rating.fromReviews(product.reviews);
     return toProductDetailResponse({
       ...product,

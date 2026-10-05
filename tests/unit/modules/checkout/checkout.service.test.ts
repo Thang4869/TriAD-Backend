@@ -9,10 +9,10 @@ import type {
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
 import { PricingService } from "@/modules/checkout/services/pricing.service";
 import {
-  BadRequestError,
+  ValidationError,
+  ResourceNotFoundError,
   ConflictError,
-  NotFoundError,
-} from "@shared/utils/errors";
+} from "@shared/errors/application-error";
 import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
 
 const discount = {
@@ -276,12 +276,12 @@ describe("CheckoutService", () => {
   it("throws non-ConflictError immediately without retrying", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
 
-    const nonConflictError = new BadRequestError("some other error");
+    const nonConflictError = new ValidationError("some other error");
 
     unitOfWork.run = vi.fn().mockRejectedValue(nonConflictError);
 
     await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
-      BadRequestError,
+      ValidationError,
     );
 
     expect(unitOfWork.run).toHaveBeenCalledTimes(1);
@@ -383,7 +383,7 @@ describe("CheckoutService", () => {
       });
 
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
-        BadRequestError,
+        ValidationError,
       );
     });
 
@@ -481,7 +481,7 @@ describe("CheckoutService", () => {
           ...baseInput,
           discountCode: "INACTIVE",
         }),
-      ).rejects.toThrow(BadRequestError);
+      ).rejects.toThrow(ValidationError);
     });
 
     it("throws if discount code expired", async () => {
@@ -499,7 +499,7 @@ describe("CheckoutService", () => {
           ...baseInput,
           discountCode: "EXPIRED",
         }),
-      ).rejects.toThrow(BadRequestError);
+      ).rejects.toThrow(ValidationError);
     });
 
     it("throws if order amount below minOrderAmount", async () => {
@@ -517,30 +517,30 @@ describe("CheckoutService", () => {
           ...baseInput,
           discountCode: "MIN",
         }),
-      ).rejects.toThrow(BadRequestError);
+      ).rejects.toThrow(ValidationError);
     });
 
-    it("throws NotFoundError if a cart product is missing from the locked products", async () => {
+    it("throws ResourceNotFoundError if a cart product is missing from the locked products", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
 
       mockStockService.reserveStock = vi
         .fn()
-        .mockRejectedValue(new NotFoundError("Product not found"));
+        .mockRejectedValue(new ResourceNotFoundError("Product not found"));
 
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
-        NotFoundError,
+        ResourceNotFoundError,
       );
     });
 
-    it("throws BadRequestError when locked stock is not enough for the requested quantity", async () => {
+    it("throws ValidationError when locked stock is not enough for the requested quantity", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
 
       mockStockService.reserveStock = vi
         .fn()
-        .mockRejectedValue(new BadRequestError("Not enough stock"));
+        .mockRejectedValue(new ValidationError("Not enough stock"));
 
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
-        BadRequestError,
+        ValidationError,
       );
     });
 
@@ -656,7 +656,7 @@ describe("CheckoutService", () => {
       repository.findOrderByUserAndId = vi.fn().mockResolvedValue(null);
 
       await expect(service.getOrder("order-1", "user-1")).rejects.toThrow(
-        NotFoundError,
+        ResourceNotFoundError,
       );
     });
 

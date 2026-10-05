@@ -3,9 +3,9 @@ import { idempotencyMiddleware } from "@shared/middlewares/idempotency.middlewar
 import { Request, Response, NextFunction } from "express";
 import redis from "@core/redis/client";
 import {
-  BadRequestError,
-  UnprocessableEntityError,
-} from "@shared/utils/errors";
+  UnprocessableError,
+  ValidationError,
+} from "@shared/errors/application-error";
 import crypto from "crypto";
 
 vi.mock("@core/redis/client", () => ({
@@ -45,10 +45,10 @@ describe("idempotencyMiddleware", () => {
     expect(redis.get).not.toHaveBeenCalled();
   });
 
-  it("should throw BadRequestError if Idempotency-Key header missing", async () => {
+  it("should throw ValidationError if Idempotency-Key header missing", async () => {
     const middleware = idempotencyMiddleware();
     await middleware(req as Request, res as Response, next);
-    expect(next).toHaveBeenCalledWith(expect.any(BadRequestError));
+    expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
   });
 
   it("should return cached response if exists", async () => {
@@ -130,9 +130,7 @@ describe("idempotencyMiddleware", () => {
 
     await idempotencyMiddleware()(req as Request, res as Response, next);
 
-    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(
-      UnprocessableEntityError,
-    );
+    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(UnprocessableError);
   });
 
   it("should use a short TTL for the IN_PROGRESS claim", async () => {

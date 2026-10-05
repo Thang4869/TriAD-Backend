@@ -9,7 +9,7 @@ import {
 import { OrderStatus } from "../../domain/order-status";
 import { Order } from "../../domain/order.entity";
 import { persistDomainEvents } from "@core/outbox/persist-domain-events";
-import { ConflictError } from "@shared/utils/errors";
+import { ConflictError } from "@shared/errors/application-error";
 import { toSafeMoneyNumber } from "@shared/infrastructure/money-number";
 type PersistDomainEvents = typeof persistDomainEvents;
 

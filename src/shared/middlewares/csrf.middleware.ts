@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { Request, Response, NextFunction } from "express";
 import config from "@config";
-import { ForbiddenError } from "@shared/utils/errors";
+import { AuthorizationError } from "@shared/errors/application-error";
 
 export const CSRF_COOKIE_NAME = "csrfToken";
 const CSRF_HEADER_NAME = "x-csrf-token";
@@ -53,7 +53,7 @@ export const csrfProtection = (
     typeof headerToken !== "string" ||
     !timingSafeEqual(cookieToken, headerToken)
   ) {
-    return next(new ForbiddenError("Invalid or missing CSRF token"));
+    return next(new AuthorizationError("Invalid or missing CSRF token"));
   }
 
   next();

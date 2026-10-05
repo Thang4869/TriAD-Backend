@@ -1,5 +1,5 @@
 import type { IProductsRepository } from "../application/ports/products.repository.port";
-import { NotFoundError } from "@shared/utils/errors";
+import { ResourceNotFoundError } from "@shared/errors/application-error";
 import { ImageProcessingQueuePort } from "../application/ports/image-processing-queue.port";
 
 export class ProductImageService {
@@ -12,7 +12,7 @@ export class ProductImageService {
     const exists = await this.repository.existsAndActive(productId);
 
     if (!exists) {
-      throw new NotFoundError("Product not found");
+      throw new ResourceNotFoundError("Product not found");
     }
 
     await this.imageProcessingQueue.enqueueProductImage({

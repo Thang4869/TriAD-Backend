@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { AuthService, TwoFactorRequired, AuthTokens } from "./auth.service";
 import { logger } from "@core/logger/winston";
-import { BadRequestError } from "@shared/utils/errors";
+import { ValidationError } from "@shared/errors/application-error";
 import config from "@config";
 import { asyncHandler } from "@shared/utils/async-handler";
 import {
@@ -62,7 +62,7 @@ export class AuthController {
 
   verifyEmail = asyncHandler(async (req: Request, res: Response) => {
     const token = req.query.token as string;
-    if (!token) throw new BadRequestError("Verification token is required");
+    if (!token) throw new ValidationError("Verification token is required");
     const result = await this.service.verifyEmail(token);
     const csrfToken = this.setAuthCookies(
       res,
@@ -95,7 +95,7 @@ export class AuthController {
       return;
     }
     if (!isAuthTokens(result))
-      throw new BadRequestError("Unexpected result from login");
+      throw new ValidationError("Unexpected result from login");
 
     const csrfToken = this.setAuthCookies(
       res,
@@ -107,7 +107,7 @@ export class AuthController {
 
   refresh = asyncHandler(async (req: Request, res: Response) => {
     const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
-    if (!refreshToken) throw new BadRequestError("Refresh token required");
+    if (!refreshToken) throw new ValidationError("Refresh token required");
     const result = await this.service.refreshToken(refreshToken);
     const csrfToken = this.setAuthCookies(
       res,
@@ -152,7 +152,7 @@ export class AuthController {
   verify2FA = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;
     const { token } = req.body;
-    if (!token) throw new BadRequestError("Token is required");
+    if (!token) throw new ValidationError("Token is required");
     const result = await this.service.verify2FA(userId, token);
     sendSuccess(res, result);
   });
@@ -160,10 +160,10 @@ export class AuthController {
   verifyTOTP = asyncHandler(async (req: Request, res: Response) => {
     const { preAuthToken, token } = req.body;
     if (!preAuthToken || !token)
-      throw new BadRequestError("preAuthToken and token are required");
+      throw new ValidationError("preAuthToken and token are required");
     const result = await this.service.verifyTOTP(preAuthToken, token);
     if (!isAuthTokens(result))
-      throw new BadRequestError("Unexpected result from TOTP verification");
+      throw new ValidationError("Unexpected result from TOTP verification");
     const csrfToken = this.setAuthCookies(
       res,
       result.accessToken,

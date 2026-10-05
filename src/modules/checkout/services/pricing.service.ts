@@ -1,7 +1,10 @@
 import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
 import { CheckoutTransaction } from "../application/ports/checkout-transaction";
-import { BadRequestError, ConflictError } from "@shared/utils/errors";
+import {
+  ValidationError,
+  ConflictError,
+} from "@shared/errors/application-error";
 import {
   FeatureFlag,
   FeatureFlagPort,
@@ -40,18 +43,18 @@ export class PricingService {
       const discount = await tx.findDiscountByCode(discountCode);
 
       if (!discount || !discount.isActive) {
-        throw new BadRequestError("Invalid or inactive discount code");
+        throw new ValidationError("Invalid or inactive discount code");
       }
 
       if (discount.expiresAt && discount.expiresAt < new Date()) {
-        throw new BadRequestError("Discount code has expired");
+        throw new ValidationError("Discount code has expired");
       }
 
       if (
         discount.minOrderAmount != null &&
         subtotal.getValue() < discount.minOrderAmount
       ) {
-        throw new BadRequestError(
+        throw new ValidationError(
           `Order must be at least ${discount.minOrderAmount} to use this discount code`,
         );
       }

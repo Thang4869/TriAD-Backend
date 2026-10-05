@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 import prisma from "@core/database/prisma";
 import { PrismaCheckoutUnitOfWork } from "@modules/checkout/infrastructure/prisma-checkout-unit-of-work";
-import { ConflictError } from "@shared/utils/errors";
+import { ConflictError } from "@shared/errors/application-error";
 
 vi.mock("@core/database/prisma", () => ({
   default: {

@@ -3,10 +3,41 @@ import { logger } from "@core/logger/winston";
 import type { PersistenceErrorClassifier } from "@shared/errors/persistence-error";
 import { ZodError } from "zod";
 import { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
-import {
-  DomainError,
-  DOMAIN_ERROR_STATUS_MAP,
-} from "@shared/domain/errors/domain-error";
+import { DomainError } from "@shared/domain/errors/domain-error";
+import { ApplicationError } from "@shared/errors/application-error";
+
+const DOMAIN_ERROR_STATUS_MAP: Readonly<Record<string, number>> = {
+  "ORDER.NOT_MUTABLE": 409,
+  "ORDER.INVALID_ITEM": 400,
+  "ORDER.INVALID_DISCOUNT": 400,
+  "ORDER.EMPTY": 400,
+  "ORDER.ALREADY_PLACED": 409,
+  "ORDER.INVALID_TRANSITION": 409,
+  "ORDER.NOT_CANCELLABLE": 409,
+  "CART.INVALID_QUANTITY": 400,
+  "CART.ITEM_NOT_FOUND": 404,
+  "PRODUCT.INVALID_PRICE": 400,
+  "PRODUCT.INSUFFICIENT_STOCK": 409,
+  "PRODUCT.INVALID_STOCK_QUANTITY": 400,
+  "PRODUCT.ALREADY_ACTIVE": 409,
+  "PRODUCT.ALREADY_INACTIVE": 409,
+  "USER.ALREADY_VERIFIED": 409,
+  "USER.2FA_ALREADY_ENABLED": 409,
+  "USER.2FA_NOT_SET_UP": 409,
+  "USER.2FA_NOT_ENABLED": 409,
+  "USER.INVALID_STATE": 400,
+  "USER.WEAK_PASSWORD": 400,
+};
+
+const APPLICATION_ERROR_STATUS_MAP: Readonly<Record<string, number>> = {
+  "APPLICATION.VALIDATION": 400,
+  "APPLICATION.AUTHENTICATION": 401,
+  "APPLICATION.AUTHORIZATION": 403,
+  "APPLICATION.NOT_FOUND": 404,
+  "APPLICATION.CONFLICT": 409,
+  "APPLICATION.UNPROCESSABLE": 422,
+  "APPLICATION.RATE_LIMIT": 429,
+};
 
 interface ErrorResponsePayload {
   success: false;
@@ -15,18 +46,6 @@ interface ErrorResponsePayload {
   correlationId: string | string[];
   details?: unknown;
   stack?: string;
-}
-
-export class AppError extends Error {
-  public statusCode: number;
-  public isOperational: boolean;
-
-  constructor(message: string, statusCode: number, isOperational = true) {
-    super(message);
-    this.statusCode = statusCode;
-    this.isOperational = isOperational;
-    Error.captureStackTrace(this, this.constructor);
-  }
 }
 
 export function createErrorHandler(
@@ -55,9 +74,11 @@ export function createErrorHandler(
       message = err.message;
       code = err.code;
       details = err.context;
-    } else if (err instanceof AppError) {
-      statusCode = err.statusCode;
-      message = err.isOperational ? err.message : "Internal server error";
+    } else if (err instanceof ApplicationError) {
+      statusCode = APPLICATION_ERROR_STATUS_MAP[err.code] ?? 500;
+      message = err.message;
+      code = err.code;
+      details = err.context;
     } else if (err instanceof ZodError) {
       statusCode = 400;
       message = "Validation failed";

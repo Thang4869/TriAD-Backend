@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { CatalogService } from "./services/catalog.service";
 import { AdminProductService } from "./services/admin-product.service";
 import { asyncHandler } from "@shared/utils/async-handler";
-import { BadRequestError } from "@shared/utils/errors";
+import { ValidationError } from "@shared/errors/application-error";
 import {
   sendSuccess,
   sendCreated,
@@ -71,7 +71,7 @@ export class ProductsController {
   });
 
   adminUploadImage = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.file) throw new BadRequestError("Image file is required");
+    if (!req.file) throw new ValidationError("Image file is required");
     const result = await this.adminService.uploadImage(
       req.params.id,
       req.file.buffer,

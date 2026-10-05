@@ -22,7 +22,7 @@ import type { SavedCheckoutOrder } from "../application/ports/checkout-models";
 import type { Order } from "@modules/orders/domain/order.entity";
 import type { DomainEvent } from "@shared/domain/events/domain-event";
 import { IdempotencyConflictError } from "../application/errors/idempotency-conflict.error";
-import { ConflictError } from "@shared/utils/errors";
+import { ConflictError } from "@shared/errors/application-error";
 import {
   toSafeDecimalNumber,
   toSafeMoneyNumber,

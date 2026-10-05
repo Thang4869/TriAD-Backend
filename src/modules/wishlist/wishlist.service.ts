@@ -1,4 +1,7 @@
-import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import {
+  ResourceNotFoundError,
+  ValidationError,
+} from "@shared/errors/application-error";
 import {
   PAGINATION_DEFAULTS,
   resolvePagination,
@@ -38,12 +41,12 @@ export class WishlistService implements IWishlistService {
   async addItem(userId: string, productId: string) {
     const productExists = await this.repository.productExists(productId);
     if (!productExists) {
-      throw new NotFoundError("Product not found");
+      throw new ResourceNotFoundError("Product not found");
     }
 
     const alreadyWishlisted = await this.repository.exists(userId, productId);
     if (alreadyWishlisted) {
-      throw new BadRequestError("Product already in wishlist");
+      throw new ValidationError("Product already in wishlist");
     }
 
     return this.repository.create(userId, productId);
@@ -52,7 +55,7 @@ export class WishlistService implements IWishlistService {
   async removeItem(userId: string, productId: string) {
     const exists = await this.repository.exists(userId, productId);
     if (!exists) {
-      throw new NotFoundError("Product not found in wishlist");
+      throw new ResourceNotFoundError("Product not found in wishlist");
     }
     await this.repository.delete(userId, productId);
   }

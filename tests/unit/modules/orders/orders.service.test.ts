@@ -8,7 +8,7 @@ import type {
   OrderHistoryView,
 } from "@modules/orders/application/order-history-read.port";
 import { EventBus } from "@shared/domain/event-bus/event-bus";
-import { NotFoundError } from "@shared/utils/errors";
+import { ResourceNotFoundError } from "@shared/errors/application-error";
 
 vi.mock("@core/logger/winston", () => ({
   logger: {
@@ -174,7 +174,7 @@ describe("OrdersService.getOrderById", () => {
     expect(readPort.findByIdAndUser).toHaveBeenCalledWith("order-1", "user-1");
   });
 
-  it("không tìm thấy (hoặc không thuộc về user) → NotFoundError", async () => {
+  it("không tìm thấy (hoặc không thuộc về user) → ResourceNotFoundError", async () => {
     const repository = createRepository();
     const readPort = createReadPort({
       findByIdAndUser: vi.fn().mockResolvedValue(null),
@@ -182,7 +182,7 @@ describe("OrdersService.getOrderById", () => {
 
     await expect(
       createService(repository, readPort).getOrderById("order-1", "user-2"),
-    ).rejects.toThrow(new NotFoundError("Order not found"));
+    ).rejects.toThrow(new ResourceNotFoundError("Order not found"));
   });
 });
 
@@ -251,7 +251,7 @@ describe("OrdersService.updateOrderStatus", () => {
     expect(result.status).toBe(OrderStatus.PROCESSING);
   });
 
-  it("đơn không tồn tại → NotFoundError, không update", async () => {
+  it("đơn không tồn tại → ResourceNotFoundError, không update", async () => {
     const repository = createRepository({
       findById: vi.fn().mockResolvedValue(null),
     });
@@ -261,7 +261,7 @@ describe("OrdersService.updateOrderStatus", () => {
         "missing",
         OrderStatus.PROCESSING,
       ),
-    ).rejects.toThrow(NotFoundError);
+    ).rejects.toThrow(ResourceNotFoundError);
 
     expect(repository.updateStatusWithEvents).not.toHaveBeenCalled();
   });

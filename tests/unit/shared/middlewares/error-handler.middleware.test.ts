@@ -2,16 +2,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Request, Response } from "express";
 import { ZodError, z } from "zod";
 import {
-  AppError,
-  createErrorHandler,
-  notFoundHandler,
-} from "@shared/middlewares/error-handler.middleware";
+  ValidationError,
+  AuthenticationError,
+  AuthorizationError,
+  ResourceNotFoundError,
+  ConflictError,
+  UnprocessableError,
+  RateLimitError,
+} from "@shared/errors/application-error";
 import { logger } from "@core/logger/winston";
 import {
   EmptyOrderError,
   CartItemNotFoundError,
   DomainError,
 } from "@shared/domain/errors/domain-error";
+import {
+  createErrorHandler,
+  notFoundHandler,
+} from "@shared/middlewares/error-handler.middleware";
 import type { PersistenceErrorClassifier } from "@shared/errors/persistence-error";
 vi.mock("@core/logger/winston", () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
@@ -218,28 +226,38 @@ describe("errorHandler", () => {
     );
   });
 
-  it("dùng đúng statusCode và message thật của AppError operational (BadRequestError...)", () => {
-    const err = new AppError("Custom message", 422, true);
-    const res = createMockResponse();
+  it.each([
+    [new ValidationError("Invalid input"), 400, "APPLICATION.VALIDATION"],
+    [
+      new AuthenticationError("Login required"),
+      401,
+      "APPLICATION.AUTHENTICATION",
+    ],
+    [new AuthorizationError("Forbidden"), 403, "APPLICATION.AUTHORIZATION"],
+    [new ResourceNotFoundError("Missing"), 404, "APPLICATION.NOT_FOUND"],
+    [new ConflictError("Conflict"), 409, "APPLICATION.CONFLICT"],
+    [
+      new UnprocessableError("Cannot process"),
+      422,
+      "APPLICATION.UNPROCESSABLE",
+    ],
+    [new RateLimitError("Slow down"), 429, "APPLICATION.RATE_LIMIT"],
+  ])(
+    "maps ApplicationError to HTTP boundary",
+    (err, expectedStatus, expectedCode) => {
+      const res = createMockResponse();
 
-    errorHandler(err, createMockRequest(), res, vi.fn());
+      errorHandler(err, createMockRequest(), res, vi.fn());
 
-    expect(res.status).toHaveBeenCalledWith(422);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: "Custom message" }),
-    );
-  });
-
-  it("ẨN message thật, trả 'Internal server error' cho lỗi không operational (tránh rò rỉ chi tiết nội bộ)", () => {
-    const err = new AppError("Sensitive stack detail", 500, false);
-    const res = createMockResponse();
-
-    errorHandler(err, createMockRequest(), res, vi.fn());
-
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: "Internal server error" }),
-    );
-  });
+      expect(res.status).toHaveBeenCalledWith(expectedStatus);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: err.message,
+          code: expectedCode,
+        }),
+      );
+    },
+  );
 
   it("mặc định statusCode=500 cho lỗi thường (Error thuần, không phải AppError)", () => {
     const err = new Error("boom");
@@ -268,7 +286,7 @@ describe("errorHandler", () => {
   it("should include stack trace in development", () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "development";
-    const err = new AppError("Test error", 500, false);
+    const err = new Error("Test error");
     const res = createMockResponse();
     errorHandler(err, createMockRequest(), res, vi.fn());
     expect(res.json).toHaveBeenCalledWith(
@@ -280,7 +298,7 @@ describe("errorHandler", () => {
   it("should NOT include stack trace in production", () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";
-    const err = new AppError("Test error", 500, false);
+    const err = new Error("Test error");
     const res = createMockResponse();
     errorHandler(err, createMockRequest(), res, vi.fn());
     expect(res.json).not.toHaveBeenCalledWith(

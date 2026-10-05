@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ReviewRecord } from "@modules/reviews/application/ports/review-models";
 import { ReviewsService } from "@modules/reviews/reviews.service";
 import type { IReviewsRepository } from "@modules/reviews/application/ports/reviews.repository.port";
-import { NotFoundError, BadRequestError } from "@shared/utils/errors";
+import {
+  ResourceNotFoundError,
+  ValidationError,
+} from "@shared/errors/application-error";
 import type { EventBus } from "@shared/domain/event-bus/event-bus";
 function createFakeRepository(
   overrides: Partial<IReviewsRepository> = {},
@@ -41,7 +44,7 @@ describe("ReviewsService", () => {
   beforeEach(() => vi.clearAllMocks());
 
   describe("createReview", () => {
-    it("ném NotFoundError khi product không tồn tại", async () => {
+    it("ném ResourceNotFoundError khi product không tồn tại", async () => {
       const repository = createFakeRepository({
         productExists: vi.fn().mockResolvedValue(false),
       });
@@ -49,11 +52,11 @@ describe("ReviewsService", () => {
 
       await expect(
         service.createReview("user-1", "product-x", 5, "Great"),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
       expect(repository.findByUserAndProduct).not.toHaveBeenCalled();
     });
 
-    it("ném BadRequestError khi user đã review sản phẩm này rồi (chặn spam review)", async () => {
+    it("ném ValidationError khi user đã review sản phẩm này rồi (chặn spam review)", async () => {
       const repository = createFakeRepository({
         productExists: vi.fn().mockResolvedValue(true),
         findByUserAndProduct: vi.fn().mockResolvedValue(baseReview),
@@ -62,7 +65,7 @@ describe("ReviewsService", () => {
 
       await expect(
         service.createReview("user-1", "product-1", 4, "Ok"),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
       expect(repository.create).not.toHaveBeenCalled();
     });
 
@@ -86,7 +89,7 @@ describe("ReviewsService", () => {
   });
 
   describe("deleteReview", () => {
-    it("ném NotFoundError khi review không tồn tại", async () => {
+    it("ném ResourceNotFoundError khi review không tồn tại", async () => {
       const repository = createFakeRepository({
         findById: vi.fn().mockResolvedValue(null),
       });
@@ -94,10 +97,10 @@ describe("ReviewsService", () => {
 
       await expect(
         service.deleteReview("review-x", "user-1"),
-      ).rejects.toBeInstanceOf(NotFoundError);
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
-    it("ném BadRequestError khi user không phải chủ review và không phải admin", async () => {
+    it("ném ValidationError khi user không phải chủ review và không phải admin", async () => {
       const repository = createFakeRepository({
         findById: vi
           .fn()
@@ -107,7 +110,7 @@ describe("ReviewsService", () => {
 
       await expect(
         service.deleteReview("review-1", "user-1"),
-      ).rejects.toBeInstanceOf(BadRequestError);
+      ).rejects.toBeInstanceOf(ValidationError);
       expect(repository.delete).not.toHaveBeenCalled();
     });
 

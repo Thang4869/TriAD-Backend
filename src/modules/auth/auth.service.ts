@@ -2,7 +2,10 @@ import crypto from "crypto";
 import { TokenStorePort } from "./application/ports/token-store.port";
 import { logger } from "@core/logger/winston";
 import { AuthUser } from "./application/ports/auth-user";
-import { BadRequestError, UnauthorizedError } from "@shared/utils/errors";
+import {
+  ValidationError,
+  AuthenticationError,
+} from "@shared/errors/application-error";
 import { hashPassword, comparePassword } from "@shared/utils/bcrypt";
 import type {
   CreateUserData,
@@ -50,7 +53,7 @@ export class AuthService {
 
   async register(data: CreateUserData) {
     const existing = await this.repository.findUserByEmail(data.email);
-    if (existing) throw new BadRequestError("Email already registered");
+    if (existing) throw new ValidationError("Email already registered");
 
     const hashedPassword = await hashPassword(data.password);
     const createdUser = await this.repository.createUser({
@@ -73,10 +76,10 @@ export class AuthService {
   async verifyEmail(token: string) {
     const userId = await this.tokenStore.get(`email-verify:${token}`);
     if (!userId)
-      throw new BadRequestError("Verification link is invalid or has expired");
+      throw new ValidationError("Verification link is invalid or has expired");
 
     const foundUser = await this.repository.findUserById(userId);
-    if (!foundUser) throw new BadRequestError("User not found");
+    if (!foundUser) throw new ValidationError("User not found");
 
     await this.tokenStore.delete(`email-verify:${token}`);
 
@@ -107,13 +110,13 @@ export class AuthService {
 
   async login(email: string, password: string) {
     const user = await this.repository.findUserByEmail(email);
-    if (!user) throw new UnauthorizedError("Invalid credentials");
+    if (!user) throw new AuthenticationError("Invalid credentials");
 
     const isValid = await comparePassword(password, user.password || "");
-    if (!isValid) throw new UnauthorizedError("Invalid credentials");
+    if (!isValid) throw new AuthenticationError("Invalid credentials");
 
     if (!user.isVerified)
-      throw new UnauthorizedError("Please verify your email");
+      throw new AuthenticationError("Please verify your email");
 
     if (user.is2FAEnabled) {
       return {

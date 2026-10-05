@@ -276,4 +276,100 @@ describe("outbox observability and retry (integration, real DB)", () => {
       }),
     ).resolves.toBe(0);
   });
+
+  it("does not repeat a successful handler after crash before publishedAt", async () => {
+    const eventName = "CrashWindowIntegration";
+    const eventId = `crash-window-${Date.now()}`;
+    const occurredAt = new Date(Date.now() - 1_000);
+
+    await prisma.outboxEvent.create({
+      data: outboxEvent(eventId, eventName, occurredAt),
+    });
+
+    const tracker = new PrismaOutboxHandlerTracker();
+    const eventBus = new EventBus();
+
+    let sideEffects = 0;
+
+    eventBus.subscribe(eventName, "CrashWindowHandler", async () => {
+      sideEffects += 1;
+    });
+
+    // Simulate the first process:
+    // the handler side effect completed and its SUCCESS tracker row was persisted,
+    // but the process crashed before the outbox row received publishedAt.
+    const firstDelivery = await eventBus.publish(
+      {
+        eventName,
+        aggregateId: eventId,
+        occurredAt,
+      },
+      {
+        eventId,
+        tracker,
+      },
+    );
+
+    expect(firstDelivery).toEqual({
+      success: true,
+      failedHandlers: [],
+    });
+    expect(sideEffects).toBe(1);
+
+    await expect(
+      prisma.outboxEvent.findUnique({
+        where: { id: eventId },
+      }),
+    ).resolves.toMatchObject({
+      publishedAt: null,
+      attempts: 0,
+    });
+
+    await expect(
+      prisma.outboxHandlerLog.findUnique({
+        where: {
+          outboxEventId_handlerName: {
+            outboxEventId: eventId,
+            handlerName: "CrashWindowHandler",
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: "SUCCESS",
+    });
+
+    // A replacement relay reclaims the unpublished row.
+    // Handler tracker must prevent the external side effect from running twice.
+    await new OutboxRelay(
+      new PrismaOutboxRelayStore(),
+      new PrismaOutboxHandlerTracker(),
+      eventBus,
+      {
+        leaseDurationSeconds: 5,
+        heartbeatIntervalMs: 1_000,
+      },
+    ).pollOnce();
+
+    expect(sideEffects).toBe(1);
+
+    const published = await prisma.outboxEvent.findUnique({
+      where: { id: eventId },
+    });
+
+    expect(published).toMatchObject({
+      attempts: 0,
+      deadLetteredAt: null,
+    });
+    expect(published?.publishedAt).toBeInstanceOf(Date);
+
+    expect(
+      await prisma.outboxHandlerLog.count({
+        where: {
+          outboxEventId: eventId,
+          handlerName: "CrashWindowHandler",
+          status: "SUCCESS",
+        },
+      }),
+    ).toBe(1);
+  });
 });

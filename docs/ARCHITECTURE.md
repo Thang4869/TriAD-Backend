@@ -122,6 +122,16 @@ Checkout, reservation, compensation and projection lag are emitted at the applic
 
 Value objects enforce normalization and invariants inside aggregates while exposing primitive getters at the existing mapper boundary. This hardens the domain without changing frontend DTOs.
 
+### ADR-008: Runtime process topology
+
+TriAD currently runs the HTTP server, BullMQ workers, and OutboxRelay in the same application process.
+
+This is an intentional deployment decision for the current workload and portfolio scope rather than an architectural limitation. Queue processing and outbox delivery already have explicit lifecycle management and graceful shutdown integration.
+
+Separate worker entrypoints or runtime-role flags should only be introduced when operational evidence requires independent scaling, rolling deployment, resource isolation, or failure isolation between HTTP traffic and background processing.
+
+Until that requirement exists, keeping a single process avoids unnecessary deployment complexity while preserving clear component boundaries in the codebase.
+
 ## Operations
 
 ```bash

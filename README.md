@@ -3,31 +3,38 @@
 **Production-oriented E-Commerce Backend**  
 **Clean Architecture · Domain-Driven Design · CQRS · Reliability Engineering**
 
-[![Node.js](https://img.shields.io/badge/Node.js-20+-green)](<>)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](<>)
-[![Prisma](https://img.shields.io/badge/Prisma-5.22-2D3748)](<>)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)](<>)
-[![Redis](https://img.shields.io/badge/Redis-7-DC382D)](<>)
-[![BullMQ](https://img.shields.io/badge/BullMQ-5-red)](<>)
-[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-enabled-blue)](<>)
-[![Vitest](https://img.shields.io/badge/Vitest-Coverage-green)](<>)
+![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.3%2B-blue)
+![Prisma](https://img.shields.io/badge/Prisma-5.22-2D3748)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D)
+![BullMQ](https://img.shields.io/badge/BullMQ-5-red)
+![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-enabled-blue)
+![Vitest](https://img.shields.io/badge/Vitest-tested-green)
+
+Backend repository: [Thang4869/TriAD-Backend](https://github.com/Thang4869/TriAD-Backend)
+
+Frontend repository: [Thang4869/TriAD-12](https://github.com/Thang4869/TriAD-12)
 
 ---
 
 ## 1. Architecture Overview
 
-Dự án được thiết kế theo **Clean Architecture + Domain-Driven Design (DDD)** với các nguyên tắc cốt lõi:
+TriAD Backend is a modular monolith designed around **Clean Architecture** and **Domain-Driven Design (DDD)**. The codebase emphasizes explicit boundaries, transactional correctness, recoverable asynchronous processing, and testable infrastructure.
 
-- **Separation of Concerns** rõ ràng giữa Domain, Application, Infrastructure và Presentation.
-- **Dependency Inversion** được thực thi nghiêm ngặt thông qua DI Container tùy chỉnh.
-- **Domain Events + Transactional Outbox** để đảm bảo eventual consistency và reliability.
-- **Idempotency**, **Optimistic Concurrency**, **Circuit Breaker**, **Rate Limiting**, **CSRF Protection**.
-- **Observability** đầy đủ: Structured Logging (Winston), Metrics (Prometheus), Distributed Tracing (OpenTelemetry).
+Core principles:
 
-```
+- **Separation of Concerns** between Domain, Application, Infrastructure, and Presentation.
+- **Dependency Inversion** through a custom token-based DI container.
+- **Domain Events + Transactional Outbox** for side effects that require durable post-commit delivery.
+- **Idempotency**, **Optimistic Concurrency**, **Circuit Breaker**, **Rate Limiting**, and **CSRF Protection**.
+- **Observability** through structured logging, Prometheus metrics, and OpenTelemetry tracing.
+- **CQRS-style read models** where dedicated projections materially improve query isolation and recovery.
+
+```text
 src/
-├── core/                 # Infrastructure & Cross-cutting concerns
-│   ├── di/               # Dependency Injection Container + Tokens
+├── core/                 # Infrastructure & cross-cutting concerns
+│   ├── di/               # Dependency Injection container + tokens
 │   ├── database/         # Prisma client
 │   ├── redis/
 │   ├── queue/            # BullMQ
@@ -38,7 +45,7 @@ src/
 │   ├── tracing/
 │   ├── logger/
 │   └── storage/          # Cloudinary
-├── modules/              # Bounded Contexts (Vertical Slices)
+├── modules/              # Bounded contexts / vertical slices
 │   ├── auth/
 │   ├── users/
 │   ├── products/
@@ -49,13 +56,13 @@ src/
 │   ├── wishlist/
 │   ├── notifications/
 │   └── admin/
-├── shared/               # Shared Kernel
-│   ├── domain/           # AggregateRoot, DomainEvent, DomainError
-│   ├── value-objects/    # Money, Rating
+├── shared/               # Shared kernel
+│   ├── domain/
+│   ├── value-objects/
 │   ├── middlewares/
 │   ├── utils/
 │   └── constants/
-├── jobs/                 # Background jobs (Email, Image Processing)
+├── jobs/                 # Background jobs
 ├── config/
 ├── app.ts
 ├── container.ts
@@ -64,92 +71,118 @@ src/
 
 ### Bounded Contexts & Aggregates
 
-| Bounded Context | Aggregate Root  | Key Domain Concepts                      |
-| --------------- | --------------- | ---------------------------------------- |
-| Auth            | User            | RefreshToken family, 2FA (TOTP), OAuth   |
-| Products        | Product         | Stock (optimistic locking), SearchVector |
-| Cart            | Cart            | CartItem                                 |
-| Checkout        | Order (pending) | Pricing, Stock Reservation, Idempotency  |
-| Orders          | Order           | State Machine, PaymentStatus             |
-| Reviews         | Review          | Rating Value Object                      |
-| Wishlist        | WishlistItem    |                                          |
-| Notifications   | Notification    |                                          |
+| Bounded Context | Aggregate / Main Model | Key Domain Concepts |
+| --- | --- | --- |
+| Auth | User | Refresh token family, 2FA (TOTP), OAuth |
+| Products | Product | Stock, optimistic locking, search |
+| Cart | Cart | CartItem |
+| Checkout | Order creation flow | Pricing, stock reservation, idempotency |
+| Orders | Order | State machine, PaymentStatus |
+| Reviews | Review | Rating Value Object |
+| Wishlist | WishlistItem | User-product relationship |
+| Notifications | Notification | Delivery state / user notifications |
 
 ---
 
 ## 2. Core Design Principles
 
-### 2.1 Domain Layer (Pure & Rich)
+### 2.1 Domain Layer
 
-- **Entities** và **Aggregate Roots** chứa encapsulation mạnh (`order.entity.ts`, `product.entity.ts`, `cart.entity.ts`, `user.entity.ts`).
-- **Value Objects**: `Money`, `Rating` (immutable, self-validating).
-- **Domain Events** được raise trong Aggregate; các event cần durable delivery sau commit được persist qua Transactional Outbox, trong khi một số notification nội bộ vẫn dùng in-process EventBus.
-- **Domain Errors** thống nhất (`DomainError` hierarchy).
+- **Entities** and **Aggregate Roots** encapsulate domain behavior rather than exposing data-only models.
+- **Value Objects** such as `Money` and `Rating` are immutable and self-validating.
+- **Domain Events** are raised from aggregates.
+- Events that require durable post-commit delivery are persisted through the **Transactional Outbox**; purely in-process notifications may remain on the internal EventBus.
+- Domain failures use an explicit **`DomainError` hierarchy**.
 
 ### 2.2 Application Layer
 
-- Application Services / Use Cases mỏng, điều phối Domain + Infrastructure.
-- Checkout transaction boundary được quản lý bởi `CheckoutUnitOfWork`; adapter `PrismaCheckoutUnitOfWork` thực thi PostgreSQL `Serializable` transaction cho stock lock/decrement, discount usage, order + items, cart cleanup và Outbox persistence.
-- Idempotency Key được enforce ở middleware + service level (checkout, order placement).
+- Application services coordinate domain behavior and infrastructure ports.
+- Checkout uses a dedicated **`CheckoutUnitOfWork`**.
+- `PrismaCheckoutUnitOfWork` runs the checkout write path inside a PostgreSQL **`Serializable` transaction**, including stock locking/decrement, discount usage, order creation, order items, cart cleanup, and Outbox persistence.
+- Idempotency is enforced at the HTTP middleware boundary and at business-critical service/database boundaries where appropriate.
+- Application ports keep external systems and persistence concerns outside domain logic.
 
 ### 2.3 Infrastructure Layer
 
-- **Repository** pattern (interface ở Domain/Application, implementation ở Infrastructure).
-- **Transactional Outbox** + `outbox_handler_log` cung cấp at-least-once delivery, handler success tracking và idempotent replay/recovery.
-- **Circuit Breaker** (Opossum) bảo vệ external services.
-- **Optimistic Concurrency Control** (`version` field trên Product & Order).
+- Repository interfaces live behind application/domain-facing ports; Prisma adapters implement persistence.
+- **Transactional Outbox** + `outbox_handler_log` provide at-least-once delivery, handler success tracking, retry/recovery, and idempotent replay behavior.
+- **Circuit Breaker** behavior is implemented with Opossum, with retry behavior where explicitly configured.
+- **Optimistic Concurrency Control** uses persisted version fields for Product and Order updates.
+- Redis supports idempotency, rate limiting, queues, and token/session-related infrastructure.
 
-Dashboard, catalog và order history dùng query-side adapters riêng. Catalog đọc
-`product_catalog_projection`, order history đọc `order_history_projection`, còn
-dashboard kết hợp `admin_dashboard_projection` cho summary với hai read model
-trên cho analytics. `newUsers30Days` là query hẹp trên `users` vì hiện chưa có
-user projection; dashboard không fallback về write repository.
+### 2.4 CQRS Read Models
 
-### 2.4 Cross-cutting Concerns
+Dedicated query-side adapters are used where they provide a concrete benefit:
 
-- Structured logging với request correlation.
-- Prometheus metrics + custom business metrics.
-- OpenTelemetry tracing (Jaeger / OTEL Collector).
-- Rate limiting (Redis store) + strict rate limit cho auth endpoints.
-- CSRF protection, Helmet, input validation (Zod).
+- Product catalog → `product_catalog_projection`
+- Order history → `order_history_projection`
+- Admin dashboard → `admin_dashboard_projection` plus dedicated read models
+
+Projection updates use source-version-aware ordering so stale events cannot overwrite newer state. Rebuild procedures are documented in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
+
+### 2.5 Cross-cutting Concerns
+
+- Structured logging with request correlation.
+- Prometheus metrics and business metrics.
+- OpenTelemetry tracing through the OTEL Collector / Jaeger development stack.
+- Redis-backed rate limiting with stricter authentication limits.
+- CSRF protection for cookie-authenticated write requests.
+- Helmet, CORS configuration, cookie hardening, and Zod input validation.
 
 ---
 
-## 3. Key Production Features
+## 3. Reliability & Platform Features
 
-| Feature                | Implementation                                        | Status |
-| ---------------------- | ----------------------------------------------------- | ------ |
-| Transactional Outbox   | `outbox_events` + `outbox_handler_log` + Relay        | ✅     |
-| Idempotency            | Redis + Idempotency-Key header + DB unique constraint | ✅     |
-| Optimistic Locking     | `version` column + Prisma updateMany                  | ✅     |
-| Stock Reservation      | Checkout flow với reservation service                 | ✅     |
-| 2FA (TOTP)             | Speakeasy + encrypted secret                          | ✅     |
-| Refresh Token Rotation | Family-based rotation + revocation                    | ✅     |
-| Full-text Search       | PostgreSQL `tsvector` + GIN index                     | ✅     |
-| Background Jobs        | BullMQ (Email, Image processing)                      | ✅     |
-| Health Checks          | Liveness + Readiness (DB, Redis, Queue)               | ✅     |
-| Observability          | Winston + Prometheus + OpenTelemetry                  | ✅     |
-| Docker & Compose       | Multi-stage Dockerfile + prod compose                 | ✅     |
+| Feature | Implementation | Status |
+| --- | --- | --- |
+| Transactional Outbox | `outbox_events` + `outbox_handler_log` + relay | ✅ Implemented |
+| Idempotency | Redis + `Idempotency-Key` + DB constraints where required | ✅ Implemented |
+| Optimistic Locking | Version-based conditional updates | ✅ Implemented |
+| Checkout transaction boundary | `CheckoutUnitOfWork` + PostgreSQL Serializable transaction | ✅ Implemented |
+| Stock protection | Locking / version checks / retryable conflict handling | ✅ Implemented |
+| 2FA (TOTP) | Speakeasy + encrypted secret | ✅ Implemented |
+| Refresh token rotation | Family-based rotation + revocation | ✅ Implemented |
+| Full-text search | PostgreSQL `tsvector` + GIN index | ✅ Implemented |
+| Background jobs | BullMQ | ✅ Implemented |
+| Health checks | Liveness + readiness | ✅ Implemented |
+| Observability | Winston + Prometheus + OpenTelemetry | ✅ Implemented |
+| Docker & Compose | Multi-stage Dockerfile + dev/prod Compose | ✅ Implemented |
+| Payment provider integration | Provider port / extension point | ⏳ Not production-wired |
+| Saga runtime orchestration | State machines + persistence prepared | ⏳ Not production-wired |
 
 ---
 
 ## 4. Testing Strategy
 
 ```bash
-# Unit tests (fast, isolated)
+# Type checking
+npm run typecheck
+
+# Lint
+npm run lint
+
+# Unit tests
 npm run test:unit
 
-# Integration tests (real DB + Redis via Testcontainers)
+# Integration tests
 npm run test:integration
 
 # Full suite
 npm test
+
+# Production build
+npm run build
 ```
 
-- **Unit tests**: Domain logic, Services, Value Objects, Middlewares (high coverage).
-- **Property-based testing**: `Money`, Order state machine, Product stock (fast-check).
-- **Integration tests**: Repository layer, concurrent checkout scenarios, Outbox.
-- **Testcontainers** cho PostgreSQL & Redis → test gần production environment.
+Coverage and reliability strategy includes:
+
+- **Unit tests** for domain logic, services, value objects, and middleware.
+- **Property-based tests** for invariants such as Money, order state transitions, and stock behavior.
+- **Integration tests** with real PostgreSQL and Redis through Testcontainers.
+- **Concurrency tests** around checkout, optimistic conflicts, and Outbox claims.
+- **Outbox recovery tests** covering retries, handler tracking, replay, crash windows, and dead-letter behavior.
+- **Projection ordering/rebuild tests** using persisted source versions.
+- **Redis idempotency integration tests** for in-progress claims, TTL, completed replay, and payload mismatch rejection.
 
 ---
 
@@ -157,166 +190,362 @@ npm test
 
 ### Prerequisites
 
-- Node.js ≥ 20
-- Docker & Docker Compose
-- PostgreSQL 16 + Redis 7 (hoặc dùng docker-compose)
+- Node.js 20+
+- npm
+- Docker + Docker Compose
+- Git
 
-### Local Development
+### 5.1 Backend Local Development
 
 ```bash
-# 1. Clone & install
-git clone <repo>
-cd triad-backend
+git clone https://github.com/Thang4869/TriAD-Backend.git
+cd TriAD-Backend
 npm install
+```
 
-# 2. Environment
+Create the local environment file:
+
+```bash
 cp .env.example .env
-# Điền DATABASE_URL, REDIS_URL, JWT secrets, Cloudinary, OAuth credentials...
+```
 
-# 3. Database
-npx prisma migrate dev
+PowerShell equivalent:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The provided development baseline expects:
+
+```env
+PORT=5000
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/triad?schema=public
+REDIS_URL=redis://localhost:6379
+FRONTEND_URL=http://localhost:3000
+CORS_ORIGIN=http://localhost:3000
+```
+
+Replace the example JWT/TOTP secrets before using the environment for anything beyond local development.
+
+Start infrastructure:
+
+```bash
+docker compose up -d postgres redis jaeger
+```
+
+Run database migrations and seed data:
+
+```bash
+npm run prisma:migrate
 npm run seed
+```
 
-# 4. Start services
-docker-compose up -d postgres redis jaeger
+Start the backend:
 
-# 5. Run
+```bash
 npm run dev
 ```
 
-API sẽ chạy tại `http://localhost:5000`  
-Swagger (development): `http://localhost:5000/api/docs`
+Development endpoints:
 
-> `/api/docs` được tắt ở production; production API documentation nên được publish qua protected/staging docs hoặc static OpenAPI artifact.
+- API: `http://localhost:5000`
+- Swagger UI: `http://localhost:5000/api/docs`
+- Health: `http://localhost:5000/health`
+- Liveness: `http://localhost:5000/health/live`
+- Readiness: `http://localhost:5000/health/ready`
+- Metrics: `http://localhost:5000/metrics`
+- Jaeger UI: `http://localhost:16686`
 
-Jaeger UI: `http://localhost:16686`
+> `/api/docs` and `/metrics` are not mounted by the application in production.
 
-### Production
+### 5.2 Frontend Integration
+
+Run the frontend in a separate terminal:
 
 ```bash
-docker-compose -f docker-compose.prod.yml up -d --build
+git clone https://github.com/Thang4869/TriAD-12.git
+cd TriAD-12
+npm install
+npm run dev
 ```
 
+The frontend development server runs at:
+
+```text
+http://localhost:3000
+```
+
+During local development, Vite proxies:
+
+```text
+/api/* -> http://localhost:5000
+```
+
+This allows frontend code to call `/api/...` while Vite forwards the request to the backend.
+
+The local development flow is:
+
+1. Start PostgreSQL, Redis, and Jaeger.
+2. Run backend migrations and seed data.
+3. Start the backend with `npm run dev`.
+4. Start the frontend with `npm run dev`.
+5. Open `http://localhost:3000`.
+
+For production frontend deployment, configure the frontend API base URL for the deployed backend rather than relying on the local Vite proxy.
+
+### 5.3 Production Compose
+
+Production deployment requires the variables expected by `docker-compose.prod.yml`, including database, Redis, JWT/TOTP, frontend/CORS, SMTP, and Cloudinary configuration.
+
+Validate configuration first:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml config --quiet
+```
+
+Then build and start:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+```
+
+Run production migrations as an explicit deployment step:
+
+```bash
+npm run prisma:migrate:deploy
+```
+
+Operational procedures for Outbox replay, cleanup, projection rebuilds, incident handling, and recovery are documented in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
+
 ---
 
-## 6. Project Structure Highlights (OOP / Clean Code)
+## 6. Project Structure Highlights
 
-- **DI Container** tùy chỉnh với token-based resolution (`src/core/di`).
-- **Aggregate Root** base class quản lý domain events.
-- **Checkout-scoped Unit of Work** (`CheckoutUnitOfWork` → `PrismaCheckoutUnitOfWork`) cho atomic checkout transaction; các module khác dùng transaction boundary phù hợp với use case thay vì một global UoW abstraction.
-- **Specification** pattern trong Products (search, filter).
-- **Strategy** pattern hiện được dùng cho OAuth providers; payment orchestration vẫn là extension point và chưa được production-wire với provider thật.
-- **Middleware chain** rõ ràng, có request scope.
-- **Mapper** được dùng tại các boundary cần thiết như Auth và Products; các module/read-model khác có thể map trực tiếp khi không cần thêm abstraction.
+- **Custom DI Container** with token-based resolution and explicit lifetimes.
+- **Aggregate Root** base abstraction for domain events.
+- **Checkout-scoped Unit of Work** rather than a misleading global UoW abstraction.
+- **Specification Pattern** for Product catalog filtering/search.
+- **Strategy Pattern** for OAuth providers.
+- **Mapper abstractions** only at boundaries where mapping adds value.
+- **Repository / Port-Adapter boundaries** for persistence and external services.
+- **Middleware chain** for request scope, authentication, CSRF, idempotency, logging, metrics, validation, and error translation.
+
+Payment orchestration remains an extension point; a real payment/refund provider is not production-wired yet.
 
 ---
 
-## 7. Security Checklist
+## 7. Security
 
-- [x] Password hashing (bcrypt)
-- [x] JWT Access + Refresh Token (rotation + family revocation)
+- [x] Password hashing with bcrypt
+- [x] JWT access + refresh token flow
+- [x] Refresh token rotation and family revocation
 - [x] 2FA (TOTP)
-- [x] Rate limiting (global + auth strict)
+- [x] Authentication rate limiting
+- [x] Redis-backed global/API rate limiting
 - [x] CSRF protection
-- [x] Helmet + CORS config
-- [x] Input validation (Zod)
-- [x] Idempotency keys
-- [x] Sensitive data redaction in logs
-- [x] Secure headers & cookie settings
+- [x] Helmet security headers
+- [x] CORS configuration
+- [x] Zod input validation
+- [x] Idempotency keys for critical write flows
+- [x] Sensitive-data redaction in logs
+- [x] Secure cookie configuration
+- [x] Production Swagger/metrics exposure disabled by application routing
+
+Deployed cross-origin authentication still requires environment-specific verification on the actual frontend/backend domains.
 
 ---
 
 ## 8. Observability & Operations
 
-- **Health**: `/health`, `/health/ready`
-- **Metrics**: `/metrics` (Prometheus)
-- **Tracing**: OpenTelemetry → OTEL Collector / Jaeger
-- **Logging**: Winston + Daily Rotate + structured JSON
-- **Outbox monitoring**: dead-letter + attempts tracking
+### Health
+
+- `GET /health`
+- `GET /health/live`
+- `GET /health/ready`
+
+Readiness checks infrastructure dependencies and returns `503` when the application is not ready to serve traffic.
+
+### Metrics
+
+Prometheus-compatible metrics are exposed through `/metrics` outside production. Production metrics exposure should be handled through an explicitly protected/internal deployment path rather than a public endpoint.
+
+### Tracing
+
+OpenTelemetry tracing is initialized by the application and can export through the OTEL Collector. The development Compose stack includes Jaeger for local inspection.
+
+### Logging
+
+Winston provides structured logging and request correlation. Runtime failures in queue, Outbox, persistence, and HTTP boundaries are logged with contextual metadata.
+
+### Outbox Operations
+
+The Outbox implementation includes:
+
+- row claiming with lease semantics,
+- handler success tracking,
+- retry/backoff,
+- dead-letter handling,
+- replay tooling,
+- cleanup tooling,
+- observability metrics,
+- crash-window recovery behavior.
+
+See [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
 ---
 
 ## 9. Architecture Decision Records
 
-### ADR-001: Modular Monolith trước Microservices
+### ADR-001: Modular Monolith Before Microservices
 
-Các bounded context được tách bằng module, port và DI ngay trong một process. Cách này giữ transaction boundary và local debugging đơn giản khi team còn cần thay đổi domain nhanh; Outbox và Saga tạo khả năng tách service sau này mà không buộc hệ thống trả giá vận hành microservices quá sớm.
+Bounded contexts are separated by modules, ports, and DI while remaining in one deployable application process.
 
-### ADR-002: Transactional Outbox + CQRS projections
+This keeps transaction boundaries, debugging, and local development simpler while the domain continues to evolve. Outbox-backed asynchronous boundaries make later extraction possible without paying the operational cost of microservices prematurely.
 
-Domain events được ghi cùng transaction với aggregate. Relay claim event bằng `SKIP LOCKED` và lease trước khi publish, nên nhiều instance không xử lý cùng row trong một lease. Catalog, Dashboard và Order History có dedicated projection tables được cập nhật bởi idempotent handlers. API response giữ nguyên để frontend không phải đổi hợp đồng.
+### ADR-002: Transactional Outbox + CQRS Projections
 
-### ADR-003: Prepared Saga orchestration
+Events that require durable post-commit processing are written in the same database transaction as the associated state change.
 
-`CheckoutSaga` và `CancellationRefundSaga` có persisted state, retry/timeout policy, deadline và compensation semantics. Tuy nhiên production checkout hiện vẫn dùng transaction-based flow; Saga chỉ được production-wire khi payment/refund adapters và runtime integration evidence đầy đủ.
+The Outbox relay claims rows with PostgreSQL locking/lease semantics before dispatch. Dedicated projections support catalog, dashboard, and order-history read paths. Handlers and projection writers are designed to tolerate retry/replay.
+
+### ADR-003: Prepared Saga Orchestration
+
+`CheckoutSaga` and `CancellationRefundSaga` include persisted state, retry/timeout behavior, deadlines, and compensation semantics.
+
+They are **not the current production checkout path**. Production checkout remains transaction-based. Saga orchestration should only be wired into the runtime after payment/refund adapters and end-to-end failure semantics are proven.
+
+---
 
 ## 10. Principal Architecture
 
-Mermaid C4 context/container/component diagrams, sequence flows, decision records, trade-offs và production commands nằm tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Runbook xử lý Outbox, Saga và Projection nằm tại [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Detailed Mermaid diagrams, architectural decisions, transaction boundaries, and trade-offs are documented in:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
+
+The current runtime topology intentionally runs the HTTP server, BullMQ workers, and OutboxRelay in the same application process. Separate worker processes should be introduced only when scaling, deployment isolation, resource isolation, or failure isolation requirements justify the added operational complexity.
+
+---
 
 ## 11. Diagrams
 
-### C4 Context
+### 11.1 System Context
 
 ```mermaid
 flowchart LR
-	Customer[Customer / Admin] --> API[TriAD Backend API]
-	API --> DB[(PostgreSQL)]
-	API --> Redis[(Redis)]
-	API --> External[Payment / Email / Image providers]
+    User[Customer / Admin] --> FE[TriAD Frontend]
+    FE --> API[TriAD Backend API]
+
+    API --> DB[(PostgreSQL)]
+    API --> Redis[(Redis)]
+    API --> Email[Email Provider]
+    API --> Images[Cloudinary]
+
+    API -. future payment adapter .-> Payment[Payment Provider]
 ```
 
-### C4 Container
+### 11.2 Backend Container View
 
 ```mermaid
 flowchart TB
-	API[Express Presentation] --> App[Application Services / CQRS]
-	App --> Domain[Domain Aggregates / Value Objects]
-	App --> Ports[Ports: repositories, payment, email, flags]
-	Ports --> Adapters[Prisma, Redis, BullMQ, Cloudinary]
-	Adapters --> DB[(PostgreSQL + Outbox)]
-	DB --> Relay[Outbox Relay]
-	Relay --> Bus[Event Bus / Saga Process Managers]
+    HTTP[Express Presentation] --> App[Application Services / CQRS]
+    App --> Domain[Domain Aggregates / Value Objects]
+    App --> Ports[Application Ports]
+
+    Ports --> Prisma[Prisma Adapters]
+    Ports --> RedisAdapter[Redis / BullMQ]
+    Ports --> External[Email / Image Adapters]
+
+    Prisma --> DB[(PostgreSQL + Outbox)]
+    DB --> Relay[Outbox Relay]
+    Relay --> EventBus[Event Bus / Projection Handlers]
+
+    Saga[Prepared Saga State Machines] -. not production-wired .-> App
+    Payment[Future Payment Adapter] -. extension point .-> Ports
 ```
 
-### C4 Component: Checkout
+### 11.3 Current Production Checkout
+
+```mermaid
+flowchart TD
+    Request[Checkout Request] --> Idempotency[Idempotency Validation]
+    Idempotency --> UoW[CheckoutUnitOfWork]
+    UoW --> Tx[PostgreSQL Serializable Transaction]
+
+    Tx --> Lock[Lock / Validate Stock]
+    Lock --> Pricing[Pricing / Discount Validation]
+    Pricing --> Order[Create Order + Items]
+    Order --> Stock[Decrement Stock]
+    Stock --> Outbox[Persist Durable Domain Events]
+    Outbox --> Cart[Clear Cart]
+    Cart --> Commit[Commit]
+
+    Commit --> Response[Checkout Response]
+```
+
+### 11.4 Prepared Saga State Model
+
+The following models future distributed payment orchestration; it is **not** the currently wired production checkout path.
 
 ```mermaid
 stateDiagram-v2
-	[*] --> StockReserved
-	StockReserved --> OrderPlaced
-	OrderPlaced --> PaymentAuthorized
-	PaymentAuthorized --> Completed
-	StockReserved --> Compensated: failure
-	OrderPlaced --> Compensated: failure
-	PaymentAuthorized --> Compensated: failure
+    [*] --> StockReserved
+    StockReserved --> OrderPlaced
+    OrderPlaced --> PaymentAuthorized
+    PaymentAuthorized --> Completed
+
+    StockReserved --> Compensated: failure
+    OrderPlaced --> Compensated: failure
+    PaymentAuthorized --> Compensated: failure
 ```
-
-## 12. Reliability and Verification
-
-- `CheckoutSaga` and `CancellationRefundSaga` have unit fault-injection tests, persisted state and compensation paths.
-- Saga state machines and the PostgreSQL `saga_states` adapter are implemented, while the current production checkout path remains transaction-based until payment and Saga port adapters are integrated.
-- `.github/workflows/quality-gates.yml` runs typecheck, OpenAPI contract verification, unit tests, build and the Outbox chaos probe.
-- `ops/prometheus/alerts.yml` contains sample rules for outbox lag, delivery failures and stock reservation failures.
-- Run `npm run typecheck`, `npm run test:unit`, and `npm run test:integration` before deployment.
-
-Remaining production integration work is intentionally adapter-specific: a real payment provider, Saga runtime port wiring, Pact/OpenAPI consumer verification, and CI chaos jobs require the deployment environment and frontend contract. The ports and state machines keep those additions isolated from the domain.
 
 ---
 
-## 13. License & Author
+## 12. Reliability & Verification
 
-**TriAD Backend** – Public portfolio repository  
-Built to demonstrate production-oriented backend architecture, reliability patterns, maintainability and scalable design practices.
+Implemented reliability evidence includes:
 
-> No explicit open-source license is currently included. Reuse, modification or redistribution rights are not granted unless a license is added.
+- Checkout concurrency and conflict handling.
+- PostgreSQL Serializable transaction boundaries.
+- Idempotency replay and payload-mismatch protection.
+- Redis-backed idempotency integration tests.
+- Outbox retry, lease, handler-tracker, crash-window, replay, and dead-letter behavior.
+- Source-version-aware projection ordering and rebuild procedures.
+- Unit fault-injection tests for prepared Saga state machines.
+- OpenAPI contract verification.
+- Architecture boundary checks.
+- Typecheck, lint, build, unit, integration, and broader quality-gate coverage.
+
+Before deployment, run at minimum:
+
+```bash
+npm run typecheck
+npm run lint
+npm run architecture:check
+npm run test:unit
+npm run test:integration
+npm run build
+```
+
+Current limitations are explicit:
+
+- No real payment/refund provider is production-wired.
+- Prepared Saga orchestration is not the active production checkout path.
+- Cross-domain production CSRF/CORS/OAuth behavior still requires smoke verification on the deployed frontend/backend domains.
+- Full frontend-to-backend CI journey and production-image runtime smoke/recovery evidence remain separate operational backlog items where not yet completed.
 
 ---
 
-> **Philosophy**:  
-> Code is written once, read and maintained many times.  
-> Domain purity, explicit boundaries, and operational excellence are non-negotiable.
+## 13. License & Portfolio Use
 
-```
+**TriAD Backend** is a public portfolio repository built to demonstrate production-oriented backend architecture, reliability patterns, maintainability, and scalable design practices.
 
-```
+No explicit open-source license is currently included. Reuse, modification, or redistribution rights are therefore not granted unless a license is added.
+
+---
+
+> **Philosophy**
+>
+> Code is written once, read and maintained many times.
+>
+> Domain purity, explicit boundaries, and operational reliability should be demonstrated by code and evidence, not by labels alone.

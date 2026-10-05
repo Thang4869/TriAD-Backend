@@ -27,6 +27,9 @@ export class PrismaDashboardReadRepository implements DashboardReadPort {
     const groups = await prisma.orderHistoryProjection.groupBy({
       by: ["status"],
       _count: { status: true },
+      orderBy: {
+        status: "asc",
+      },
     });
 
     return groups.map((group) => ({

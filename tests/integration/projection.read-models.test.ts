@@ -185,8 +185,8 @@ describe("projection read adapters (integration, real DB)", () => {
       { date: "2020-01-02", grossOrderValue: 100, orderCount: 1 },
     ]);
     expect(statusBreakdown).toEqual([
-      { status: OrderStatus.CANCELLED, count: 1 },
       { status: OrderStatus.PENDING, count: 1 },
+      { status: OrderStatus.CANCELLED, count: 1 },
     ]);
     expect(topSelling[0]).toMatchObject({
       productId,

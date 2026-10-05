@@ -37,8 +37,7 @@ src/
 │   ├── metrics/
 │   ├── tracing/
 │   ├── logger/
-│   ├── storage/          # Cloudinary
-│   └── unit-of-work/
+│   └── storage/          # Cloudinary
 ├── modules/              # Bounded Contexts (Vertical Slices)
 │   ├── auth/
 │   ├── users/
@@ -90,7 +89,7 @@ src/
 ### 2.2 Application Layer
 
 - Application Services / Use Cases mỏng, điều phối Domain + Infrastructure.
-- Transactional boundary được quản lý bởi **Unit of Work**.
+- Checkout transaction boundary được quản lý bởi `CheckoutUnitOfWork`; adapter `PrismaCheckoutUnitOfWork` thực thi PostgreSQL `Serializable` transaction cho stock lock/decrement, discount usage, order + items, cart cleanup và Outbox persistence.
 - Idempotency Key được enforce ở middleware + service level (checkout, order placement).
 
 ### 2.3 Infrastructure Layer
@@ -201,7 +200,7 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
 - **DI Container** tùy chỉnh với token-based resolution (`src/core/di`).
 - **Aggregate Root** base class quản lý domain events.
-- **Unit of Work** pattern cho transaction boundary.
+- **Checkout-scoped Unit of Work** (`CheckoutUnitOfWork` → `PrismaCheckoutUnitOfWork`) cho atomic checkout transaction; các module khác dùng transaction boundary phù hợp với use case thay vì một global UoW abstraction.
 - **Specification** pattern trong Products (search, filter).
 - **Strategy** pattern cho OAuth providers và Payment methods (dễ mở rộng).
 - **Middleware chain** rõ ràng, có request scope.

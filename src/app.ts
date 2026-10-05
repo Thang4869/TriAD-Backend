@@ -2,8 +2,7 @@ import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import { json, urlencoded } from "body-parser";
-import { Request } from "express";
+import { json, urlencoded, Request } from "express";
 
 import cookieParser from "cookie-parser";
 import swaggerUi from "swagger-ui-express";

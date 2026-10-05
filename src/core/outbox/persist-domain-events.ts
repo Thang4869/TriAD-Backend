@@ -27,13 +27,10 @@ export async function persistEvents(
       })),
     });
   } catch (error) {
-    logger.error(
-      "Failed to write domain events to outbox - see prisma/schema.additions.prisma",
-      {
-        error,
-        events: events.map((event) => event.eventName),
-      },
-    );
+    logger.error("Failed to write domain events to outbox", {
+      error,
+      events: events.map((event) => event.eventName),
+    });
 
     throw error;
   }

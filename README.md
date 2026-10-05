@@ -1,7 +1,7 @@
 # TriAD Backend (DNEK)
 
-**Production-ready E-Commerce Backend**  
-**Tech Lead Level · Clean Architecture · Domain-Driven Design · High Reliability**
+**Production-oriented E-Commerce Backend**  
+**Clean Architecture · Domain-Driven Design · CQRS · Reliability Engineering**
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green)](<>)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](<>)
@@ -77,13 +77,13 @@ src/
 
 ---
 
-## 2. Core Design Principles (Tech Lead Level)
+## 2. Core Design Principles
 
 ### 2.1 Domain Layer (Pure & Rich)
 
 - **Entities** và **Aggregate Roots** chứa encapsulation mạnh (`order.entity.ts`, `product.entity.ts`, `cart.entity.ts`, `user.entity.ts`).
 - **Value Objects**: `Money`, `Rating` (immutable, self-validating).
-- **Domain Events** được raise bên trong Aggregate và publish qua Outbox.
+- **Domain Events** được raise trong Aggregate; các event cần durable delivery sau commit được persist qua Transactional Outbox, trong khi một số notification nội bộ vẫn dùng in-process EventBus.
 - **Domain Errors** thống nhất (`DomainError` hierarchy).
 
 ### 2.2 Application Layer
@@ -95,7 +95,7 @@ src/
 ### 2.3 Infrastructure Layer
 
 - **Repository** pattern (interface ở Domain/Application, implementation ở Infrastructure).
-- **Transactional Outbox** + `outbox_handler_log` để đảm bảo at-least-once delivery và exactly-once per handler.
+- **Transactional Outbox** + `outbox_handler_log` cung cấp at-least-once delivery, handler success tracking và idempotent replay/recovery.
 - **Circuit Breaker** (Opossum) bảo vệ external services.
 - **Optimistic Concurrency Control** (`version` field trên Product & Order).
 
@@ -185,7 +185,10 @@ npm run dev
 ```
 
 API sẽ chạy tại `http://localhost:5000`  
-Swagger: `http://localhost:5000/api-docs`  
+Swagger (development): `http://localhost:5000/api/docs`
+
+> `/api/docs` được tắt ở production; production API documentation nên được publish qua protected/staging docs hoặc static OpenAPI artifact.
+
 Jaeger UI: `http://localhost:16686`
 
 ### Production
@@ -202,9 +205,9 @@ docker-compose -f docker-compose.prod.yml up -d --build
 - **Aggregate Root** base class quản lý domain events.
 - **Checkout-scoped Unit of Work** (`CheckoutUnitOfWork` → `PrismaCheckoutUnitOfWork`) cho atomic checkout transaction; các module khác dùng transaction boundary phù hợp với use case thay vì một global UoW abstraction.
 - **Specification** pattern trong Products (search, filter).
-- **Strategy** pattern cho OAuth providers và Payment methods (dễ mở rộng).
+- **Strategy** pattern hiện được dùng cho OAuth providers; payment orchestration vẫn là extension point và chưa được production-wire với provider thật.
 - **Middleware chain** rõ ràng, có request scope.
-- **Mapper** tách biệt giữa Domain Entity ↔ Persistence ↔ DTO.
+- **Mapper** được dùng tại các boundary cần thiết như Auth và Products; các module/read-model khác có thể map trực tiếp khi không cần thêm abstraction.
 
 ---
 
@@ -243,19 +246,15 @@ Các bounded context được tách bằng module, port và DI ngay trong một 
 
 Domain events được ghi cùng transaction với aggregate. Relay claim event bằng `SKIP LOCKED` và lease trước khi publish, nên nhiều instance không xử lý cùng row trong một lease. Catalog, Dashboard và Order History có dedicated projection tables được cập nhật bởi idempotent handlers. API response giữ nguyên để frontend không phải đổi hợp đồng.
 
-### ADR-003: Production Saga orchestration
+### ADR-003: Prepared Saga orchestration
 
-Checkout và Cancellation/Refund lưu state bằng Prisma, retry từng step với exponential backoff, timeout từng step và deadline toàn Saga. Compensation được gọi qua cùng policy để chịu được retry và process restart.
+`CheckoutSaga` và `CancellationRefundSaga` có persisted state, retry/timeout policy, deadline và compensation semantics. Tuy nhiên production checkout hiện vẫn dùng transaction-based flow; Saga chỉ được production-wire khi payment/refund adapters và runtime integration evidence đầy đủ.
 
 ## 10. Principal Architecture
 
 Mermaid C4 context/container/component diagrams, sequence flows, decision records, trade-offs và production commands nằm tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Runbook xử lý Outbox, Saga và Projection nằm tại [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-### ADR-003: Saga cho workflow phân tán
-
-Checkout và Cancellation/Refund là process manager có state machine, resume và compensation. Payment, inventory và email được biểu diễn qua ports để adapter thật có thể thêm timeout, retry, circuit breaker và bulkhead mà không làm bẩn domain.
-
-## 10. Diagrams
+## 11. Diagrams
 
 ### C4 Context
 
@@ -293,7 +292,7 @@ stateDiagram-v2
 	PaymentAuthorized --> Compensated: failure
 ```
 
-## 11. Reliability and Verification
+## 12. Reliability and Verification
 
 - `CheckoutSaga` and `CancellationRefundSaga` have unit fault-injection tests, persisted state and compensation paths.
 - Saga state machines and the PostgreSQL `saga_states` adapter are implemented, while the current production checkout path remains transaction-based until payment and Saga port adapters are integrated.
@@ -301,14 +300,16 @@ stateDiagram-v2
 - `ops/prometheus/alerts.yml` contains sample rules for outbox lag, delivery failures and stock reservation failures.
 - Run `npm run typecheck`, `npm run test:unit`, and `npm run test:integration` before deployment.
 
-Remaining production integration work is intentionally adapter-specific: a real payment provider, production Saga port wiring, Pact/OpenAPI consumer verification, and CI chaos jobs require the deployment environment and frontend contract. The ports and state machines keep those additions isolated from the domain.
+Remaining production integration work is intentionally adapter-specific: a real payment provider, Saga runtime port wiring, Pact/OpenAPI consumer verification, and CI chaos jobs require the deployment environment and frontend contract. The ports and state machines keep those additions isolated from the domain.
 
 ---
 
-## 10. License & Author
+## 13. License & Author
 
-**TriAD Backend** – Internal / Private  
-Architected for production reliability, maintainability and team scalability.
+**TriAD Backend** – Public portfolio repository  
+Built to demonstrate production-oriented backend architecture, reliability patterns, maintainability and scalable design practices.
+
+> No explicit open-source license is currently included. Reuse, modification or redistribution rights are not granted unless a license is added.
 
 ---
 

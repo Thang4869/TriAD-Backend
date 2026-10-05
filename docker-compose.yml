@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -9,7 +7,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: triad
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +20,7 @@ services:
     image: redis:7-alpine
     container_name: triad-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -43,14 +41,12 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/triad?schema=public
       REDIS_URL: redis://redis:6379
-      QUEUE_REDIS_URL: redis://redis:6379
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
       - ./tests:/app/tests
       - ./package.json:/app/package.json
       - ./tsconfig.json:/app/tsconfig.json
-      - ./nodemon.json:/app/nodemon.json
       - /app/node_modules
     depends_on:
       postgres:

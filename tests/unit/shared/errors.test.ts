@@ -1,29 +1,40 @@
 import { describe, it, expect } from "vitest";
 import {
-  BadRequestError,
-  UnauthorizedError,
-  ForbiddenError,
-  NotFoundError,
+  ApplicationError,
+  ValidationError,
+  AuthenticationError,
+  AuthorizationError,
+  ResourceNotFoundError,
   ConflictError,
+  UnprocessableError,
   RateLimitError,
-} from "@shared/utils/errors";
-import { AppError } from "@shared/middlewares/error-handler.middleware";
+} from "@shared/errors/application-error";
 
-describe("Custom error classes", () => {
+describe("application errors", () => {
   it.each([
-    [new BadRequestError("bad"), 400, "bad"],
-    [new UnauthorizedError(), 401, "Unauthorized"],
-    [new UnauthorizedError("custom"), 401, "custom"],
-    [new ForbiddenError(), 403, "Forbidden"],
-    [new NotFoundError(), 404, "Not found"],
-    [new ConflictError(), 409, "Conflict"],
-    [new RateLimitError(), 429, "Too many requests"],
-  ])(
-    "%# gán đúng statusCode và message mặc định",
-    (err, expectedStatus, expectedMessage) => {
-      expect(err).toBeInstanceOf(AppError);
-      expect((err as AppError).statusCode).toBe(expectedStatus);
-      expect(err.message).toBe(expectedMessage);
-    },
-  );
+    [new ValidationError("bad"), "APPLICATION.VALIDATION"],
+    [new AuthenticationError(), "APPLICATION.AUTHENTICATION"],
+    [new AuthorizationError(), "APPLICATION.AUTHORIZATION"],
+    [new ResourceNotFoundError(), "APPLICATION.NOT_FOUND"],
+    [new ConflictError(), "APPLICATION.CONFLICT"],
+    [new UnprocessableError(), "APPLICATION.UNPROCESSABLE"],
+    [new RateLimitError(), "APPLICATION.RATE_LIMIT"],
+  ])("exposes semantic code without HTTP concerns", (err, expectedCode) => {
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(ApplicationError);
+    expect(err.code).toBe(expectedCode);
+    expect(err.name).toBe(err.constructor.name);
+    expect(err.stack).toBeDefined();
+    expect("statusCode" in err).toBe(false);
+  });
+
+  it("supports optional context", () => {
+    const err = new ValidationError("Invalid input", {
+      field: "email",
+    });
+
+    expect(err.context).toEqual({
+      field: "email",
+    });
+  });
 });

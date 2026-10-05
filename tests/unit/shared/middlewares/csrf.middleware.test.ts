@@ -6,7 +6,7 @@ import {
   csrfCookieOptions,
   CSRF_COOKIE_NAME,
 } from "@shared/middlewares/csrf.middleware";
-import { ForbiddenError } from "@shared/utils/errors";
+import { AuthorizationError } from "@shared/errors/application-error";
 
 // vi.mock() được Vitest hoist lên ĐẦU file, TRƯỚC khi `const configMock = ...` chạy.
 // vi.hoisted() đảm bảo object này tồn tại sẵn ngay khi factory được gọi (fix TDZ).
@@ -112,7 +112,7 @@ describe("csrfProtection", () => {
       headers: {},
     });
 
-    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(ForbiddenError);
+    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(AuthorizationError);
   });
 
   it("cho qua khi cookie token và header token trùng khớp", () => {
@@ -130,8 +130,9 @@ describe("csrfProtection", () => {
       headers: {},
     });
 
-    const error = vi.mocked(next).mock.calls[0][0] as unknown as ForbiddenError;
-    expect(error).toBeInstanceOf(ForbiddenError);
+    const error = vi.mocked(next).mock
+      .calls[0][0] as unknown as AuthorizationError;
+    expect(error).toBeInstanceOf(AuthorizationError);
     expect(error.message).toBe("Invalid or missing CSRF token");
   });
 
@@ -141,7 +142,7 @@ describe("csrfProtection", () => {
       headers: { "x-csrf-token": VALID_TOKEN },
     });
 
-    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(ForbiddenError);
+    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(AuthorizationError);
   });
 
   it("chặn khi hai token khác nhau nhưng cùng độ dài", () => {
@@ -150,7 +151,7 @@ describe("csrfProtection", () => {
       headers: { "x-csrf-token": "b".repeat(64) },
     });
 
-    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(ForbiddenError);
+    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(AuthorizationError);
   });
 
   it("chặn khi hai token khác độ dài (không crash timingSafeEqual)", () => {
@@ -159,7 +160,7 @@ describe("csrfProtection", () => {
       headers: { "x-csrf-token": "short" },
     });
 
-    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(ForbiddenError);
+    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(AuthorizationError);
   });
 
   it("chặn khi header bị gửi nhiều lần (mảng thay vì string)", () => {
@@ -168,6 +169,6 @@ describe("csrfProtection", () => {
       headers: { "x-csrf-token": [VALID_TOKEN, VALID_TOKEN] },
     });
 
-    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(ForbiddenError);
+    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(AuthorizationError);
   });
 });

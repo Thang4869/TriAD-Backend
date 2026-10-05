@@ -1,6 +1,6 @@
 import multer from "multer";
 import { Request } from "express";
-import { BadRequestError } from "@shared/utils/errors";
+import { ValidationError } from "@shared/errors/application-error";
 import sharp from "sharp";
 import { NextFunction, Response } from "express";
 
@@ -14,7 +14,7 @@ function fileFilter(
 ) {
   if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
     return cb(
-      new BadRequestError(
+      new ValidationError(
         "Only JPEG, PNG or WEBP images are allowed",
       ) as unknown as Error,
     );
@@ -45,12 +45,12 @@ export const validateUploadedImage = async (
       !metadata.format ||
       !["jpeg", "png", "webp"].includes(metadata.format)
     ) {
-      next(new BadRequestError("Invalid image content"));
+      next(new ValidationError("Invalid image content"));
       return;
     }
 
     next();
   } catch {
-    next(new BadRequestError("Invalid image content"));
+    next(new ValidationError("Invalid image content"));
   }
 };

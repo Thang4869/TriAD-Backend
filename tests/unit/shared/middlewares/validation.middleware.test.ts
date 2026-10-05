@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { validate } from "@shared/middlewares/validation.middleware";
 import { z } from "zod";
 import { Request, Response } from "express";
-import { BadRequestError } from "@shared/utils/errors";
+import { ValidationError } from "@shared/errors/application-error";
 
 describe("validation middleware", () => {
   const schema = z.object({
@@ -77,7 +77,7 @@ describe("validation middleware", () => {
     expect(req.query).toEqual({ page: "2" });
   });
 
-  it("should throw BadRequestError on validation failure", () => {
+  it("should throw ValidationError on validation failure", () => {
     const req = {
       body: { name: "Jo" },
       query: {},
@@ -87,8 +87,8 @@ describe("validation middleware", () => {
     const next = vi.fn();
 
     validate(schema)(req, res, next);
-    expect(next).toHaveBeenCalledWith(expect.any(BadRequestError));
-    const error = next.mock.calls[0][0] as BadRequestError;
+    expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
+    const error = next.mock.calls[0][0] as ValidationError;
     expect(error.message).toContain(
       "String must contain at least 3 character(s)",
     );

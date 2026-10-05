@@ -1,15 +1,18 @@
 import { Request, Response, NextFunction } from "express";
-import { ForbiddenError } from "@shared/utils/errors";
+import {
+  AuthenticationError,
+  AuthorizationError,
+} from "@shared/errors/application-error";
 import { Role, ROLES, ALL_ROLES } from "@shared/types/roles";
 
 export const requireRole = (...roles: Role[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return next(new ForbiddenError("Authentication required"));
+      return next(new AuthenticationError("Authentication required"));
     }
 
     if (!roles.includes((req.user as { role: Role }).role)) {
-      return next(new ForbiddenError("Insufficient permissions"));
+      return next(new AuthorizationError("Insufficient permissions"));
     }
 
     next();

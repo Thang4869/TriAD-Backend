@@ -3,10 +3,10 @@ import crypto from "crypto";
 import redis from "@core/redis/client";
 import config from "@config";
 import {
-  BadRequestError,
+  ValidationError,
   ConflictError,
-  UnprocessableEntityError,
-} from "@shared/utils/errors";
+  UnprocessableError,
+} from "@shared/errors/application-error";
 import { logger } from "@core/logger/winston";
 
 export const idempotencyMiddleware = (
@@ -22,7 +22,7 @@ export const idempotencyMiddleware = (
       const idempotencyKey = typeof headerValue === "string" ? headerValue : "";
 
       if (!/^[A-Za-z0-9._~-]{1,128}$/.test(idempotencyKey)) {
-        return next(new BadRequestError("Idempotency-Key header required"));
+        return next(new ValidationError("Idempotency-Key header required"));
       }
 
       const userId =
@@ -129,7 +129,7 @@ function replayOrReject(
     };
     if (cachedResponse.requestHash !== requestHash) {
       return next(
-        new UnprocessableEntityError(
+        new UnprocessableError(
           "Idempotency key was reused with a different request",
         ),
       );

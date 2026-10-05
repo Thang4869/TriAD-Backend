@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { BadRequestError } from "@shared/utils/errors";
+import { ValidationError } from "@shared/errors/application-error";
 
 vi.mock("@core/queue/bull", () => ({
   emailQueue: { add: vi.fn() },
@@ -69,7 +69,7 @@ describe("upload.middleware", () => {
     const req = {} as any;
     const cb = vi.fn();
     fileFilter(req, { mimetype: "text/plain" } as any, cb);
-    expect(cb).toHaveBeenCalledWith(expect.any(BadRequestError));
+    expect(cb).toHaveBeenCalledWith(expect.any(ValidationError));
   });
 
   it("fileFilter should accept allowed mime types", () => {
@@ -110,7 +110,7 @@ describe("upload.middleware", () => {
 
     await validateUploadedImage(req, {} as any, next);
 
-    expect(next).toHaveBeenCalledWith(expect.any(BadRequestError));
+    expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
   });
 
   it("should reject unsupported detected image format", async () => {
@@ -126,6 +126,6 @@ describe("upload.middleware", () => {
 
     await validateUploadedImage(req, {} as any, next);
 
-    expect(next).toHaveBeenCalledWith(expect.any(BadRequestError));
+    expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
   });
 });

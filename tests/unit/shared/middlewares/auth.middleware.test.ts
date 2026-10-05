@@ -6,7 +6,7 @@ import {
 } from "@shared/middlewares/auth.middleware";
 import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
 import type { AccessTokenVerifierPort } from "@modules/auth/application/ports/access-token-verifier.port";
-import { UnauthorizedError } from "@shared/utils/errors";
+import { AuthenticationError } from "@shared/errors/application-error";
 
 const VERIFIED_USER = {
   id: "user-1",
@@ -109,22 +109,22 @@ describe("authMiddleware", () => {
     );
   });
 
-  it("không có token → UnauthorizedError", async () => {
+  it("không có token → AuthenticationError", async () => {
     const next = vi.fn() as NextFunction;
 
     await authMiddleware(createReq(), {} as Response, next);
 
     const error = vi.mocked(next).mock
-      .calls[0][0] as unknown as UnauthorizedError;
+      .calls[0][0] as unknown as AuthenticationError;
 
-    expect(error).toBeInstanceOf(UnauthorizedError);
+    expect(error).toBeInstanceOf(AuthenticationError);
     expect(error.message).toBe("No token provided");
 
     expect(mockedTokenService.isAccessTokenRevoked).not.toHaveBeenCalled();
     expect(mockedTokenService.verifyAccessToken).not.toHaveBeenCalled();
   });
 
-  it("token revoked → UnauthorizedError và không verify token", async () => {
+  it("token revoked → AuthenticationError và không verify token", async () => {
     vi.mocked(mockedTokenService.isAccessTokenRevoked).mockResolvedValue(true);
 
     const next = vi.fn() as NextFunction;
@@ -143,14 +143,14 @@ describe("authMiddleware", () => {
     expect(mockedTokenService.verifyAccessToken).not.toHaveBeenCalled();
 
     const error = vi.mocked(next).mock
-      .calls[0][0] as unknown as UnauthorizedError;
+      .calls[0][0] as unknown as AuthenticationError;
 
-    expect(error).toBeInstanceOf(UnauthorizedError);
+    expect(error).toBeInstanceOf(AuthenticationError);
     expect(error.message).toBe("Token revoked");
   });
 
-  it("token không hợp lệ → truyền UnauthorizedError từ TokenService", async () => {
-    const error = new UnauthorizedError("Invalid token");
+  it("token không hợp lệ → truyền AuthenticationError từ TokenService", async () => {
+    const error = new AuthenticationError("Invalid token");
 
     vi.mocked(mockedTokenService.verifyAccessToken).mockImplementation(() => {
       throw error;
@@ -169,7 +169,7 @@ describe("authMiddleware", () => {
     expect(next).toHaveBeenCalledWith(error);
   });
 
-  it("user không tồn tại → UnauthorizedError", async () => {
+  it("user không tồn tại → AuthenticationError", async () => {
     vi.mocked(mockedUsers.findById).mockResolvedValue(null);
 
     const next = vi.fn() as NextFunction;
@@ -183,13 +183,13 @@ describe("authMiddleware", () => {
     );
 
     const error = vi.mocked(next).mock
-      .calls[0][0] as unknown as UnauthorizedError;
+      .calls[0][0] as unknown as AuthenticationError;
 
-    expect(error).toBeInstanceOf(UnauthorizedError);
+    expect(error).toBeInstanceOf(AuthenticationError);
     expect(error.message).toBe("User not found or not verified");
   });
 
-  it("user chưa verify email → UnauthorizedError", async () => {
+  it("user chưa verify email → AuthenticationError", async () => {
     vi.mocked(mockedUsers.findById).mockResolvedValue({
       ...VERIFIED_USER,
       isVerified: false,
@@ -206,9 +206,9 @@ describe("authMiddleware", () => {
     );
 
     const error = vi.mocked(next).mock
-      .calls[0][0] as unknown as UnauthorizedError;
+      .calls[0][0] as unknown as AuthenticationError;
 
-    expect(error).toBeInstanceOf(UnauthorizedError);
+    expect(error).toBeInstanceOf(AuthenticationError);
     expect(error.message).toBe("User not found or not verified");
   });
 
@@ -280,7 +280,7 @@ describe("optionalAuthMiddleware", () => {
 
   it("token không hợp lệ → tiếp tục như guest", async () => {
     vi.mocked(mockedTokenService.verifyAccessToken).mockImplementation(() => {
-      throw new UnauthorizedError("Invalid token");
+      throw new AuthenticationError("Invalid token");
     });
 
     const req = createReq({

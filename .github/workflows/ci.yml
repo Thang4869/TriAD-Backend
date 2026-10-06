@@ -91,6 +91,137 @@ jobs:
           path: dist/
           retention-days: 3
 
+  frontend-backend-e2e:
+    name: Frontend ↔ Backend E2E
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test, build]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: triad_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d triad_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      PORT: 5000
+
+      DATABASE_URL: postgresql://test:test@127.0.0.1:5432/triad_e2e
+      REDIS_URL: redis://127.0.0.1:6379
+
+      JWT_ACCESS_SECRET: ci-fullstack-access-secret-32charslong-enough
+      JWT_REFRESH_SECRET: ci-fullstack-refresh-secret-32chars-long-enough
+      JWT_PREAUTH_SECRET: ci-fullstack-preauth-secret-32chars-long-enough
+
+      TOTP_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      TOTP_ISSUER: TriAD
+
+      FRONTEND_URL: http://127.0.0.1:3000
+      CORS_ORIGIN: http://127.0.0.1:3000
+
+      FULLSTACK_API_URL: http://127.0.0.1:5000
+      FULLSTACK_E2E_BASE_URL: http://127.0.0.1:3000
+      FULLSTACK_E2E_PORT: 3000
+
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+        with:
+          repository: Thang4869/TriAD-12
+          path: frontend
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
+      - name: Seed E2E database
+        run: npm run seed
+
+      - name: Rebuild product catalog projection
+        run: npm run projection:rebuild:products
+
+      - name: Build backend
+        run: npm run build
+
+      - name: Start backend
+        run: |
+          npm start > /tmp/triad-backend.log 2>&1 &
+          echo $! > /tmp/triad-backend.pid
+
+      - name: Wait for backend readiness
+        run: |
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:5000/health/ready > /dev/null; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "Backend did not become ready"
+          cat /tmp/triad-backend.log
+          exit 1
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run full Frontend ↔ Backend journey
+        working-directory: frontend
+        run: npm run test:e2e:fullstack
+
+      - name: Show backend logs on failure
+        if: failure()
+        run: cat /tmp/triad-backend.log || true
+
+      - name: Upload full-stack Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fullstack-playwright-report
+          path: frontend/playwright-fullstack-report/
+          retention-days: 7
+
   docker-build:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest

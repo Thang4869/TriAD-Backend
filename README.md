@@ -71,16 +71,16 @@ src/
 
 ### Bounded Contexts & Aggregates
 
-| Bounded Context | Aggregate / Main Model | Key Domain Concepts |
-| --- | --- | --- |
-| Auth | User | Refresh token family, 2FA (TOTP), OAuth |
-| Products | Product | Stock, optimistic locking, search |
-| Cart | Cart | CartItem |
-| Checkout | Order creation flow | Pricing, stock reservation, idempotency |
-| Orders | Order | State machine, PaymentStatus |
-| Reviews | Review | Rating Value Object |
-| Wishlist | WishlistItem | User-product relationship |
-| Notifications | Notification | Delivery state / user notifications |
+| Bounded Context | Aggregate / Main Model | Key Domain Concepts                     |
+| --------------- | ---------------------- | --------------------------------------- |
+| Auth            | User                   | Refresh token family, 2FA (TOTP), OAuth |
+| Products        | Product                | Stock, optimistic locking, search       |
+| Cart            | Cart                   | CartItem                                |
+| Checkout        | Order creation flow    | Pricing, stock reservation, idempotency |
+| Orders          | Order                  | State machine, PaymentStatus            |
+| Reviews         | Review                 | Rating Value Object                     |
+| Wishlist        | WishlistItem           | User-product relationship               |
+| Notifications   | Notification           | Delivery state / user notifications     |
 
 ---
 
@@ -133,22 +133,22 @@ Projection updates use source-version-aware ordering so stale events cannot over
 
 ## 3. Reliability & Platform Features
 
-| Feature | Implementation | Status |
-| --- | --- | --- |
-| Transactional Outbox | `outbox_events` + `outbox_handler_log` + relay | ✅ Implemented |
-| Idempotency | Redis + `Idempotency-Key` + DB constraints where required | ✅ Implemented |
-| Optimistic Locking | Version-based conditional updates | ✅ Implemented |
-| Checkout transaction boundary | `CheckoutUnitOfWork` + PostgreSQL Serializable transaction | ✅ Implemented |
-| Stock protection | Locking / version checks / retryable conflict handling | ✅ Implemented |
-| 2FA (TOTP) | Speakeasy + encrypted secret | ✅ Implemented |
-| Refresh token rotation | Family-based rotation + revocation | ✅ Implemented |
-| Full-text search | PostgreSQL `tsvector` + GIN index | ✅ Implemented |
-| Background jobs | BullMQ | ✅ Implemented |
-| Health checks | Liveness + readiness | ✅ Implemented |
-| Observability | Winston + Prometheus + OpenTelemetry | ✅ Implemented |
-| Docker & Compose | Multi-stage Dockerfile + dev/prod Compose | ✅ Implemented |
-| Payment provider integration | Provider port / extension point | ⏳ Not production-wired |
-| Saga runtime orchestration | State machines + persistence prepared | ⏳ Not production-wired |
+| Feature                       | Implementation                                             | Status                  |
+| ----------------------------- | ---------------------------------------------------------- | ----------------------- |
+| Transactional Outbox          | `outbox_events` + `outbox_handler_log` + relay             | ✅ Implemented          |
+| Idempotency                   | Redis + `Idempotency-Key` + DB constraints where required  | ✅ Implemented          |
+| Optimistic Locking            | Version-based conditional updates                          | ✅ Implemented          |
+| Checkout transaction boundary | `CheckoutUnitOfWork` + PostgreSQL Serializable transaction | ✅ Implemented          |
+| Stock protection              | Locking / version checks / retryable conflict handling     | ✅ Implemented          |
+| 2FA (TOTP)                    | Speakeasy + encrypted secret                               | ✅ Implemented          |
+| Refresh token rotation        | Family-based rotation + revocation                         | ✅ Implemented          |
+| Full-text search              | PostgreSQL `tsvector` + GIN index                          | ✅ Implemented          |
+| Background jobs               | BullMQ                                                     | ✅ Implemented          |
+| Health checks                 | Liveness + readiness                                       | ✅ Implemented          |
+| Observability                 | Winston + Prometheus + OpenTelemetry                       | ✅ Implemented          |
+| Docker & Compose              | Multi-stage Dockerfile + dev/prod Compose                  | ✅ Implemented          |
+| Payment provider integration  | Provider port / extension point                            | ⏳ Not production-wired |
+| Saga runtime orchestration    | State machines + persistence prepared                      | ⏳ Not production-wired |
 
 ---
 

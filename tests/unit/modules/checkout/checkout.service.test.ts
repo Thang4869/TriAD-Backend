@@ -14,6 +14,7 @@ import {
   ConflictError,
 } from "@shared/errors/application-error";
 import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
+import { noopMetrics, noopTracer } from "../../../helpers/observability";
 
 const discount = {
   id: "d1",
@@ -193,6 +194,8 @@ describe("CheckoutService", () => {
       {
         generate: vi.fn().mockReturnValue("ORD-TEST-123"),
       },
+      noopTracer,
+      noopMetrics,
     );
   });
 
@@ -630,6 +633,8 @@ describe("CheckoutService", () => {
         pricingService,
         mockStockService,
         orderNumberGenerator,
+        noopTracer,
+        noopMetrics,
       );
 
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);

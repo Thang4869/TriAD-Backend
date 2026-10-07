@@ -52,6 +52,8 @@ import type { OutboxRelay } from "@core/outbox/outbox-relay";
 import type { OrderNumberGenerator } from "@modules/checkout/application/ports/order-number-generator.port";
 import type { ProductCatalogReadPort } from "@modules/products/application/product-catalog-read.port";
 import type { CheckoutUnitOfWork } from "@modules/checkout/application/ports/checkout-transaction";
+import type { TracerPort } from "@shared/application/observability/tracer.port";
+import type { MetricsPort } from "@shared/application/observability/metrics.port";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
@@ -89,6 +91,8 @@ export const TOKENS = {
     "HandlerExecutionTracker",
   ),
   OutboxRelay: createToken<OutboxRelay>("OutboxRelay"),
+  Tracer: createToken<TracerPort>("Tracer"),
+  Metrics: createToken<MetricsPort>("Metrics"),
 
   // Domain services
   AuthService: createToken<AuthService>("AuthService"),

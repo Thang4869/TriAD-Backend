@@ -7,6 +7,7 @@ import { Order as OrderAggregate } from "@modules/orders/domain/order.entity";
 import { Money } from "@shared/value-objects/money";
 import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
 import { StockReservationService } from "@modules/checkout/services/stock-reservation.service";
+import { noopMetrics, noopTracer } from "../helpers/observability";
 
 describe("PrismaCheckoutRepository (integration)", () => {
   const repository = new PrismaCheckoutRepository();
@@ -128,7 +129,7 @@ describe("PrismaCheckoutRepository (integration)", () => {
   });
 
   it("stock reservation ghi ProductUpdated outbox cùng transaction với decrement", async () => {
-    const stockService = new StockReservationService();
+    const stockService = new StockReservationService(noopTracer, noopMetrics);
 
     await unitOfWork.run((tx) =>
       stockService.reserveStock(tx, [
@@ -172,7 +173,7 @@ describe("PrismaCheckoutRepository (integration)", () => {
       },
     });
 
-    const stockService = new StockReservationService();
+    const stockService = new StockReservationService(noopTracer, noopMetrics);
 
     await expect(
       unitOfWork.run((tx) =>
@@ -212,7 +213,7 @@ describe("PrismaCheckoutRepository (integration)", () => {
       throw new Error("product event persistence failed");
     });
 
-    const stockService = new StockReservationService();
+    const stockService = new StockReservationService(noopTracer, noopMetrics);
 
     const orderNumber = `ORD-stock-rollback-${Date.now()}`;
 

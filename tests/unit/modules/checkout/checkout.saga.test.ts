@@ -6,6 +6,7 @@ import {
 } from "@modules/checkout/application/checkout.saga";
 import { InMemorySagaStateStore } from "@shared/application/saga/saga-state";
 import { SagaTimeoutError } from "@shared/application/saga/saga-state";
+import { noopMetrics, noopTracer } from "../../../helpers/observability";
 
 const input = {
   sagaId: "saga-1",
@@ -31,7 +32,12 @@ describe("CheckoutSaga", () => {
   it("completes all steps and persists state", async () => {
     const store = new InMemorySagaStateStore<CheckoutSagaState>();
     const actionPorts = ports();
-    const state = await new CheckoutSaga(actionPorts, store).execute(input);
+    const state = await new CheckoutSaga(
+      actionPorts,
+      store,
+      noopTracer,
+      noopMetrics,
+    ).execute(input);
 
     expect(state.step).toBe("COMPLETED");
     expect(actionPorts.confirmOrder).toHaveBeenCalledWith("order-1");
@@ -45,7 +51,9 @@ describe("CheckoutSaga", () => {
     );
 
     await expect(
-      new CheckoutSaga(actionPorts, store).execute(input),
+      new CheckoutSaga(actionPorts, store, noopTracer, noopMetrics).execute(
+        input,
+      ),
     ).rejects.toThrow("payment down");
     expect(actionPorts.cancelOrder).toHaveBeenCalledWith("order-1");
     expect(actionPorts.releaseStock).toHaveBeenCalledWith("reservation-1");
@@ -61,7 +69,9 @@ describe("CheckoutSaga", () => {
       step: "ORDER_PLACED",
     });
 
-    await new CheckoutSaga(actionPorts, store).execute(input);
+    await new CheckoutSaga(actionPorts, store, noopTracer, noopMetrics).execute(
+      input,
+    );
 
     expect(actionPorts.reserveStock).not.toHaveBeenCalled();
     expect(actionPorts.placeOrder).not.toHaveBeenCalled();
@@ -80,7 +90,7 @@ describe("CheckoutSaga", () => {
     });
 
     await expect(
-      new CheckoutSaga(actionPorts, store).execute({
+      new CheckoutSaga(actionPorts, store, noopTracer, noopMetrics).execute({
         ...input,
         sagaId: "saga-timeout",
       }),

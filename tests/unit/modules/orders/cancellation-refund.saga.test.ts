@@ -5,6 +5,7 @@ import {
   CancellationRefundPorts,
 } from "@modules/orders/application/cancellation-refund.saga";
 import { InMemorySagaStateStore } from "@shared/application/saga/saga-state";
+import { noopMetrics, noopTracer } from "../../../helpers/observability";
 
 describe("CancellationRefundSaga", () => {
   it("cancels, releases stock and refunds in order", async () => {
@@ -16,7 +17,12 @@ describe("CancellationRefundSaga", () => {
       refund: vi.fn(async () => void calls.push("refund")),
     };
 
-    const state = await new CancellationRefundSaga(ports, store).execute({
+    const state = await new CancellationRefundSaga(
+      ports,
+      store,
+      noopTracer,
+      noopMetrics,
+    ).execute({
       sagaId: "saga-1",
       orderId: "order-1",
       paymentId: "payment-1",

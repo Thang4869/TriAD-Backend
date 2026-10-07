@@ -1,19 +1,23 @@
 import type { LockedProductRow } from "../application/ports/checkout-models";
-import { CheckoutTransaction } from "../application/ports/checkout-transaction";
+import type { CheckoutTransaction } from "../application/ports/checkout-transaction";
 import {
   ResourceNotFoundError,
   ValidationError,
   ConflictError,
 } from "@shared/errors/application-error";
-import { withSpan } from "@core/tracing/span";
-import { Attributes } from "@opentelemetry/api";
-import {
-  stockReservationFailed,
-  stockReservationSucceeded,
-} from "@core/metrics/metrics.registry";
+import type {
+  TracerPort,
+  TraceAttributeSetter,
+} from "@shared/application/observability/tracer.port";
+import type { MetricsPort } from "@shared/application/observability/metrics.port";
 import { ProductUpdatedEvent } from "@shared/domain/events/product-events";
 
 export class StockReservationService {
+  constructor(
+    private readonly tracer: TracerPort,
+    private readonly metrics: MetricsPort,
+  ) {}
+
   async reserveStock(
     tx: CheckoutTransaction,
     cartItems: {
@@ -26,7 +30,7 @@ export class StockReservationService {
     }
 
     try {
-      const result = await withSpan(
+      const result = await this.tracer.withSpan(
         "checkout.reserve_stock",
         (setAttributes) => this.doReserveStock(tx, cartItems, setAttributes),
         {
@@ -34,11 +38,11 @@ export class StockReservationService {
         },
       );
 
-      stockReservationSucceeded.inc();
+      this.metrics.increment("stock.reservation.succeeded");
 
       return result;
     } catch (error) {
-      stockReservationFailed.inc();
+      this.metrics.increment("stock.reservation.failed");
       throw error;
     }
   }
@@ -49,7 +53,7 @@ export class StockReservationService {
       productId: string;
       quantity: number;
     }[],
-    setAttributes: (attrs: Attributes) => void,
+    setAttributes: TraceAttributeSetter,
   ): Promise<LockedProductRow[]> {
     const productIds = cartItems.map((item) => item.productId);
 

@@ -2,8 +2,8 @@ import {
   executeSagaStep,
   SagaStateStore,
 } from "@shared/application/saga/saga-state";
-import { withSpan } from "@core/tracing/span";
-import { sagaCompensations } from "@core/metrics/metrics.registry";
+import type { TracerPort } from "@shared/application/observability/tracer.port";
+import type { MetricsPort } from "@shared/application/observability/metrics.port";
 
 export type CancellationRefundStep =
   "STARTED" | "ORDER_CANCELLED" | "STOCK_RELEASED" | "REFUNDED" | "COMPLETED";
@@ -33,6 +33,8 @@ export class CancellationRefundSaga {
   constructor(
     private readonly ports: CancellationRefundPorts,
     private readonly stateStore: SagaStateStore<CancellationRefundState>,
+    private readonly tracer: TracerPort,
+    private readonly metrics: MetricsPort,
   ) {}
 
   async execute(input: {
@@ -50,14 +52,14 @@ export class CancellationRefundSaga {
     const deadlineAt = state.deadlineAt ?? Date.now() + SAGA_TIMEOUT_MS;
     state = { ...state, deadlineAt };
     if (state.step === "STARTED") {
-      sagaCompensations.inc({
+      this.metrics.increment("saga.compensation", {
         saga: "cancellation-refund",
         step: "cancel-order",
       });
       await executeSagaStep(
         "cancellation.cancel-order",
         () =>
-          withSpan("saga.cancellation.cancel_order", () =>
+          this.tracer.withSpan("saga.cancellation.cancel_order", () =>
             this.ports.cancelOrder(state.orderId),
           ),
         STEP_POLICY,
@@ -67,14 +69,14 @@ export class CancellationRefundSaga {
       await this.stateStore.save(input.sagaId, state);
     }
     if (state.step === "ORDER_CANCELLED") {
-      sagaCompensations.inc({
+      this.metrics.increment("saga.compensation", {
         saga: "cancellation-refund",
         step: "release-stock",
       });
       await executeSagaStep(
         "cancellation.release-stock",
         () =>
-          withSpan("saga.cancellation.release_stock", () =>
+          this.tracer.withSpan("saga.cancellation.release_stock", () =>
             this.ports.releaseStock(state.orderId),
           ),
         STEP_POLICY,
@@ -84,11 +86,14 @@ export class CancellationRefundSaga {
       await this.stateStore.save(input.sagaId, state);
     }
     if (state.step === "STOCK_RELEASED" && state.paymentId) {
-      sagaCompensations.inc({ saga: "cancellation-refund", step: "refund" });
+      this.metrics.increment("saga.compensation", {
+        saga: "cancellation-refund",
+        step: "refund",
+      });
       await executeSagaStep(
         "cancellation.refund",
         () =>
-          withSpan("saga.cancellation.refund", () =>
+          this.tracer.withSpan("saga.cancellation.refund", () =>
             this.ports.refund(state.paymentId!),
           ),
         STEP_POLICY,

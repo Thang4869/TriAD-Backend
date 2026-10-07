@@ -123,34 +123,34 @@ Security-relevant events should be observable without leaking secrets.
 
 The following assets require protection.
 
-| Asset | Security concern |
-| --- | --- |
-| User credentials | Confidentiality |
-| Password hashes | Confidentiality |
-| JWT access tokens | Confidentiality / integrity |
-| Refresh tokens | Confidentiality / integrity |
-| Token revocation state | Integrity |
-| TOTP secrets | Confidentiality |
-| OAuth identities | Integrity |
-| User accounts | Confidentiality / integrity |
-| Shopping carts | Integrity |
-| Product inventory | Integrity |
-| Product pricing | Integrity |
-| Orders | Confidentiality / integrity |
-| Order history | Integrity |
-| Administrative privileges | Integrity |
-| Database records | Confidentiality / integrity |
-| Redis state | Integrity / availability |
-| BullMQ jobs | Integrity / availability |
-| Outbox events | Integrity |
-| Projection state | Integrity |
-| Application secrets | Confidentiality |
-| Logs | Confidentiality / integrity |
-| Metrics | Confidentiality |
-| API documentation | Information disclosure |
-| Cloudinary credentials | Confidentiality |
-| SMTP credentials | Confidentiality |
-| CI/CD credentials | Confidentiality |
+| Asset                     | Security concern            |
+| ------------------------- | --------------------------- |
+| User credentials          | Confidentiality             |
+| Password hashes           | Confidentiality             |
+| JWT access tokens         | Confidentiality / integrity |
+| Refresh tokens            | Confidentiality / integrity |
+| Token revocation state    | Integrity                   |
+| TOTP secrets              | Confidentiality             |
+| OAuth identities          | Integrity                   |
+| User accounts             | Confidentiality / integrity |
+| Shopping carts            | Integrity                   |
+| Product inventory         | Integrity                   |
+| Product pricing           | Integrity                   |
+| Orders                    | Confidentiality / integrity |
+| Order history             | Integrity                   |
+| Administrative privileges | Integrity                   |
+| Database records          | Confidentiality / integrity |
+| Redis state               | Integrity / availability    |
+| BullMQ jobs               | Integrity / availability    |
+| Outbox events             | Integrity                   |
+| Projection state          | Integrity                   |
+| Application secrets       | Confidentiality             |
+| Logs                      | Confidentiality / integrity |
+| Metrics                   | Confidentiality             |
+| API documentation         | Information disclosure      |
+| Cloudinary credentials    | Confidentiality             |
+| SMTP credentials          | Confidentiality             |
+| CI/CD credentials         | Confidentiality             |
 
 ---
 
@@ -1515,29 +1515,29 @@ If any assumption becomes false, the threat model must be reviewed.
 
 ## 47. Threat-to-Control Matrix
 
-| Threat | Main control |
-| --- | --- |
-| JWT forgery | JWT signature verification |
-| Access-token theft | Short TTL + TLS + revocation |
-| Refresh-token replay | Rotation + revocation |
-| Credential stuffing | Rate limiting |
-| CSRF | CSRF token verification |
-| CORS abuse | Explicit allowed origins |
-| Price manipulation | Server-side pricing |
-| Duplicate checkout | Idempotency |
-| Inventory race | Transaction/concurrency control |
-| IDOR/BOLA | Ownership checks |
-| Invalid order transitions | Domain state machine |
-| SQL injection | Prisma parameterization + validation |
-| Queue replay | Idempotent handlers |
-| Outbox duplicates | Handler tracking/idempotency |
-| Secret leakage | Environment-based secrets |
-| Error disclosure | Centralized error handler |
-| Log leakage | Sensitive-data filtering |
-| API reconnaissance | Protected production docs |
-| Metrics disclosure | Protected production metrics |
-| DoS | Rate limiting + bounded inputs |
-| Retry storm | Bounded retry + jitter |
+| Threat                    | Main control                         |
+| ------------------------- | ------------------------------------ |
+| JWT forgery               | JWT signature verification           |
+| Access-token theft        | Short TTL + TLS + revocation         |
+| Refresh-token replay      | Rotation + revocation                |
+| Credential stuffing       | Rate limiting                        |
+| CSRF                      | CSRF token verification              |
+| CORS abuse                | Explicit allowed origins             |
+| Price manipulation        | Server-side pricing                  |
+| Duplicate checkout        | Idempotency                          |
+| Inventory race            | Transaction/concurrency control      |
+| IDOR/BOLA                 | Ownership checks                     |
+| Invalid order transitions | Domain state machine                 |
+| SQL injection             | Prisma parameterization + validation |
+| Queue replay              | Idempotent handlers                  |
+| Outbox duplicates         | Handler tracking/idempotency         |
+| Secret leakage            | Environment-based secrets            |
+| Error disclosure          | Centralized error handler            |
+| Log leakage               | Sensitive-data filtering             |
+| API reconnaissance        | Protected production docs            |
+| Metrics disclosure        | Protected production metrics         |
+| DoS                       | Rate limiting + bounded inputs       |
+| Retry storm               | Bounded retry + jitter               |
 
 ---
 

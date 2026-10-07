@@ -7,17 +7,12 @@ import {
   ResourceNotFoundError,
   ConflictError,
 } from "@shared/errors/application-error";
+import { noopMetrics, noopTracer } from "../../../helpers/observability";
 
 // withSpan chỉ là lớp bọc tracing — thay bằng passthrough để test tập trung vào logic.
-vi.mock("@core/tracing/span", () => ({
-  withSpan: vi.fn(
-    (
-      _name: string,
-      fn: (setAttributes: (attributes: unknown) => void) => Promise<unknown>,
-    ) => fn(() => undefined),
-  ),
-}));
-
+function createService(): StockReservationService {
+  return new StockReservationService(noopTracer, noopMetrics);
+}
 function lockedProduct(overrides: Record<string, unknown> = {}) {
   return {
     id: "prod-1",
@@ -53,7 +48,7 @@ describe("StockReservationService.reserveStock", () => {
   });
 
   it("giỏ hàng rỗng bị chặn ngay, không khoá sản phẩm nào", async () => {
-    const service = new StockReservationService();
+    const service = createService();
 
     await expect(service.reserveStock(tx, [])).rejects.toThrow(
       new ValidationError("Cart is empty"),
@@ -73,7 +68,7 @@ describe("StockReservationService.reserveStock", () => {
       ]),
     });
 
-    const service = new StockReservationService();
+    const service = createService();
 
     await service.reserveStock(tx, [
       {
@@ -98,7 +93,7 @@ describe("StockReservationService.reserveStock", () => {
       ]),
     });
 
-    const service = new StockReservationService();
+    const service = createService();
 
     await service.reserveStock(tx, [
       {
@@ -123,7 +118,7 @@ describe("StockReservationService.reserveStock", () => {
       lockProductsForUpdate: vi.fn().mockResolvedValue([]),
     });
 
-    const service = new StockReservationService();
+    const service = createService();
 
     await expect(
       service.reserveStock(tx, [
@@ -146,7 +141,7 @@ describe("StockReservationService.reserveStock", () => {
       ]),
     });
 
-    const service = new StockReservationService();
+    const service = createService();
 
     await expect(
       service.reserveStock(tx, [
@@ -163,7 +158,7 @@ describe("StockReservationService.reserveStock", () => {
   it.each([0, -1, 1.5])(
     "từ chối số lượng không hợp lệ: %s",
     async (quantity) => {
-      const service = new StockReservationService();
+      const service = createService();
 
       await expect(
         service.reserveStock(tx, [
@@ -187,7 +182,7 @@ describe("StockReservationService.reserveStock", () => {
       ]),
     });
 
-    const service = new StockReservationService();
+    const service = createService();
 
     await expect(
       service.reserveStock(tx, [
@@ -216,7 +211,7 @@ describe("StockReservationService.reserveStock", () => {
       ]),
     });
 
-    const service = new StockReservationService();
+    const service = createService();
 
     await expect(
       service.reserveStock(tx, [
@@ -243,7 +238,7 @@ describe("StockReservationService.reserveStock", () => {
       lockProductsForUpdate: vi.fn().mockResolvedValue([product]),
     });
 
-    const service = new StockReservationService();
+    const service = createService();
 
     await expect(
       service.reserveStock(tx, [
@@ -260,7 +255,7 @@ describe("StockReservationService.reserveStock", () => {
       decrementProductStock: vi.fn().mockResolvedValue(false),
     });
 
-    const service = new StockReservationService();
+    const service = createService();
 
     await expect(
       service.reserveStock(tx, [
@@ -285,7 +280,7 @@ describe("StockReservationService.reserveStock", () => {
       ]),
     });
 
-    const service = new StockReservationService();
+    const service = createService();
 
     await service.reserveStock(tx, [
       {

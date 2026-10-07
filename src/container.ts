@@ -92,6 +92,9 @@ import {
 import { UserRegisteredEvent } from "@shared/domain/events/user-events";
 import { registerOrderEventSubscriptions } from "@modules/orders/order-event-subscriptions";
 import { PrismaCheckoutUnitOfWork } from "@modules/checkout/infrastructure/prisma-checkout-unit-of-work";
+import { OpenTelemetryTracerAdapter } from "@core/observability/opentelemetry-tracer.adapter";
+import { PrometheusMetricsAdapter } from "@core/observability/prometheus-metrics.adapter";
+
 export const container = new Container();
 
 // ---------- Cross-cutting infra ----------
@@ -118,6 +121,9 @@ container.register(
   (c) => new EmailService(c.resolve(TOKENS.EmailQueue)),
 );
 container.register(TOKENS.ImageStorage, () => new CloudinaryImageStorage());
+container.register(TOKENS.Tracer, () => new OpenTelemetryTracerAdapter());
+
+container.register(TOKENS.Metrics, () => new PrometheusMetricsAdapter());
 
 // ---------- Repositories ----------
 container.register(
@@ -231,7 +237,11 @@ container.register(
 // ---------- Checkout sub-services ----------
 container.register(
   TOKENS.StockReservationService,
-  () => new StockReservationService(),
+  (c) =>
+    new StockReservationService(
+      c.resolve(TOKENS.Tracer),
+      c.resolve(TOKENS.Metrics),
+    ),
 );
 
 container.register(
@@ -265,6 +275,8 @@ container.register(
       c.resolve(TOKENS.PricingService),
       c.resolve(TOKENS.StockReservationService),
       c.resolve(TOKENS.OrderNumberGenerator),
+      c.resolve(TOKENS.Tracer),
+      c.resolve(TOKENS.Metrics),
     ),
 );
 container.register(

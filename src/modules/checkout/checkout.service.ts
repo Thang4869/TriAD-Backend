@@ -12,10 +12,10 @@ import type {
 import { PricingService } from "./services/pricing.service";
 import { StockReservationService } from "./services/stock-reservation.service";
 import { Order } from "@modules/orders/domain/order.entity";
-import { withSpan } from "@core/tracing/span";
-import { ordersPlaced } from "@core/metrics/metrics.registry";
 import { IdempotencyConflictError } from "./application/errors/idempotency-conflict.error";
 import { OrderNumberGenerator } from "./application/ports/order-number-generator.port";
+import type { TracerPort } from "@shared/application/observability/tracer.port";
+import type { MetricsPort } from "@shared/application/observability/metrics.port";
 
 export interface CheckoutInput {
   idempotencyKey?: string;
@@ -36,10 +36,12 @@ export class CheckoutService {
     private readonly pricingService: PricingService,
     private readonly stockService: StockReservationService,
     private readonly orderNumberGenerator: OrderNumberGenerator,
+    private readonly tracer: TracerPort,
+    private readonly metrics: MetricsPort,
   ) {}
 
   async checkout(userId: string, input: CheckoutInput) {
-    return withSpan(
+    return this.tracer.withSpan(
       "checkout.place_order",
       async (setAttributes) => {
         if (input.idempotencyKey) {
@@ -178,7 +180,7 @@ export class CheckoutService {
           throw new Error("Failed to retrieve created order");
         }
 
-        ordersPlaced.inc();
+        this.metrics.increment("orders.placed");
 
         return {
           order: fullOrder,

@@ -360,9 +360,9 @@ describe("PrismaOrdersRepository.updateStatusWithEvents", () => {
 
     expect(outboxEvents).toHaveLength(2);
 
-    expect(outboxEvents.map((event) => event.eventName)).toEqual([
-      "OrderStatusChanged",
+    expect(outboxEvents.map((event) => event.eventName).sort()).toEqual([
       "OrderCancelled",
+      "OrderStatusChanged",
     ]);
 
     for (const event of outboxEvents) {

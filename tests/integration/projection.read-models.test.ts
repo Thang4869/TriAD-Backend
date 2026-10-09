@@ -39,8 +39,14 @@ describe("projection read adapters (integration, real DB)", () => {
   it("reads catalog, order history and dashboard values from projections when write models diverge", async () => {
     const placedAt = new Date("2020-01-02T10:00:00.000Z");
     const sinceDate = new Date("2020-01-01T00:00:00.000Z");
+    const grossOrderValueBefore = await dashboard.getGrossOrderValue(sinceDate);
+
+    const dailyBefore = await dashboard.getGrossOrderValueByDay(sinceDate);
+
+    const statusBreakdownBefore = await dashboard.getOrderStatusBreakdown();
     const productId = `projection-product-${Date.now()}`;
     const orderId = `projection-order-${Date.now()}`;
+    const projectionCategory = `projection-${productId}`;
 
     await prisma.product.create({
       data: {
@@ -61,7 +67,7 @@ describe("projection read adapters (integration, real DB)", () => {
         description: "projection",
         price: 10,
         stock: 2,
-        category: "projection",
+        category: projectionCategory,
         images: [],
         slug: `${productId}-projection`,
         isActive: true,
@@ -159,13 +165,17 @@ describe("projection read adapters (integration, real DB)", () => {
     });
 
     const catalogResult = await catalog.findMany({
-      where: { isActive: true, category: "projection" },
+      where: {
+        isActive: true,
+        category: projectionCategory,
+      },
+      take: 1,
     });
     const orderResult = await orderHistory.findByIdAndUser(orderId, userId);
     const grossOrderValue = await dashboard.getGrossOrderValue(sinceDate);
     const daily = await dashboard.getGrossOrderValueByDay(sinceDate);
     const statusBreakdown = await dashboard.getOrderStatusBreakdown();
-    const topSelling = await dashboard.getTopSellingProducts(5, sinceDate);
+    const topSelling = await dashboard.getTopSellingProducts(1000, sinceDate);
     const lowStock = await dashboard.getLowStockProducts(10);
 
     expect(catalogResult[0]).toMatchObject({
@@ -180,15 +190,37 @@ describe("projection read adapters (integration, real DB)", () => {
       status: OrderStatus.PENDING,
       total: 100,
     });
-    expect(grossOrderValue).toBe(100);
-    expect(daily).toEqual([
-      { date: "2020-01-02", grossOrderValue: 100, orderCount: 1 },
-    ]);
-    expect(statusBreakdown).toEqual([
-      { status: OrderStatus.PENDING, count: 1 },
-      { status: OrderStatus.CANCELLED, count: 1 },
-    ]);
-    expect(topSelling[0]).toMatchObject({
+    expect(grossOrderValue - grossOrderValueBefore).toBe(100);
+    const targetDate = "2020-01-02";
+
+    const previousDay = dailyBefore.find((row) => row.date === targetDate);
+
+    const currentDay = daily.find((row) => row.date === targetDate);
+
+    expect(currentDay).toEqual({
+      date: targetDate,
+      grossOrderValue: (previousDay?.grossOrderValue ?? 0) + 100,
+      orderCount: (previousDay?.orderCount ?? 0) + 1,
+    });
+    const getStatusCount = (
+      rows: typeof statusBreakdown,
+      status: string,
+    ): number => rows.find((row) => row.status === status)?.count ?? 0;
+
+    expect(
+      getStatusCount(statusBreakdown, OrderStatus.PENDING) -
+        getStatusCount(statusBreakdownBefore, OrderStatus.PENDING),
+    ).toBe(1);
+
+    expect(
+      getStatusCount(statusBreakdown, OrderStatus.CANCELLED) -
+        getStatusCount(statusBreakdownBefore, OrderStatus.CANCELLED),
+    ).toBe(1);
+    const projectedProduct = topSelling.find(
+      (item) => item.productId === productId,
+    );
+
+    expect(projectedProduct).toMatchObject({
       productId,
       name: "Projection product",
       totalQuantitySold: 2,

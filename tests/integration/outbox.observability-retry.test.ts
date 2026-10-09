@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import prisma from "@core/database/prisma";
 import { OutboxRelay } from "@core/outbox/outbox-relay";
 import { PrismaOutboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
@@ -35,6 +35,53 @@ function outboxEvent(
 }
 
 describe("outbox observability and retry (integration, real DB)", () => {
+  const fixtureIds = [
+    "observability-published",
+    "observability-claimable",
+    "observability-leased",
+    "observability-dead",
+    "retry-transient-integration",
+    "retry-persistent-integration",
+    "unsupported-schema-integration",
+    "malformed-payload-integration",
+  ];
+
+  async function cleanupFixtures(): Promise<void> {
+    const events = await prisma.outboxEvent.findMany({
+      where: {
+        OR: [
+          { id: { in: fixtureIds } },
+          { eventName: "CrashWindowIntegration" },
+        ],
+      },
+      select: { id: true },
+    });
+
+    const eventIds = events.map((event) => event.id);
+
+    if (eventIds.length === 0) {
+      return;
+    }
+
+    await prisma.outboxHandlerLog.deleteMany({
+      where: {
+        outboxEventId: {
+          in: eventIds,
+        },
+      },
+    });
+
+    await prisma.outboxEvent.deleteMany({
+      where: {
+        id: {
+          in: eventIds,
+        },
+      },
+    });
+  }
+
+  beforeEach(cleanupFixtures);
+  afterEach(cleanupFixtures);
   it("reports active lag and unresolved dead letters independent of claimability", async () => {
     const now = Date.now();
     const publishedAt = new Date(now - 30_000);

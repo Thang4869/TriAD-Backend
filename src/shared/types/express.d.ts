@@ -7,7 +7,6 @@ declare global {
         role: import("./roles").Role;
       };
       requestId?: string;
-      container: import("@core/di/container").Container;
     }
   }
 }

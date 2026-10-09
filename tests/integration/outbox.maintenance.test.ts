@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import prisma from "@core/database/prisma";
 import { PrismaOutboxMaintenanceStore } from "@core/outbox/prisma-outbox-maintenance.store";
 
@@ -39,6 +39,26 @@ function outboxEvent(
 
 describe("PrismaOutboxMaintenanceStore (integration, real DB)", () => {
   const store = new PrismaOutboxMaintenanceStore();
+  async function cleanupTestFixtures(): Promise<void> {
+    await prisma.outboxHandlerLog.deleteMany({
+      where: {
+        outboxEventId: {
+          startsWith: "maintenance-",
+        },
+      },
+    });
+
+    await prisma.outboxEvent.deleteMany({
+      where: {
+        id: {
+          startsWith: "maintenance-",
+        },
+      },
+    });
+  }
+
+  beforeEach(cleanupTestFixtures);
+  afterEach(cleanupTestFixtures);
 
   it("returns only unpublished dead-letter events from the requested ids", async () => {
     const deadLetteredAt = new Date("2026-10-02T00:00:00.000Z");
@@ -250,6 +270,11 @@ describe("PrismaOutboxMaintenanceStore (integration, real DB)", () => {
 
     await expect(
       prisma.outboxEvent.findMany({
+        where: {
+          id: {
+            startsWith: "maintenance-",
+          },
+        },
         orderBy: {
           id: "asc",
         },

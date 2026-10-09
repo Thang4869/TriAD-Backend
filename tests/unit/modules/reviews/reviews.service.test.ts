@@ -6,7 +6,6 @@ import {
   ResourceNotFoundError,
   ValidationError,
 } from "@shared/errors/application-error";
-import type { EventBus } from "@shared/domain/event-bus/event-bus";
 function createFakeRepository(
   overrides: Partial<IReviewsRepository> = {},
 ): IReviewsRepository {
@@ -23,15 +22,8 @@ function createFakeRepository(
     ...overrides,
   };
 }
-function createFakeEventBus(): EventBus {
-  return {
-    publish: vi.fn().mockResolvedValue(undefined),
-    subscribe: vi.fn(),
-  } as unknown as EventBus;
-}
-
 function createService(repository: IReviewsRepository) {
-  return new ReviewsService(repository, createFakeEventBus());
+  return new ReviewsService(repository);
 }
 
 const baseReview: ReviewRecord = {

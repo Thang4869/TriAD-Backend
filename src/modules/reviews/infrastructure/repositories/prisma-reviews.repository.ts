@@ -7,7 +7,11 @@ import type {
   ReviewWithUser,
   ReviewWithUserAndProduct,
 } from "../../application/ports/review-models";
-
+import { persistEvents } from "@core/outbox/persist-domain-events";
+import {
+  ReviewCreatedEvent,
+  ReviewDeletedEvent,
+} from "@shared/domain/events/review-events";
 const REVIEWER_SELECT = {
   id: true,
   firstName: true,
@@ -18,6 +22,9 @@ const REVIEWER_SELECT = {
 // ---------- Prisma implementation ----------
 
 export class PrismaReviewsRepository implements IReviewsRepository {
+  constructor(
+    private readonly persistDomainEvents: typeof persistEvents = persistEvents,
+  ) {}
   async findByProduct(
     productId: string,
     skip: number,
@@ -59,9 +66,17 @@ export class PrismaReviewsRepository implements IReviewsRepository {
   }
 
   async create(data: CreateReviewData): Promise<ReviewWithUser> {
-    return prisma.review.create({
-      data,
-      include: { user: { select: REVIEWER_SELECT } },
+    return prisma.$transaction(async (tx) => {
+      const review = await tx.review.create({
+        data,
+        include: { user: { select: REVIEWER_SELECT } },
+      });
+
+      await this.persistDomainEvents(tx, [
+        new ReviewCreatedEvent(review.productId),
+      ]);
+
+      return review;
     });
   }
 
@@ -77,7 +92,16 @@ export class PrismaReviewsRepository implements IReviewsRepository {
   }
 
   async delete(reviewId: string): Promise<void> {
-    await prisma.review.delete({ where: { id: reviewId } });
+    await prisma.$transaction(async (tx) => {
+      const review = await tx.review.delete({
+        where: { id: reviewId },
+        select: { productId: true },
+      });
+
+      await this.persistDomainEvents(tx, [
+        new ReviewDeletedEvent(review.productId),
+      ]);
+    });
   }
 
   async findAllAdmin(

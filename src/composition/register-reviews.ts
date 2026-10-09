@@ -13,11 +13,7 @@ export function registerReviewsModule(container: Container): void {
 
   container.register(
     TOKENS.ReviewsService,
-    (c) =>
-      new ReviewsService(
-        c.resolve(TOKENS.ReviewsRepository),
-        c.resolve(TOKENS.EventBus),
-      ),
+    (c) => new ReviewsService(c.resolve(TOKENS.ReviewsRepository)),
   );
 
   container.register(

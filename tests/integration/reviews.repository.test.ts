@@ -131,4 +131,122 @@ describe("PrismaReviewsRepository (integration)", () => {
     const total = await repository.count();
     expect(total).toBeGreaterThanOrEqual(2);
   });
+
+  it("persists review creation and outbox event atomically", async () => {
+    const review = await repository.create({
+      userId,
+      productId,
+      rating: 5,
+      comment: "Atomic review",
+    });
+
+    expect(review.id).toBeDefined();
+
+    const event = await prisma.outboxEvent.findFirst({
+      where: {
+        aggregateId: productId,
+        eventName: "ReviewCreated",
+      },
+    });
+
+    expect(event).not.toBeNull();
+    expect(event?.publishedAt).toBeNull();
+  });
+
+  it("rolls back review creation when outbox persistence fails", async () => {
+    const failingRepository = new PrismaReviewsRepository(async () => {
+      throw new Error("Simulated outbox failure");
+    });
+
+    await expect(
+      failingRepository.create({
+        userId,
+        productId,
+        rating: 5,
+        comment: "Rollback test",
+      }),
+    ).rejects.toThrow("Simulated outbox failure");
+
+    const reviews = await prisma.review.findMany({
+      where: { userId, productId },
+    });
+
+    expect(reviews).toHaveLength(0);
+  });
+
+  it("persists ReviewDeleted event atomically with review deletion", async () => {
+    const review = await repository.create({
+      userId,
+      productId,
+      rating: 5,
+      comment: "Review to delete",
+    });
+
+    await repository.delete(review.id);
+
+    const deletedReview = await prisma.review.findUnique({
+      where: { id: review.id },
+    });
+
+    expect(deletedReview).toBeNull();
+
+    const events = await prisma.outboxEvent.findMany({
+      where: {
+        aggregateId: productId,
+        eventName: "ReviewDeleted",
+      },
+    });
+
+    expect(events).toHaveLength(1);
+
+    expect(events[0]).toMatchObject({
+      eventName: "ReviewDeleted",
+      aggregateId: productId,
+      publishedAt: null,
+      attempts: 0,
+    });
+
+    expect(events[0].payload).toMatchObject({
+      schemaVersion: 1,
+      eventName: "ReviewDeleted",
+      aggregateId: productId,
+    });
+  });
+
+  it("rolls back review deletion when outbox persistence fails", async () => {
+    const review = await repository.create({
+      userId,
+      productId,
+      rating: 4,
+      comment: "Review must survive rollback",
+    });
+
+    const failingRepository = new PrismaReviewsRepository(async () => {
+      throw new Error("Simulated outbox failure");
+    });
+
+    await expect(failingRepository.delete(review.id)).rejects.toThrow(
+      "Simulated outbox failure",
+    );
+
+    const persistedReview = await prisma.review.findUnique({
+      where: { id: review.id },
+    });
+
+    expect(persistedReview).toMatchObject({
+      id: review.id,
+      userId,
+      productId,
+      rating: 4,
+    });
+
+    const deletedEventCount = await prisma.outboxEvent.count({
+      where: {
+        aggregateId: productId,
+        eventName: "ReviewDeleted",
+      },
+    });
+
+    expect(deletedEventCount).toBe(0);
+  });
 });

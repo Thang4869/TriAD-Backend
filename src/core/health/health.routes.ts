@@ -1,22 +1,27 @@
-import { Router, Request, Response } from "express";
-import { HealthService } from "./health.service";
+import { Router, type Request, type Response } from "express";
+import type { HealthService } from "./health.service";
 import { asyncHandler } from "@shared/utils/async-handler";
-import { InfrastructureHealthCheck } from "./infrastructure-health-check";
 
-const router = Router();
-const healthService = new HealthService(new InfrastructureHealthCheck());
+type ReadinessService = Pick<HealthService, "getReadiness">;
 
-router.get("/live", (_req: Request, res: Response) => {
-  res.status(200).json({ status: "up", timestamp: new Date().toISOString() });
-});
+export function createHealthRoutes(healthService: ReadinessService): Router {
+  const router = Router();
 
-router.get(
-  "/ready",
-  asyncHandler(async (_req: Request, res: Response) => {
-    const report = await healthService.getReadiness();
-    const httpStatus = report.status === "up" ? 200 : 503;
-    res.status(httpStatus).json(report);
-  }),
-);
+  router.get("/live", (_req: Request, res: Response) => {
+    res.status(200).json({
+      status: "up",
+      timestamp: new Date().toISOString(),
+    });
+  });
 
-export { router as healthRoutes };
+  router.get(
+    "/ready",
+    asyncHandler(async (_req: Request, res: Response) => {
+      const report = await healthService.getReadiness();
+
+      res.status(report.status === "up" ? 200 : 503).json(report);
+    }),
+  );
+
+  return router;
+}

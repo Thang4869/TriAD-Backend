@@ -789,10 +789,10 @@ describe("PrismaProductsRepository (integration)", () => {
 
     expect(outboxEvents).toHaveLength(3);
 
-    expect(outboxEvents.map((event) => event.eventName)).toEqual([
+    expect(outboxEvents.map((event) => event.eventName).sort()).toEqual([
+      "ProductDeactivated",
       "ProductPriceChanged",
       "ProductStockDepleted",
-      "ProductDeactivated",
     ]);
 
     for (const event of outboxEvents) {

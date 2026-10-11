@@ -7,15 +7,12 @@ import {
   ValidationError,
   AuthenticationError,
 } from "@shared/errors/application-error";
-import redis from "@core/redis/client";
 import speakeasy from "speakeasy";
-import { signToken, decodeToken } from "@shared/utils/jwt";
+import { signToken } from "@shared/utils/jwt";
 import { EmailService } from "@/shared/services/email.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { TokenService } from "@/modules/auth/services/token.service";
-import { logger } from "@core/logger/winston";
 import config from "@config";
-import { EventBus } from "@shared/domain/event-bus/event-bus";
 
 // ---------- Mocks ----------
 const mockEmailService = {
@@ -24,12 +21,6 @@ const mockEmailService = {
   enqueue: vi.fn().mockResolvedValue(undefined),
   enqueueWithRetry: vi.fn().mockResolvedValue(undefined),
 } as unknown as EmailService;
-const mockEventBus = {
-  publish: vi.fn().mockResolvedValue({
-    success: true,
-    failedHandlers: [],
-  }),
-} as unknown as EventBus;
 // Mock Redis
 vi.mock("@core/redis/client", () => ({
   default: {
@@ -51,14 +42,6 @@ vi.mock("@core/logger/winston", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock("@shared/utils/jwt", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@shared/utils/jwt")>();
-  return {
-    ...actual,
-    decodeToken: vi.fn(actual.decodeToken),
-  };
-});
-
 // ---------- Helper to create repository mock ----------
 function createFakeRepository(overrides = {}): IAuthRepository {
   return {
@@ -67,7 +50,6 @@ function createFakeRepository(overrides = {}): IAuthRepository {
     createUser: vi.fn(),
     createOAuthUser: vi.fn(),
     resolveOAuthIdentity: vi.fn(),
-    createCartForUser: vi.fn(),
     updateUser: vi.fn(),
     createRefreshToken: vi.fn(),
     findRefreshTokenByToken: vi.fn(),
@@ -117,10 +99,6 @@ describe("AuthService", () => {
   let tokenStore: ReturnType<typeof createTokenStore>;
 
   beforeEach(() => {
-    vi.mocked(mockEventBus.publish).mockResolvedValue({
-      success: true,
-      failedHandlers: [],
-    });
     vi.clearAllMocks();
     process.env.JWT_ACCESS_SECRET = "test-access-secret-32charslongenough";
     process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32charslongenough";
@@ -206,23 +184,7 @@ describe("AuthService", () => {
         };
       }),
       issueTwoFactorPreAuthToken: vi.fn().mockResolvedValue("pre-auth-token"),
-      blacklistAccessToken: vi
-        .fn()
-        .mockImplementation(async (token: string) => {
-          try {
-            const decoded = decodeToken(token) as { exp?: number } | null;
-            if (decoded?.exp) {
-              const ttl = decoded.exp - Math.floor(Date.now() / 1000);
-              if (ttl > 0) {
-                await redis.setex(`jwt:blacklist:${token}`, ttl, "1");
-              }
-            }
-          } catch (error) {
-            logger.warn("Failed to decode access token during logout", {
-              error,
-            });
-          }
-        }),
+      blacklistAccessToken: vi.fn().mockResolvedValue(undefined),
       invalidateAllUserTokens: vi
         .fn()
         .mockImplementation(async (userId: string) => {
@@ -284,7 +246,6 @@ describe("AuthService", () => {
       mockTokenService,
       mockTwoFactorService,
       tokenStore,
-      mockEventBus,
     );
   });
 
@@ -319,7 +280,6 @@ describe("AuthService", () => {
 
       expect(result.user).toMatchObject({ email: "test@test.com" });
       expect(result.message).toContain("check your email");
-      expect(repository.createCartForUser).toHaveBeenCalledWith(baseUser.id);
       expect(mockEmailService.sendVerificationEmail).toHaveBeenCalledWith(
         expect.objectContaining({ email: "test@test.com" }),
         expect.any(String),
@@ -626,7 +586,14 @@ describe("AuthService", () => {
 
     it("throws if the token record is expired, even with a validly-signed JWT", async () => {
       const expiredRefreshToken = signToken(
-        { sub: baseUser.id },
+        {
+          sub: baseUser.id,
+          familyId: "test-family",
+          tokenType: "refresh",
+          jti: "test-jti",
+          iss: config.JWT_ISSUER,
+          aud: config.JWT_REFRESH_AUDIENCE,
+        },
         process.env.JWT_REFRESH_SECRET as string,
         "7d",
       );
@@ -646,7 +613,14 @@ describe("AuthService", () => {
     it("rotates the refresh token and returns new tokens on success", async () => {
       const familyId = "test-family-id";
       const validRefreshToken = signToken(
-        { sub: baseUser.id, familyId },
+        {
+          sub: baseUser.id,
+          familyId,
+          tokenType: "refresh",
+          jti: "test-jti",
+          iss: config.JWT_ISSUER,
+          aud: config.JWT_REFRESH_AUDIENCE,
+        },
         config.JWT_REFRESH_SECRET,
         "7d",
       );
@@ -672,7 +646,6 @@ describe("AuthService", () => {
         realTokenService,
         mockTwoFactorService,
         createTokenStore(),
-        mockEventBus,
       );
 
       const result = await serviceWithRealToken.refreshToken(validRefreshToken);
@@ -782,7 +755,6 @@ describe("AuthService", () => {
         realTokenService,
         mockTwoFactorService,
         createTokenStore(),
-        mockEventBus,
       );
       const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
@@ -804,53 +776,26 @@ describe("AuthService", () => {
     });
   });
 
-  // ---------- logout - blacklistAccessToken ----------
-  describe("logout - blacklistAccessToken", () => {
-    it("blacklists a valid access token with the remaining TTL until expiry", async () => {
-      const accessToken = signToken(
-        { sub: baseUser.id },
-        process.env.JWT_ACCESS_SECRET as string,
-        "15m",
+  // ---------- logout - revocation fail-closed delegation ----------
+  describe("logout - revocation", () => {
+    it("revokes the provided access token and deletes refresh sessions", async () => {
+      await service.logout(baseUser.id, "access-token", "refresh-token");
+      expect(mockTokenService.blacklistAccessToken).toHaveBeenCalledWith(
+        "access-token",
       );
-      await service.logout(baseUser.id, accessToken);
-      expect(redis.setex).toHaveBeenCalledWith(
-        `jwt:blacklist:${accessToken}`,
-        expect.any(Number),
-        "1",
+      expect(repository.deleteRefreshTokenByToken).toHaveBeenCalledWith(
+        "refresh-token",
       );
-      const ttlUsed = (redis.setex as any).mock.calls[0][1];
-      expect(ttlUsed).toBeGreaterThan(0);
-      expect(ttlUsed).toBeLessThanOrEqual(15 * 60);
     });
 
-    it("does not blacklist a token that has no exp claim", async () => {
-      const accessToken = "not-a-real-jwt-token";
-      await service.logout(baseUser.id, accessToken);
-      expect(redis.setex).not.toHaveBeenCalled();
-    });
-
-    it("does not blacklist a token whose exp is already in the past", async () => {
-      const accessToken = signToken(
-        { sub: baseUser.id },
-        process.env.JWT_ACCESS_SECRET as string,
-        -10,
+    it("does not clear refresh sessions when revocation storage is unavailable", async () => {
+      vi.mocked(mockTokenService.blacklistAccessToken).mockRejectedValueOnce(
+        new Error("Redis unavailable"),
       );
-      await service.logout(baseUser.id, accessToken);
-      expect(redis.setex).not.toHaveBeenCalled();
-    });
-
-    it("logs a warning and swallows the error if decoding the access token throws", async () => {
-      (decodeToken as any).mockImplementationOnce(() => {
-        throw new Error("malformed token");
-      });
       await expect(
-        service.logout(baseUser.id, "any-token"),
-      ).resolves.toBeUndefined();
-      expect(logger.warn).toHaveBeenCalledWith(
-        "Failed to decode access token during logout",
-        expect.objectContaining({ error: expect.any(Error) }),
-      );
-      expect(redis.setex).not.toHaveBeenCalled();
+        service.logout(baseUser.id, "access-token", "refresh-token"),
+      ).rejects.toThrow("Redis unavailable");
+      expect(repository.deleteRefreshTokenByToken).not.toHaveBeenCalled();
     });
   });
 
@@ -871,7 +816,6 @@ describe("AuthService", () => {
         realTokenService,
         mockTwoFactorService,
         createTokenStore(),
-        mockEventBus,
       );
       const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
@@ -888,7 +832,6 @@ describe("AuthService", () => {
         realTokenService,
         mockTwoFactorService,
         createTokenStore(),
-        mockEventBus,
       );
       const result = await serviceWithRealToken.generateTokens(baseUser);
       expect(typeof result.accessToken).toBe("string");
@@ -925,7 +868,7 @@ describe("AuthService", () => {
       expect(repository.findUserByEmail).not.toHaveBeenCalled();
     });
 
-    it("publishes registration and sends verification for a new unverified identity", async () => {
+    it("resends verification for an unverified identity whose registration event was persisted", async () => {
       const unverifiedUser = {
         ...baseUser,
         email: identity.email,
@@ -943,7 +886,6 @@ describe("AuthService", () => {
         }),
       ).rejects.toThrow("OAuth identity email verification is required");
 
-      expect(mockEventBus.publish).toHaveBeenCalled();
       expect(mockEmailService.sendVerificationEmail).toHaveBeenCalledWith(
         expect.objectContaining({ email: identity.email }),
         expect.any(String),

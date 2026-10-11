@@ -31,7 +31,7 @@ export const processEmail = async (job: { data: EmailJobData }) => {
     html = `
       <h1>Verify your TriAD account</h1>
       <p>Hi ${data?.name || ""},</p>
-      <p>Please confirm your email address by clicking the link below. This link expires in 24 hours.</p>
+      <p>Please confirm your email address by clicking the link below. This link expires in 15 minutes.</p>
       <p><a href="${data?.verifyUrl}" target="_blank">Verify my email</a></p>
       <p>If the button doesn't work, copy and paste this URL into your browser:</p>
       <p>${data?.verifyUrl}</p>

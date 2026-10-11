@@ -1,6 +1,5 @@
 import crypto from "crypto";
 import { TokenStorePort } from "./application/ports/token-store.port";
-import { logger } from "@core/logger/winston";
 import { AuthUser } from "./application/ports/auth-user";
 import {
   ValidationError,
@@ -19,7 +18,6 @@ import {
   toAuthUserResponse,
   toEntityData,
 } from "./auth.mapper";
-import { EventBus } from "@shared/domain/event-bus/event-bus";
 import config from "@config";
 import { User as UserEntity } from "../users/domain/user.entity";
 import type { OAuthIdentity } from "./application/ports/oauth-identity";
@@ -44,7 +42,6 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly twoFactorService: TwoFactorService,
     private readonly tokenStore: TokenStorePort,
-    private readonly eventBus: EventBus,
   ) {}
 
   async generateTokens(user: AuthUser) {
@@ -61,9 +58,7 @@ export class AuthService {
       password: hashedPassword,
     });
 
-    const user = UserEntity.registered(toEntityData(createdUser));
-    await this.repository.createCartForUser(user.id);
-    await this.publishEvents(user);
+    // The repository commits user, cart and UserRegistered outbox event atomically.
     await this.sendVerificationEmail(createdUser);
 
     return {
@@ -93,7 +88,7 @@ export class AuthService {
     const updatedUser = await this.repository.updateUser(user.id, {
       isVerified: true,
     });
-    await this.publishEvents(user);
+    // UserEmailVerified has no durable subscriber; do not publish best-effort events.
     return this.tokenService.generateTokens(updatedUser);
   }
 
@@ -160,8 +155,7 @@ export class AuthService {
     const resolution = await this.repository.resolveOAuthIdentity(data);
 
     if (resolution.created) {
-      const user = UserEntity.registered(toEntityData(resolution.user));
-      await this.publishEvents(user);
+      // New identities already carry a durable UserRegistered event in the DB.
       if (!resolution.user.isVerified) {
         await this.sendVerificationEmail(resolution.user);
       }
@@ -186,16 +180,5 @@ export class AuthService {
       { email: user.email, firstName: user.firstName },
       verifyUrl,
     );
-  }
-
-  private async publishEvents(user: UserEntity) {
-    const events = user.pullEvents();
-    for (const event of events) {
-      try {
-        await this.eventBus.publish(event);
-      } catch (error) {
-        logger.error(`Failed to publish ${event.eventName}`, { error });
-      }
-    }
   }
 }

@@ -21,6 +21,8 @@ import type {
   OAuthResolution,
 } from "../../application/ports/oauth-identity";
 import { OAuthIdentityUntrustedError } from "../../application/errors/oauth-identity.errors";
+import { persistEvents } from "@core/outbox/persist-domain-events";
+import { UserRegisteredEvent } from "@shared/domain/events/user-events";
 
 function hashRefreshToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -31,6 +33,10 @@ function hashRefreshToken(token: string): string {
 export class PrismaAuthRepository
   implements IAuthRepository, AuthSessionUserPort
 {
+  constructor(
+    private readonly persistDomainEvents: typeof persistEvents = persistEvents,
+  ) {}
+
   async findUserByEmail(email: string): Promise<PrismaUser | null> {
     return prisma.user.findUnique({ where: { email } });
   }
@@ -52,20 +58,30 @@ export class PrismaAuthRepository
   }
 
   async createUser(data: CreateUserData): Promise<PrismaUser> {
-    return prisma.user.create({
-      data: { ...data, isVerified: false },
+    return prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { ...data, isVerified: false, cart: { create: {} } },
+      });
+      await this.persistDomainEvents(tx, [
+        new UserRegisteredEvent(user.id, user.email),
+      ]);
+      return user;
     });
   }
 
   async createOAuthUser(data: CreateOAuthUserData): Promise<PrismaUser> {
-    return prisma.user.create({
-      data: {
-        ...data,
-        isVerified: true,
-        cart: {
-          create: {},
+    return prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          ...data,
+          isVerified: true,
+          cart: { create: {} },
         },
-      },
+      });
+      await this.persistDomainEvents(tx, [
+        new UserRegisteredEvent(user.id, user.email),
+      ]);
+      return user;
     });
   }
 
@@ -117,6 +133,9 @@ export class PrismaAuthRepository
             },
           },
         });
+        await this.persistDomainEvents(tx, [
+          new UserRegisteredEvent(created.id, created.email),
+        ]);
         return { user: created, created: true };
       });
       return user;
@@ -176,10 +195,6 @@ export class PrismaAuthRepository
 
       throw error;
     }
-  }
-
-  async createCartForUser(userId: string): Promise<void> {
-    await prisma.cart.create({ data: { userId } });
   }
 
   async updateUser(id: string, data: Partial<PrismaUser>): Promise<PrismaUser> {

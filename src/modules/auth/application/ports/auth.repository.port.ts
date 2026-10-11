@@ -26,7 +26,6 @@ export interface IAuthRepository {
   createUser(data: CreateUserData): Promise<AuthUser>;
   createOAuthUser(data: CreateOAuthUserData): Promise<AuthUser>;
   resolveOAuthIdentity(data: OAuthIdentity): Promise<OAuthResolution>;
-  createCartForUser(userId: string): Promise<void>;
 
   updateUser(id: string, data: Partial<AuthUser>): Promise<AuthUser>;
 

@@ -40,6 +40,10 @@ const configSchema = z
     JWT_PREAUTH_SECRET: z
       .string()
       .min(32, "JWT_PREAUTH_SECRET must be at least 32 chars"),
+    JWT_ISSUER: z.string().min(1).default("triad-backend"),
+    JWT_ACCESS_AUDIENCE: z.string().min(1).default("triad:access"),
+    JWT_REFRESH_AUDIENCE: z.string().min(1).default("triad:refresh"),
+    JWT_PREAUTH_AUDIENCE: z.string().min(1).default("triad:preauth"),
     JWT_ACCESS_EXPIRY: z.string().default("15m"),
     JWT_REFRESH_EXPIRY: z.string().default("7d"),
 

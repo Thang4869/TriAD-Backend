@@ -33,7 +33,7 @@ describe("PrismaAuthRepository (integration)", () => {
     });
   });
 
-  it("createCartForUser tạo đúng 1 cart gắn với userId", async () => {
+  it("createUser ghi cart và UserRegistered vào outbox trong cùng transaction", async () => {
     const user = await repository.createUser({
       email: `auth-repo-cart-${Date.now()}@test.com`,
       password: "h",
@@ -41,10 +41,20 @@ describe("PrismaAuthRepository (integration)", () => {
       lastName: "B",
     });
 
-    await repository.createCartForUser(user.id);
-
-    const cart = await prisma.cart.findUnique({ where: { userId: user.id } });
+    const [cart, events] = await Promise.all([
+      prisma.cart.findUnique({ where: { userId: user.id } }),
+      prisma.outboxEvent.findMany({
+        where: { eventName: "UserRegistered", aggregateId: user.id },
+      }),
+    ]);
     expect(cart).not.toBeNull();
+    expect(events).toHaveLength(1);
+    expect(events[0].payload).toMatchObject({
+      schemaVersion: 1,
+      eventName: "UserRegistered",
+      aggregateId: user.id,
+    });
+    expect(events[0].publishedAt).toBeNull();
   });
 
   it("updateUser cập nhật đúng field truyền vào", async () => {
@@ -58,6 +68,88 @@ describe("PrismaAuthRepository (integration)", () => {
     const updated = await repository.updateUser(user.id, { isVerified: true });
 
     expect(updated.isVerified).toBe(true);
+  });
+
+  it("createOAuthUser persists its outbox event atomically", async () => {
+    const user = await repository.createOAuthUser({
+      email: `oauth-direct-${Date.now()}@test.com`,
+      firstName: "OAuth",
+      lastName: "User",
+    });
+
+    expect(await prisma.cart.count({ where: { userId: user.id } })).toBe(1);
+    expect(
+      await prisma.outboxEvent.count({
+        where: { eventName: "UserRegistered", aggregateId: user.id },
+      }),
+    ).toBe(1);
+  });
+
+  it("rolls back user and cart if the outbox write fails", async () => {
+    const email = `auth-rollback-${Date.now()}@test.com`;
+    const failingRepository = new PrismaAuthRepository(async () => {
+      throw new Error("Simulated outbox failure");
+    });
+
+    await expect(
+      failingRepository.createUser({
+        email,
+        password: "hashed",
+        firstName: "A",
+        lastName: "B",
+      }),
+    ).rejects.toThrow("Simulated outbox failure");
+
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+    expect(
+      await prisma.outboxEvent.count({
+        where: { eventName: "UserRegistered" },
+      }),
+    ).toBe(0);
+  });
+
+  it("persists OAuth registration once and does not duplicate on repeat", async () => {
+    const identity = {
+      provider: "GOOGLE" as const,
+      subject: `oauth-registration-${Date.now()}`,
+      email: `oauth-registration-${Date.now()}@example.com`,
+      emailVerified: true,
+      firstName: "OAuth",
+      lastName: "User",
+    };
+    const created = await repository.resolveOAuthIdentity(identity);
+    const again = await repository.resolveOAuthIdentity(identity);
+
+    expect(created.created).toBe(true);
+    expect(again.created).toBe(false);
+    expect(created.user.id).toBe(again.user.id);
+    expect(
+      await prisma.cart.count({ where: { userId: created.user.id } }),
+    ).toBe(1);
+    const events = await prisma.outboxEvent.findMany({
+      where: { eventName: "UserRegistered", aggregateId: created.user.id },
+    });
+    expect(events).toHaveLength(1);
+  });
+
+  it("rolls back an OAuth registration when the outbox fails", async () => {
+    const email = `oauth-rollback-${Date.now()}@test.com`;
+    const failingRepository = new PrismaAuthRepository(async () => {
+      throw new Error("Simulated outbox failure");
+    });
+
+    await expect(
+      failingRepository.resolveOAuthIdentity({
+        provider: "GOOGLE",
+        subject: `oauth-rollback-${Date.now()}`,
+        email,
+        emailVerified: true,
+        firstName: "OAuth",
+        lastName: "User",
+      }),
+    ).rejects.toThrow("Simulated outbox failure");
+
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
   });
 
   describe("refresh token lifecycle", () => {

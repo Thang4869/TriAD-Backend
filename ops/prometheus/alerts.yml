@@ -73,3 +73,11 @@ groups:
         annotations:
           summary: Unresolved outbox dead-letter events exist
           description: One or more unpublished outbox events remain in the dead-letter state.
+      - alert: TriadAuthRevocationRedisFailure
+        expr: sum(increase(triad_backend_auth_token_store_failures_total[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Access-token revocation Redis failure
+          description: Authentication is failing closed (HTTP 503); investigate Redis availability.

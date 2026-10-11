@@ -84,7 +84,7 @@ describe("email.job", () => {
       .value;
     expect(transporter.sendMail).toHaveBeenCalledWith(
       expect.objectContaining({
-        html: expect.stringContaining("Verify my email"),
+        html: expect.stringContaining("This link expires in 15 minutes."),
       }),
     );
   });

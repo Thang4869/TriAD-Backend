@@ -17,6 +17,32 @@ describe("jwt utils", () => {
     ).toThrow();
   });
 
+  it("verifyToken enforces issuer and audience when requested", () => {
+    const token = signToken(
+      { sub: "user-1", iss: "triad-backend", aud: "triad:access" },
+      secret,
+      "1h",
+    );
+    expect(
+      verifyToken<{ sub: string }>(token, secret, {
+        issuer: "triad-backend",
+        audience: "triad:access",
+      }).sub,
+    ).toBe("user-1");
+    expect(() =>
+      verifyToken(token, secret, {
+        issuer: "different",
+        audience: "triad:access",
+      }),
+    ).toThrow();
+    expect(() =>
+      verifyToken(token, secret, {
+        issuer: "triad-backend",
+        audience: "triad:refresh",
+      }),
+    ).toThrow();
+  });
+
   it("decodeToken đọc được payload mà KHÔNG cần đúng secret (decode ≠ verify)", () => {
     const token = signToken({ sub: "user-1" }, secret, "1h");
     const decoded = decodeToken(token) as { sub: string };

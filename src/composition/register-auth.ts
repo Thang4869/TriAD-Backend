@@ -53,7 +53,6 @@ export function registerAuthModule(container: Container): void {
         c.resolve(TOKENS.TokenService),
         c.resolve(TOKENS.TwoFactorService),
         c.resolve(TOKENS.TokenStore),
-        c.resolve(TOKENS.EventBus),
       ),
   );
 

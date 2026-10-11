@@ -9,6 +9,7 @@ import {
   ConflictError,
   UnprocessableError,
   RateLimitError,
+  DependencyUnavailableError,
 } from "@shared/errors/application-error";
 import { logger } from "@core/logger/winston";
 import {
@@ -51,6 +52,23 @@ describe("errorHandler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(mockedPersistenceErrors.classify).mockReturnValue(null);
+  });
+
+  it("returns 503 when Redis revocation is unavailable", () => {
+    const res = createMockResponse();
+    errorHandler(
+      new DependencyUnavailableError("Authentication temporarily unavailable"),
+      createMockRequest(),
+      res,
+      vi.fn(),
+    );
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "APPLICATION.DEPENDENCY_UNAVAILABLE",
+        error: "Authentication temporarily unavailable",
+      }),
+    );
   });
 
   it("does not expose unexpected internal error messages", () => {

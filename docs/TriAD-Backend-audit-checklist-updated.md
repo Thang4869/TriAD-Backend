@@ -56,23 +56,23 @@
 
 Các dòng dưới đây là phần cần tiếp tục cập nhật. Chi tiết kỹ thuật nằm trong `docs/TriAD-Backend-Improvement-Checklist.md`.
 
-| Ưu tiên     | Gate                               | Liên kết backlog      | Trạng thái     | Điều kiện đóng                                                                                                                     |
-| ----------- | ---------------------------------- | --------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| P0          | Durable side-effect classification | A1                    | ⬜ NEXT        | Phân loại Auth/Review events; event cần sống qua crash phải có durable path + idempotency/failure policy.                          |
-| P0          | Access-token/JWT semantics         | B2, B3                | ⬜ OPEN        | Dùng `jti`/hash thay whole JWT cho revocation key; claim set có `iss`/`aud`/type/`jti` và verify theo token class.                 |
-| P0          | Redis/security failure policy      | B2, B7                | ⬜ OPEN        | Fail-open/fail-closed được quyết định, log/metric rõ, test được.                                                                   |
-| P0          | Production image runtime smoke     | I7 / audit #32        | 🟡 PARTIAL     | CI migrate → start image vừa build → `/health/ready` → API request đại diện → SIGTERM clean.                                       |
-| P0          | Crash/recovery evidence            | T2, T6 / audit #30    | 🟡 PARTIAL     | Lost-response retry, synchronized price-change-vs-checkout và kill-process/crash-window test có evidence.                          |
-| P0          | Backup/restore drill               | I9 / audit #33        | ⬜ OPEN        | Restore DB, replay outbox, rebuild projection; ghi RTO/RPO và runbook kết quả.                                                     |
-| P1          | Mutation testing                   | T4                    | ⬜ OPEN        | Mutation report cho domain/value objects/core services với threshold hợp lý trong CI hoặc artifact tái lập.                        |
-| P1          | Load/performance evidence          | T7                    | ⬜ OPEN        | k6 scenario cho checkout/hot product; ghi p50/p95/p99, throughput, error/conflict rate và test environment.                        |
-| Conditional | Bounded-context token/error split  | H10                   | ⚪ CONDITIONAL | Chỉ tách `TOKENS`/error catalog/composition nếu quy mô hoặc ownership gây khó review và bảo trì; hiện chưa có lý do refactor thêm. |
-| P1          | Observability production proof     | J1, J2                | 🟡 PARTIAL     | trace/span correlation ổn định; dashboard/SLO/burn-rate/runbook links nếu muốn claim operability mạnh.                             |
-| P1          | Admin audit trail                  | J3                    | ⬜ OPEN        | Sensitive admin actions có actor, target, time, correlation ID, outcome.                                                           |
-| P2          | Deployed auth/CSRF/OAuth smoke     | audit #12/#23         | 🟡 PENDING     | Chạy trên domain thật: login, refresh, logout, CSRF và OAuth callback với provider thật.                                           |
-| P2          | Release/repository hygiene         | I8, K3, issue hygiene | ⬜ OPEN        | Tag/semver/changelog khi phù hợp; SECURITY/CONTRIBUTING/license/metadata; đóng issue đã được implementation hoàn tất.              |
-| P2          | Demo/portfolio evidence            | K4, K5                | ⬜ OPEN        | Demo/deploy hoặc protected/static OpenAPI artifact; CV chỉ dùng metrics có thể tái lập.                                            |
-| Conditional | Saga payment/refund runtime        | F1 / audit #24        | ⚪ CONDITIONAL | Chỉ production-wire khi có payment/refund adapter thật hoặc demo adapter được mô tả rõ và có compensation/resume tests.            |
+| Ưu tiên     | Gate                               | Liên kết backlog      | Trạng thái     | Điều kiện đóng                                                                                                                                            |
+| ----------- | ---------------------------------- | --------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0          | Durable side-effect classification | A1                    | 🟡 PARTIAL     | Auth `UserRegistered` được chuẩn bị ghi outbox cùng user/cart; Reviews vốn đã atomic. Cần chạy integration/CI và xử lý crash-window email enqueue còn hở. |
+| P0          | Access-token/JWT semantics         | B2, B3                | ⬜ OPEN        | Dùng `jti`/hash thay whole JWT cho revocation key; claim set có `iss`/`aud`/type/`jti` và verify theo token class.                                        |
+| P0          | Redis/security failure policy      | B2, B7                | ⬜ OPEN        | Fail-open/fail-closed được quyết định, log/metric rõ, test được.                                                                                          |
+| P0          | Production image runtime smoke     | I7 / audit #32        | 🟡 PARTIAL     | Đã chuẩn bị job `production-image-smoke` trong `ci.yml`; yêu cầu CI PASS cho migrations, readiness, API, route protection và SIGTERM exit 0.              |
+| P0          | Crash/recovery evidence            | T2, T6 / audit #30    | 🟡 PARTIAL     | Lost-response retry, synchronized price-change-vs-checkout và kill-process/crash-window test có evidence.                                                 |
+| P0          | Backup/restore drill               | I9 / audit #33        | ⬜ OPEN        | Restore DB, replay outbox, rebuild projection; ghi RTO/RPO và runbook kết quả.                                                                            |
+| P1          | Mutation testing                   | T4                    | ⬜ OPEN        | Mutation report cho domain/value objects/core services với threshold hợp lý trong CI hoặc artifact tái lập.                                               |
+| P1          | Load/performance evidence          | T7                    | ⬜ OPEN        | k6 scenario cho checkout/hot product; ghi p50/p95/p99, throughput, error/conflict rate và test environment.                                               |
+| Conditional | Bounded-context token/error split  | H10                   | ⚪ CONDITIONAL | Chỉ tách `TOKENS`/error catalog/composition nếu quy mô hoặc ownership gây khó review và bảo trì; hiện chưa có lý do refactor thêm.                        |
+| P1          | Observability production proof     | J1, J2                | 🟡 PARTIAL     | trace/span correlation ổn định; dashboard/SLO/burn-rate/runbook links nếu muốn claim operability mạnh.                                                    |
+| P1          | Admin audit trail                  | J3                    | ⬜ OPEN        | Sensitive admin actions có actor, target, time, correlation ID, outcome.                                                                                  |
+| P2          | Deployed auth/CSRF/OAuth smoke     | audit #12/#23         | 🟡 PENDING     | Chạy trên domain thật: login, refresh, logout, CSRF và OAuth callback với provider thật.                                                                  |
+| P2          | Release/repository hygiene         | I8, K3, issue hygiene | ⬜ OPEN        | Tag/semver/changelog khi phù hợp; SECURITY/CONTRIBUTING/license/metadata; đóng issue đã được implementation hoàn tất.                                     |
+| P2          | Demo/portfolio evidence            | K4, K5                | ⬜ OPEN        | Demo/deploy hoặc protected/static OpenAPI artifact; CV chỉ dùng metrics có thể tái lập.                                                                   |
+| Conditional | Saga payment/refund runtime        | F1 / audit #24        | ⚪ CONDITIONAL | Chỉ production-wire khi có payment/refund adapter thật hoặc demo adapter được mô tả rõ và có compensation/resume tests.                                   |
 
 ## 4. Các issue đang mở nhưng có dấu hiệu đã được implementation đóng
 
@@ -88,7 +88,7 @@ Các issue như `#102`, `#90`, `#84` cần rà từng acceptance criterion trư�
 
 ## 5. Thứ tự thực hiện đề xuất
 
-1. **A1 — Durable event classification cho Auth/Reviews.**
+1. **A1 — kiểm chứng durable Auth/Reviews + quyết định xử lý email enqueue crash window.**
 2. **B2 + B3 — JWT `jti`/hash, `iss`/`aud`/token type và revocation semantics.**
 3. **I7 / audit #32 — smoke image production vừa build trong CI.**
 4. **T6 + T2 / audit #30 — kill-process/crash-window + lost-response/concurrent price scenario.**
@@ -123,4 +123,4 @@ Dự án có thể được trình bày ở mức rất mạnh khi:
 - Không refactor một adapter singleton nếu không có lợi ích testability/lifecycle cụ thể.
 - Không gọi dự án “10/10” chỉ vì checklist hết ô OPEN.
 
-> **NEXT:** A1 — phân loại durable side-effect events, bắt đầu từ Auth và Reviews.
+> **NEXT:** A1 — chạy đầy đủ integration/CI trên repo thực, xác minh đường email enqueue; sau đó B2+B3 JWT/revocation. Xem `docs/EVENT_DURABILITY.md`.

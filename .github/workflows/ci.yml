@@ -222,10 +222,181 @@ jobs:
           path: frontend/playwright-fullstack-report/
           retention-days: 7
 
+  production-image-smoke:
+    name: Production Image Runtime Smoke
+    runs-on: ubuntu-latest
+    needs: [build]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: smoke
+          POSTGRES_PASSWORD: smoke
+          POSTGRES_DB: triad_image_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smoke -d triad_image_smoke"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      IMAGE_TAG: triad-backend:runtime-smoke
+      CONTAINER_NAME: triad-production-smoke
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgresql://smoke:smoke@127.0.0.1:5432/triad_image_smoke
+      REDIS_URL: redis://127.0.0.1:6379
+      JWT_ACCESS_SECRET: ci-runtime-access-secret-at-least-32-chars
+      JWT_REFRESH_SECRET: ci-runtime-refresh-secret-at-least-32-chars
+      JWT_PREAUTH_SECRET: ci-runtime-preauth-secret-at-least-32-chars
+      TOTP_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      TOTP_ISSUER: TriAD
+      FRONTEND_URL: http://127.0.0.1:5173
+      CORS_ORIGIN: http://127.0.0.1:5173
+      SMTP_HOST: smtp.invalid
+      SMTP_PORT: "587"
+      SMTP_USER: smoke
+      SMTP_PASS: smoke
+      SMTP_FROM: smoke@example.com
+      CLOUDINARY_CLOUD_NAME: smoke
+      CLOUDINARY_API_KEY: smoke
+      CLOUDINARY_API_SECRET: smoke
+      ENABLE_TRACING: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build production image
+        run: docker build --target production --tag "$IMAGE_TAG" .
+
+      - name: Apply migrations from the built image
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL \
+            "$IMAGE_TAG" \
+            ./node_modules/.bin/prisma migrate deploy
+
+      - name: Start production container
+        run: |
+          docker run --detach --init \
+            --name "$CONTAINER_NAME" \
+            --network host \
+            -e NODE_ENV -e PORT -e DATABASE_URL -e REDIS_URL \
+            -e JWT_ACCESS_SECRET -e JWT_REFRESH_SECRET -e JWT_PREAUTH_SECRET \
+            -e TOTP_ENCRYPTION_KEY -e TOTP_ISSUER \
+            -e FRONTEND_URL -e CORS_ORIGIN \
+            -e SMTP_HOST -e SMTP_PORT -e SMTP_USER -e SMTP_PASS -e SMTP_FROM \
+            -e CLOUDINARY_CLOUD_NAME -e CLOUDINARY_API_KEY -e CLOUDINARY_API_SECRET \
+            -e ENABLE_TRACING \
+            "$IMAGE_TAG"
+
+      - name: Probe readiness, API, and protected routes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ready=0
+          for attempt in $(seq 1 60); do
+            http_code=$(curl --silent --output /tmp/triad-ready.json \
+              --write-out '%{http_code}' --max-time 3 \
+              http://127.0.0.1:3000/health/ready || true)
+
+            if [[ "$http_code" == "200" ]] && jq -e '
+              .status == "up" and
+              .components.database.status == "up" and
+              .components.cache.status == "up" and
+              .components.queues.status == "up"
+            ' /tmp/triad-ready.json > /dev/null 2>&1; then
+              ready=1
+              break
+            fi
+
+            if [[ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]]; then
+              echo "Production container terminated during startup"
+              break
+            fi
+            sleep 2
+          done
+
+          if [[ "$ready" -ne 1 ]]; then
+            echo "Readiness check failed"
+            cat /tmp/triad-ready.json || true
+            docker logs "$CONTAINER_NAME" || true
+            exit 1
+          fi
+
+          [[ "$(curl --silent --output /tmp/triad-live.json --write-out '%{http_code}' \
+            --max-time 5 http://127.0.0.1:3000/health/live)" == "200" ]]
+          jq -e '.status == "up"' /tmp/triad-live.json
+
+          [[ "$(curl --silent --output /tmp/triad-products.json --write-out '%{http_code}' \
+            --max-time 5 http://127.0.0.1:3000/api/products)" == "200" ]]
+          jq -e '.success == true' /tmp/triad-products.json
+
+          for path in /metrics /api/docs; do
+            status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --max-time 5 "http://127.0.0.1:3000${path}")
+            if [[ "$status" != "404" ]]; then
+              echo "Unexpected ${path} status: ${status} (expected 404)"
+              exit 1
+            fi
+          done
+
+      - name: Verify clean SIGTERM shutdown
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! docker container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
+            echo "No production container to stop"
+            exit 0
+          fi
+
+          if [[ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME")" == "true" ]]; then
+            docker stop --time 15 "$CONTAINER_NAME"
+          fi
+
+          docker logs "$CONTAINER_NAME" > /tmp/triad-production-smoke.log 2>&1 || true
+          exit_code=$(docker inspect --format '{{.State.ExitCode}}' "$CONTAINER_NAME")
+          docker rm "$CONTAINER_NAME"
+
+          if [[ "$exit_code" != "0" ]]; then
+            echo "Shutdown failed: container exit code ${exit_code}"
+            cat /tmp/triad-production-smoke.log
+            exit 1
+          fi
+
+          echo "Production image exited cleanly after SIGTERM"
+
+      - name: Upload smoke container logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-image-smoke-logs
+          path: /tmp/triad-production-smoke.log
+          if-no-files-found: ignore
+          retention-days: 7
+
   docker-build:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: [build, production-image-smoke, frontend-backend-e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read

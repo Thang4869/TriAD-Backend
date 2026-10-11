@@ -1,83 +1,93 @@
 import crypto from "crypto";
 import { TokenStorePort } from "../application/ports/token-store.port";
 import { SECURITY } from "@shared/constants/security.constant";
-import { signToken, verifyToken, decodeToken } from "@shared/utils/jwt";
-import { AuthenticationError } from "@shared/errors/application-error";
+import { signToken, verifyToken } from "@shared/utils/jwt";
+import {
+  AuthenticationError,
+  DependencyUnavailableError,
+} from "@shared/errors/application-error";
 import type { IAuthRepository } from "../application/ports/auth.repository.port";
 import { AuthUser } from "../application/ports/auth-user";
 import { AuthUserResponse } from "../auth.mapper";
 import config from "@config";
+import { logger } from "@core/logger/winston";
+import { authTokenStoreFailuresTotal } from "@core/metrics/metrics.registry";
 import {
   AccessTokenClaims,
   AccessTokenVerifierPort,
 } from "../application/ports/access-token-verifier.port";
 
-export interface PreAuthClaims {
+type TokenType = "access" | "refresh" | "preauth";
+
+interface TokenBaseClaims {
   sub: string;
-  purpose: "2fa";
   jti: string;
+  iss: string;
+  aud: string;
+  tokenType: TokenType;
+  exp: number;
+}
+
+export interface PreAuthClaims extends TokenBaseClaims {
+  tokenType: "preauth";
+  purpose: "2fa";
+}
+
+interface RefreshTokenClaims extends TokenBaseClaims {
+  tokenType: "refresh";
+  familyId: string;
+}
+
+/** JWT signatures and issuer/audience are verified before the claims are read. */
+function hasBaseClaims(
+  value: unknown,
+  tokenType: TokenType,
+  audience: string,
+): value is TokenBaseClaims & Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const claims = value as Record<string, unknown>;
+  return (
+    typeof claims.sub === "string" &&
+    claims.sub.length > 0 &&
+    typeof claims.jti === "string" &&
+    claims.jti.length > 0 &&
+    claims.iss === config.JWT_ISSUER &&
+    claims.aud === audience &&
+    claims.tokenType === tokenType &&
+    typeof claims.exp === "number" &&
+    Number.isFinite(claims.exp)
+  );
+}
+
+/** Validate access-specific fields before narrowing untrusted JWT payloads. */
+function hasAccessClaims(value: unknown): value is AccessTokenClaims {
+  return (
+    hasBaseClaims(value, "access", config.JWT_ACCESS_AUDIENCE) &&
+    typeof value.email === "string" &&
+    typeof value.role === "string"
+  );
+}
+
+function hasRefreshClaims(value: unknown): value is RefreshTokenClaims {
+  return (
+    hasBaseClaims(value, "refresh", config.JWT_REFRESH_AUDIENCE) &&
+    typeof value.familyId === "string" &&
+    value.familyId.length > 0
+  );
+}
+
+function hasPreAuthClaims(value: unknown): value is PreAuthClaims {
+  return (
+    hasBaseClaims(value, "preauth", config.JWT_PREAUTH_AUDIENCE) &&
+    value.purpose === "2fa"
+  );
 }
 
 export class TokenService implements AccessTokenVerifierPort {
-  verifyAccessToken(token: string): AccessTokenClaims {
-    try {
-      return verifyToken<AccessTokenClaims>(token, TokenService.ACCESS_SECRET);
-    } catch {
-      throw new AuthenticationError("Invalid token");
-    }
-  }
-
-  async isAccessTokenRevoked(token: string): Promise<boolean> {
-    const value = await this.tokenStore.get(
-      `${SECURITY.BLACKLIST_KEY_PREFIX}${token}`,
-    );
-
-    return value !== null;
-  }
   constructor(
     private readonly authRepository: IAuthRepository,
     private readonly tokenStore: TokenStorePort,
   ) {}
-
-  async issueTwoFactorPreAuthToken(userId: string): Promise<string> {
-    const jti = crypto.randomUUID();
-
-    const token = signToken(
-      { sub: userId, purpose: "2fa", jti },
-      config.JWT_PREAUTH_SECRET,
-      "5m",
-    );
-
-    await this.tokenStore.set(`auth:2fa:preauth:${jti}`, userId, 300);
-
-    return token;
-  }
-
-  async consumeTwoFactorPreAuthToken(token: string): Promise<string> {
-    let claims: PreAuthClaims;
-
-    try {
-      claims = verifyToken<PreAuthClaims>(token, config.JWT_PREAUTH_SECRET);
-    } catch {
-      throw new AuthenticationError(
-        "Invalid or expired pre-authentication token",
-      );
-    }
-
-    if (claims.purpose !== "2fa" || !claims.sub || !claims.jti) {
-      throw new AuthenticationError("Invalid pre-authentication token");
-    }
-
-    const key = `auth:2fa:preauth:${claims.jti}`;
-
-    const consumed = await this.tokenStore.getAndDelete(key);
-
-    if (consumed !== claims.sub) {
-      throw new AuthenticationError("Pre-authentication token already used");
-    }
-
-    return claims.sub;
-  }
 
   private static get ACCESS_SECRET(): string {
     return config.JWT_ACCESS_SECRET;
@@ -95,6 +105,141 @@ export class TokenService implements AccessTokenVerifierPort {
     return config.JWT_REFRESH_EXPIRY;
   }
 
+  private static claims(tokenType: TokenType, aud: string) {
+    return {
+      tokenType,
+      jti: crypto.randomUUID(),
+      iss: config.JWT_ISSUER,
+      aud,
+    };
+  }
+
+  private signAccessToken(user: Pick<AuthUser, "id" | "email" | "role">) {
+    return signToken(
+      {
+        ...TokenService.claims("access", config.JWT_ACCESS_AUDIENCE),
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      TokenService.ACCESS_SECRET,
+      TokenService.ACCESS_EXPIRY,
+    );
+  }
+
+  private signRefreshToken(userId: string, familyId: string) {
+    return signToken(
+      {
+        ...TokenService.claims("refresh", config.JWT_REFRESH_AUDIENCE),
+        sub: userId,
+        familyId,
+      },
+      TokenService.REFRESH_SECRET,
+      TokenService.REFRESH_EXPIRY,
+    );
+  }
+
+  verifyAccessToken(token: string): AccessTokenClaims {
+    try {
+      const claims = verifyToken<unknown>(token, TokenService.ACCESS_SECRET, {
+        issuer: config.JWT_ISSUER,
+        audience: config.JWT_ACCESS_AUDIENCE,
+      });
+
+      if (!hasAccessClaims(claims)) {
+        throw new AuthenticationError("Invalid access token claims");
+      }
+
+      return claims;
+    } catch {
+      throw new AuthenticationError("Invalid token");
+    }
+  }
+
+  private verifyRefreshToken(token: string): RefreshTokenClaims {
+    const claims = verifyToken<unknown>(token, TokenService.REFRESH_SECRET, {
+      issuer: config.JWT_ISSUER,
+      audience: config.JWT_REFRESH_AUDIENCE,
+    });
+
+    if (!hasRefreshClaims(claims)) {
+      throw new AuthenticationError("Invalid refresh token claims");
+    }
+
+    return claims;
+  }
+
+  private static revocationKey(jti: string): string {
+    // Only a non-reversible digest of the token ID reaches Redis key space.
+    return `${SECURITY.BLACKLIST_KEY_PREFIX}${crypto.createHash("sha256").update(jti).digest("hex")}`;
+  }
+
+  private tokenStoreUnavailable(operation: "read" | "write", error: unknown) {
+    authTokenStoreFailuresTotal.inc({ operation });
+    logger.error("Auth revocation Redis unavailable (fail-closed)", {
+      operation,
+      policy: "fail-closed",
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return new DependencyUnavailableError(
+      "Authentication temporarily unavailable",
+    );
+  }
+
+  async isAccessTokenRevoked(token: string): Promise<boolean> {
+    const claims = this.verifyAccessToken(token);
+    try {
+      const value = await this.tokenStore.get(
+        TokenService.revocationKey(claims.jti),
+      );
+      return value !== null;
+    } catch (error) {
+      throw this.tokenStoreUnavailable("read", error);
+    }
+  }
+
+  async issueTwoFactorPreAuthToken(userId: string): Promise<string> {
+    const claims = TokenService.claims("preauth", config.JWT_PREAUTH_AUDIENCE);
+    const token = signToken(
+      { ...claims, sub: userId, purpose: "2fa" },
+      config.JWT_PREAUTH_SECRET,
+      "5m",
+    );
+    await this.tokenStore.set(`auth:2fa:preauth:${claims.jti}`, userId, 300);
+    return token;
+  }
+
+  async consumeTwoFactorPreAuthToken(token: string): Promise<string> {
+    let claims: PreAuthClaims;
+
+    try {
+      const decoded = verifyToken<unknown>(token, config.JWT_PREAUTH_SECRET, {
+        issuer: config.JWT_ISSUER,
+        audience: config.JWT_PREAUTH_AUDIENCE,
+      });
+
+      if (!hasPreAuthClaims(decoded)) {
+        throw new AuthenticationError("Invalid pre-authentication token");
+      }
+
+      claims = decoded;
+    } catch {
+      throw new AuthenticationError(
+        "Invalid or expired pre-authentication token",
+      );
+    }
+
+    const consumed = await this.tokenStore.getAndDelete(
+      `auth:2fa:preauth:${claims.jti}`,
+    );
+
+    if (consumed !== claims.sub) {
+      throw new AuthenticationError("Pre-authentication token already used");
+    }
+
+    return claims.sub;
+  }
+
   async generateTokens(
     user: AuthUser,
     familyId?: string,
@@ -110,35 +255,15 @@ export class TokenService implements AccessTokenVerifierPort {
       is2FAEnabled: boolean;
     };
   }> {
-    const accessToken = signToken(
-      {
-        sub: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      TokenService.ACCESS_SECRET,
-      TokenService.ACCESS_EXPIRY,
-    );
-
+    const accessToken = this.signAccessToken(user);
     const finalFamilyId = familyId || crypto.randomUUID();
-
-    const refreshToken = signToken(
-      {
-        sub: user.id,
-        familyId: finalFamilyId,
-        jti: crypto.randomUUID(),
-      },
-      TokenService.REFRESH_SECRET,
-      TokenService.REFRESH_EXPIRY,
-    );
-
+    const refreshToken = this.signRefreshToken(user.id, finalFamilyId);
     await this.authRepository.createRefreshToken(
       refreshToken,
       user.id,
       finalFamilyId,
       new Date(Date.now() + SECURITY.REFRESH_TOKEN_TTL_MS),
     );
-
     return {
       accessToken,
       refreshToken,
@@ -159,80 +284,49 @@ export class TokenService implements AccessTokenVerifierPort {
     user: AuthUserResponse;
   }> {
     try {
-      const { sub, familyId } = verifyToken<{
-        sub: string;
-        familyId: string;
-      }>(refreshToken, TokenService.REFRESH_SECRET);
-
+      const { sub, familyId } = this.verifyRefreshToken(refreshToken);
       const tokenRecord =
         await this.authRepository.findRefreshTokenWithUser(refreshToken);
-
       if (!tokenRecord) {
         throw new AuthenticationError("Invalid refresh token");
       }
-
       if (tokenRecord.revokedAt !== null) {
         await this.authRepository.revokeAllTokensInFamily(tokenRecord.familyId);
-
         throw new AuthenticationError(
           "Token revoked - possible theft detected",
         );
       }
-
       if (tokenRecord.expiresAt < new Date()) {
         throw new AuthenticationError("Refresh token expired");
       }
-
       if (tokenRecord.familyId !== familyId) {
         throw new AuthenticationError("Family ID mismatch");
       }
-
       if (tokenRecord.userId !== sub) {
         throw new AuthenticationError("User ID mismatch");
       }
-
       const latestToken =
         await this.authRepository.findActiveRefreshTokenByFamily(
           tokenRecord.familyId,
         );
-
       const REFRESH_GRACE_PERIOD_SECONDS = 30;
-
       if (latestToken && latestToken.id !== tokenRecord.id) {
         const timeDiff =
           (Date.now() - new Date(latestToken.createdAt).getTime()) / 1000;
-
         if (timeDiff >= REFRESH_GRACE_PERIOD_SECONDS) {
           await this.authRepository.revokeAllTokensInFamily(
             tokenRecord.familyId,
           );
-
           throw new AuthenticationError(
             "Token has been superseded - possible theft",
           );
         }
       }
-
-      const accessToken = signToken(
-        {
-          sub: tokenRecord.user.id,
-          email: tokenRecord.user.email,
-          role: tokenRecord.user.role,
-        },
-        TokenService.ACCESS_SECRET,
-        TokenService.ACCESS_EXPIRY,
+      const accessToken = this.signAccessToken(tokenRecord.user);
+      const newRefreshToken = this.signRefreshToken(
+        tokenRecord.user.id,
+        tokenRecord.familyId,
       );
-
-      const newRefreshToken = signToken(
-        {
-          sub: tokenRecord.user.id,
-          familyId: tokenRecord.familyId,
-          jti: crypto.randomUUID(),
-        },
-        TokenService.REFRESH_SECRET,
-        TokenService.REFRESH_EXPIRY,
-      );
-
       const rotated = await this.authRepository.rotateRefreshToken(
         tokenRecord.id,
         newRefreshToken,
@@ -240,11 +334,9 @@ export class TokenService implements AccessTokenVerifierPort {
         tokenRecord.familyId,
         new Date(Date.now() + SECURITY.REFRESH_TOKEN_TTL_MS),
       );
-
       if (!rotated) {
         throw new AuthenticationError("Refresh token already used");
       }
-
       return {
         accessToken,
         refreshToken: newRefreshToken,
@@ -258,10 +350,7 @@ export class TokenService implements AccessTokenVerifierPort {
         },
       };
     } catch (error) {
-      if (error instanceof AuthenticationError) {
-        throw error;
-      }
-
+      if (error instanceof AuthenticationError) throw error;
       throw new AuthenticationError("Invalid refresh token");
     }
   }
@@ -271,24 +360,17 @@ export class TokenService implements AccessTokenVerifierPort {
   }
 
   async blacklistAccessToken(accessToken: string): Promise<void> {
+    const claims = this.verifyAccessToken(accessToken);
+    const ttl = claims.exp - Math.floor(Date.now() / 1000);
+    if (ttl <= 0) return;
     try {
-      const decoded = decodeToken(accessToken) as {
-        exp: number;
-      } | null;
-
-      if (decoded?.exp) {
-        const ttl = decoded.exp - Math.floor(Date.now() / 1000);
-
-        if (ttl > 0) {
-          await this.tokenStore.set(
-            `${SECURITY.BLACKLIST_KEY_PREFIX}${accessToken}`,
-            "1",
-            ttl,
-          );
-        }
-      }
-    } catch {
-      // swallow error, log warning handled outside
+      await this.tokenStore.set(
+        TokenService.revocationKey(claims.jti),
+        "1",
+        ttl,
+      );
+    } catch (error) {
+      throw this.tokenStoreUnavailable("write", error);
     }
   }
 }

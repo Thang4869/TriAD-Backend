@@ -115,3 +115,10 @@ export const outboxDeadLetteredEvents = new client.Gauge({
   help: "Number of unpublished outbox events currently in the dead-letter state",
   registers: [metricsRegistry],
 });
+
+export const authTokenStoreFailuresTotal = new client.Counter({
+  name: "triad_backend_auth_token_store_failures_total",
+  help: "Redis failures in the access-token revocation path",
+  labelNames: ["operation"],
+  registers: [metricsRegistry],
+});

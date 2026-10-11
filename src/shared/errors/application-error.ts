@@ -87,3 +87,12 @@ export class RateLimitError extends ApplicationError {
     super(message, context);
   }
 }
+
+/** Authentication infrastructure is unavailable: deny access without reporting 401. */
+export class DependencyUnavailableError extends ApplicationError {
+  readonly code = "APPLICATION.DEPENDENCY_UNAVAILABLE";
+
+  constructor(message: string = "Service temporarily unavailable") {
+    super(message);
+  }
+}

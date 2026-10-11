@@ -49,6 +49,11 @@ describe("authMiddleware", () => {
       sub: "user-1",
       email: "a@b.com",
       role: "USER",
+      jti: "token-id",
+      iss: "triad-backend",
+      aud: "triad:access",
+      tokenType: "access",
+      exp: 1999999999,
     });
 
     vi.mocked(mockedUsers.findById).mockResolvedValue(VERIFIED_USER as never);
@@ -140,7 +145,9 @@ describe("authMiddleware", () => {
     expect(mockedTokenService.isAccessTokenRevoked).toHaveBeenCalledWith(
       "revoked.token",
     );
-    expect(mockedTokenService.verifyAccessToken).not.toHaveBeenCalled();
+    expect(mockedTokenService.verifyAccessToken).toHaveBeenCalledWith(
+      "revoked.token",
+    );
 
     const error = vi.mocked(next).mock
       .calls[0][0] as unknown as AuthenticationError;
@@ -241,6 +248,11 @@ describe("optionalAuthMiddleware", () => {
       sub: "user-1",
       email: "a@b.com",
       role: "USER",
+      jti: "token-id",
+      iss: "triad-backend",
+      aud: "triad:access",
+      tokenType: "access",
+      exp: 1999999999,
     });
 
     vi.mocked(mockedUsers.findById).mockResolvedValue(VERIFIED_USER as never);
@@ -304,7 +316,9 @@ describe("optionalAuthMiddleware", () => {
 
     await optionalAuthMiddleware(req, {} as Response, next);
 
-    expect(mockedTokenService.verifyAccessToken).not.toHaveBeenCalled();
+    expect(mockedTokenService.verifyAccessToken).toHaveBeenCalledWith(
+      "revoked.token",
+    );
     expect(req.user).toBeUndefined();
     expect(next).toHaveBeenCalledWith();
   });
@@ -338,5 +352,51 @@ describe("optionalAuthMiddleware", () => {
 
     expect(req.user).toBeUndefined();
     expect(next).toHaveBeenCalledWith();
+  });
+});
+
+describe("fail-closed middleware behavior", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(mockedTokenService.verifyAccessToken).mockReturnValue({
+      sub: "user-1",
+      email: "a@b.com",
+      role: "USER",
+      jti: "jti-1",
+      iss: "triad-backend",
+      aud: "triad:access",
+      tokenType: "access",
+      exp: 1999999999,
+    });
+  });
+
+  it("does not silently downgrade optional auth on Redis outage", async () => {
+    const error = new Error("Redis unavailable");
+    vi.mocked(mockedTokenService.isAccessTokenRevoked).mockRejectedValueOnce(
+      error,
+    );
+    const next = vi.fn() as NextFunction;
+    await optionalAuthMiddleware(
+      createReq({ headers: { authorization: "Bearer ACCESS" } }),
+      {} as Response,
+      next,
+    );
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(next).toHaveBeenCalledWith(error);
+  });
+
+  it("denies required authentication on Redis outage", async () => {
+    const error = new Error("Redis unavailable");
+    vi.mocked(mockedTokenService.isAccessTokenRevoked).mockRejectedValueOnce(
+      error,
+    );
+    const next = vi.fn() as NextFunction;
+    await authMiddleware(
+      createReq({ headers: { authorization: "Bearer ACCESS" } }),
+      {} as Response,
+      next,
+    );
+    expect(next).toHaveBeenCalledWith(error);
+    expect(mockedUsers.findById).not.toHaveBeenCalled();
   });
 });

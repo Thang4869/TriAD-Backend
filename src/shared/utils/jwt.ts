@@ -10,9 +10,14 @@ export const signToken = (
   } as jwt.SignOptions);
 };
 
-export const verifyToken = <T>(token: string, secret: string): T => {
+export const verifyToken = <T>(
+  token: string,
+  secret: string,
+  options: Pick<jwt.VerifyOptions, "issuer" | "audience"> = {},
+): T => {
   return jwt.verify(token, Buffer.from(secret, "utf-8"), {
     algorithms: ["HS256"],
+    ...options,
   }) as T;
 };
 

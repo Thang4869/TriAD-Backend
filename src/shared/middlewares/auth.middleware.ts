@@ -22,11 +22,10 @@ export function createAuthMiddleware(
         throw new AuthenticationError("No token provided");
       }
 
+      const decoded = tokenVerifier.verifyAccessToken(token);
       if (await tokenVerifier.isAccessTokenRevoked(token)) {
         throw new AuthenticationError("Token revoked");
       }
-
-      const decoded = tokenVerifier.verifyAccessToken(token);
 
       const user = await users.findById(decoded.sub);
 
@@ -58,21 +57,26 @@ export function createOptionalAuthMiddleware(
       if (authHeader?.startsWith("Bearer ")) {
         const token = authHeader.substring(7);
 
-        if (!(await tokenVerifier.isAccessTokenRevoked(token))) {
-          const decoded = tokenVerifier.verifyAccessToken(token);
-          const user = await users.findById(decoded.sub);
-
-          if (user?.isVerified) {
-            req.user = {
-              id: user.id,
-              email: user.email,
-              role: user.role,
-            };
-          }
+        const decoded = tokenVerifier.verifyAccessToken(token);
+        if (await tokenVerifier.isAccessTokenRevoked(token)) {
+          throw new AuthenticationError("Token revoked");
+        }
+        const user = await users.findById(decoded.sub);
+        if (user?.isVerified) {
+          req.user = {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+          };
         }
       }
-    } catch {
-      // Optional authentication intentionally falls back to guest.
+    } catch (error) {
+      // Only invalid credentials may fall back to guest; Redis/DB failures must
+      // not silently downgrade authentication or expose a guest response.
+      if (!(error instanceof AuthenticationError)) {
+        next(error);
+        return;
+      }
     }
 
     next();

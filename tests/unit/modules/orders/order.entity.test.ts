@@ -402,6 +402,15 @@ describe("Order.canTransition", () => {
       Order.canTransition("UNKNOWN" as OrderStatus, OrderStatus.PENDING),
     ).toBe(false);
   });
+
+  it("trạng thái kết thúc không thể chuyển tiếp sang bất kỳ trạng thái nào", () => {
+    for (const terminal of [OrderStatus.DELIVERED, OrderStatus.CANCELLED]) {
+      for (const next of Object.values(OrderStatus)) {
+        expect(Order.canTransition(terminal, next)).toBe(false);
+      }
+    }
+  });
+
 });
 
 function hydrateData(

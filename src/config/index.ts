@@ -3,22 +3,6 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// ---------- FALLBACK CHO MÔI TRƯỜNG TEST ----------
-if (process.env.NODE_ENV === "test") {
-  process.env.JWT_ACCESS_SECRET =
-    process.env.JWT_ACCESS_SECRET || "test-access-secret-32charslongenough";
-  process.env.JWT_REFRESH_SECRET =
-    process.env.JWT_REFRESH_SECRET || "test-refresh-secret-32charslongenough";
-  process.env.JWT_PREAUTH_SECRET =
-    process.env.JWT_PREAUTH_SECRET || "test-preauth-secret-32charslongenough";
-  process.env.TOTP_ENCRYPTION_KEY =
-    process.env.TOTP_ENCRYPTION_KEY ||
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-  process.env.DATABASE_URL =
-    process.env.DATABASE_URL ||
-    "postgresql://postgres:postgres@localhost:5432/triad_test?schema=public";
-}
-
 const configSchema = z
   .object({
     NODE_ENV: z
@@ -154,7 +138,7 @@ if (!parseResult.success) {
     process.exit(1);
   } else {
     throw new Error(
-      "Invalid configuration in test environment. Please check .env.test or fallback logic.",
+      "Invalid configuration in test environment. Check required test environment variables.",
     );
   }
 }

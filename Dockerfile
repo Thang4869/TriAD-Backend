@@ -8,6 +8,7 @@ WORKDIR /app
 # ---------- Dependencies ----------
 FROM base AS deps
 COPY package.json package-lock.json ./
+COPY scripts/prepare-husky.cjs ./scripts/prepare-husky.cjs
 RUN HUSKY=0 npm ci
 
 # ---------- Build ----------
@@ -33,6 +34,7 @@ RUN groupadd --gid 1001 nodejs \
     && useradd --uid 1001 --gid nodejs --no-create-home nodejs
 
 COPY package.json package-lock.json ./
+COPY scripts/prepare-husky.cjs ./scripts/prepare-husky.cjs
 RUN HUSKY=0 npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/dist ./dist

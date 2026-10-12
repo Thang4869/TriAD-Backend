@@ -33,7 +33,7 @@
     "prisma:studio": "prisma studio",
     "prisma:generate": "prisma generate && tsc-alias",
     "prisma:reset": "prisma migrate reset --force && ts-node scripts/seed.ts",
-    "prepare": "if [ -d .git ]; then husky install; fi"
+    "prepare": "node scripts/prepare-husky.cjs"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",

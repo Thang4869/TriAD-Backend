@@ -35,6 +35,16 @@ export class OrderItem {
 }
 
 export class Order extends AggregateRoot {
+  private static readonly ALLOWED_TRANSITIONS: Readonly<
+    Record<OrderStatus, readonly OrderStatus[]>
+  > = {
+    [OrderStatus.PENDING]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+    [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
+    [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],
+    [OrderStatus.DELIVERED]: [],
+    [OrderStatus.CANCELLED]: [],
+  };
+
   private _items: OrderItem[] = [];
   private _status: OrderStatus;
   private _discountAmount: Money;
@@ -282,14 +292,7 @@ export class Order extends AggregateRoot {
   }
 
   static canTransition(current: OrderStatus, next: OrderStatus): boolean {
-    const transitions: Record<OrderStatus, OrderStatus[]> = {
-      [OrderStatus.PENDING]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
-      [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
-      [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],
-      [OrderStatus.DELIVERED]: [],
-      [OrderStatus.CANCELLED]: [],
-    };
-    return transitions[current]?.includes(next) || false;
+    return Order.ALLOWED_TRANSITIONS[current]?.includes(next) ?? false;
   }
 
   static hydrate(data: {

@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     name: "unit",
+    setupFiles: ["./tests/setup-env.ts"],
     include: ["tests/unit/**/*.test.ts"],
     environment: "node",
     globals: false,

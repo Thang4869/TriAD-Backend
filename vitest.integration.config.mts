@@ -7,7 +7,7 @@ export default defineConfig({
     include: ["tests/integration/**/*.test.ts"],
     environment: "node",
     globalSetup: ["./tests/integration/global-setup.ts"],
-    setupFiles: ["./tests/integration/setup.ts"],
+    setupFiles: ["./tests/setup-env.ts", "./tests/integration/setup.ts"],
 
     pool: "forks",
     fileParallelism: false,

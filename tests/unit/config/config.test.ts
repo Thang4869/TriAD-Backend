@@ -68,7 +68,7 @@ describe("Config validation", () => {
     await expect(async () => {
       await import("@config");
     }).rejects.toThrow(
-      "Invalid configuration in test environment. Please check .env.test or fallback logic.",
+      "Invalid configuration in test environment. Check required test environment variables.",
     );
     expect(consoleErrorSpy).toHaveBeenCalled();
     expect(exitSpy).not.toHaveBeenCalled();
@@ -161,23 +161,31 @@ describe("Config validation", () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
-  it("áp dụng giá trị fallback cho JWT_ACCESS_SECRET/JWT_REFRESH_SECRET/DATABASE_URL khi NODE_ENV=test và chưa được set", async () => {
-    process.env.NODE_ENV = "test";
+  it("requires explicit configuration when NODE_ENV=test, without production fallbacks", async () => {
     delete process.env.JWT_ACCESS_SECRET;
     delete process.env.JWT_REFRESH_SECRET;
     delete process.env.DATABASE_URL;
 
-    const { config } = await import("@config");
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("process.exit should not be called in test env");
+    });
 
-    expect(config.JWT_ACCESS_SECRET).toBe(
-      "test-access-secret-32charslongenough",
+    await expect(import("@config")).rejects.toThrow(
+      "Invalid configuration in test environment. Check required test environment variables.",
     );
-    expect(config.JWT_REFRESH_SECRET).toBe(
-      "test-refresh-secret-32charslongenough",
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("DATABASE_URL"),
     );
-    expect(config.DATABASE_URL).toBe(
-      "postgresql://postgres:postgres@localhost:5432/triad_test?schema=public",
-    );
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it("loads required test secrets from Vitest setup before config validation", async () => {
+    const { config } = await import("@config");
+    expect(config.JWT_ACCESS_SECRET.length).toBeGreaterThanOrEqual(32);
+    expect(config.JWT_REFRESH_SECRET.length).toBeGreaterThanOrEqual(32);
+    expect(config.JWT_PREAUTH_SECRET.length).toBeGreaterThanOrEqual(32);
+    expect(config.DATABASE_URL).toBeTruthy();
   });
 
   it("tách CORS_ORIGIN thành mảng khi biến môi trường được cung cấp", async () => {

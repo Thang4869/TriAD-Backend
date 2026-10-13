@@ -69,6 +69,21 @@ describe("EmailService", () => {
   });
 
   describe("sendVerificationEmail", () => {
+    it("forwards stable idempotency key for durable outbox delivery", async () => {
+      const queue = createEmailQueue();
+      const service = new EmailService(queue);
+      await service.sendVerificationEmail(
+        { email: "a@test.com", firstName: "A" },
+        "https://app.com/verify?token=abc",
+        "registration-verification-user-1",
+      );
+      expect(queue.enqueue).toHaveBeenCalledWith(
+        "verify-email",
+        expect.any(Object),
+        { idempotencyKey: "registration-verification-user-1" },
+      );
+    });
+
     it("enqueue job verify-email với đúng data", async () => {
       const emailQueue = createEmailQueue();
       const service = new EmailService(emailQueue);

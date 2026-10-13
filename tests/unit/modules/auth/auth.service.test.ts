@@ -266,7 +266,7 @@ describe("AuthService", () => {
       expect(repository.createUser).not.toHaveBeenCalled();
     });
 
-    it("creates user, cart, and enqueues verification email", async () => {
+    it("commits registration and defers verification email to the outbox", async () => {
       (bcrypt.hash as any).mockResolvedValueOnce("hashed");
       repository.findUserByEmail = vi.fn().mockResolvedValue(null);
       repository.createUser = vi.fn().mockResolvedValue(baseUser);
@@ -280,10 +280,8 @@ describe("AuthService", () => {
 
       expect(result.user).toMatchObject({ email: "test@test.com" });
       expect(result.message).toContain("check your email");
-      expect(mockEmailService.sendVerificationEmail).toHaveBeenCalledWith(
-        expect.objectContaining({ email: "test@test.com" }),
-        expect.any(String),
-      );
+      expect(mockEmailService.sendVerificationEmail).not.toHaveBeenCalled();
+      expect(repository.createUser).toHaveBeenCalledOnce();
     });
   });
 
@@ -868,7 +866,7 @@ describe("AuthService", () => {
       expect(repository.findUserByEmail).not.toHaveBeenCalled();
     });
 
-    it("resends verification for an unverified identity whose registration event was persisted", async () => {
+    it("defers verification for an unverified OAuth identity to its persisted outbox event", async () => {
       const unverifiedUser = {
         ...baseUser,
         email: identity.email,
@@ -886,10 +884,7 @@ describe("AuthService", () => {
         }),
       ).rejects.toThrow("OAuth identity email verification is required");
 
-      expect(mockEmailService.sendVerificationEmail).toHaveBeenCalledWith(
-        expect.objectContaining({ email: identity.email }),
-        expect.any(String),
-      );
+      expect(mockEmailService.sendVerificationEmail).not.toHaveBeenCalled();
     });
 
     it("does not issue a session when the repository rejects an untrusted link", async () => {

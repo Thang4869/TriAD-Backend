@@ -6,6 +6,7 @@ import { EventBus } from "@shared/domain/event-bus/event-bus";
 
 import type { ProjectionHandler } from "@core/outbox/projection-handler";
 import type { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-placed.handler";
+import type { RegistrationVerificationHandler } from "@modules/auth/event-handlers/registration-verification.handler";
 import type { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
 
 import { wireDomainEvents } from "@/composition/wire-domain-events";
@@ -29,6 +30,10 @@ function createTestContainer(): {
     handle: vi.fn(),
   } as unknown as OrderPlacedHandler;
 
+  const registrationVerificationHandler = {
+    handle: vi.fn(),
+  } as unknown as RegistrationVerificationHandler;
+
   const orderStatusChangedHandler = {
     handle: vi.fn(),
   } as unknown as OrderStatusChangedHandler;
@@ -38,6 +43,10 @@ function createTestContainer(): {
   container.register(TOKENS.ProjectionHandler, () => projectionHandler);
 
   container.register(TOKENS.OrderPlacedHandler, () => orderPlacedHandler);
+  container.register(
+    TOKENS.RegistrationVerificationHandler,
+    () => registrationVerificationHandler,
+  );
 
   container.register(
     TOKENS.OrderStatusChangedHandler,
@@ -61,7 +70,7 @@ describe("Domain event wiring", () => {
       }),
     );
 
-    expect(subscriptions).toHaveLength(14);
+    expect(subscriptions).toHaveLength(15);
 
     expect(subscriptions).toContainEqual({
       eventName: "OrderPlaced",
@@ -88,6 +97,11 @@ describe("Domain event wiring", () => {
       handlerName: "DashboardProjectionHandler:UserRegistered",
     });
 
+    expect(subscriptions).toContainEqual({
+      eventName: "UserRegistered",
+      handlerName: "RegistrationVerificationHandler",
+    });
+
     expect(
       subscriptions.filter((entry) => entry.eventName === "OrderCancelled"),
     ).toHaveLength(0);
@@ -96,7 +110,7 @@ describe("Domain event wiring", () => {
       new Set(
         subscriptions.map((entry) => `${entry.eventName}:${entry.handlerName}`),
       ).size,
-    ).toBe(14);
+    ).toBe(15);
   });
 
   it("does not register subscriptions twice on the same EventBus", () => {
@@ -106,7 +120,7 @@ describe("Domain event wiring", () => {
     wireDomainEvents(container);
     wireDomainEvents(container);
 
-    expect(subscribe).toHaveBeenCalledTimes(14);
+    expect(subscribe).toHaveBeenCalledTimes(15);
   });
 
   it("registers subscriptions for a different EventBus", () => {
@@ -119,7 +133,7 @@ describe("Domain event wiring", () => {
     wireDomainEvents(first.container);
     wireDomainEvents(second.container);
 
-    expect(firstSubscribe).toHaveBeenCalledTimes(14);
-    expect(secondSubscribe).toHaveBeenCalledTimes(14);
+    expect(firstSubscribe).toHaveBeenCalledTimes(15);
+    expect(secondSubscribe).toHaveBeenCalledTimes(15);
   });
 });

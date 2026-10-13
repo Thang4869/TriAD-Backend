@@ -35,6 +35,7 @@ import type { WishlistController } from "@modules/wishlist/wishlist.controller";
 import type { DashboardController } from "@modules/admin/dashboard/dashboard.controller";
 import type { NotificationsController } from "@modules/notifications/notifications.controller";
 import type { OrderPlacedHandler } from "@modules/checkout/event-handlers/order-placed.handler";
+import type { RegistrationVerificationHandler } from "@modules/auth/event-handlers/registration-verification.handler";
 import type { OrderStatusChangedHandler } from "@modules/orders/event-handlers/order-status-changed.handler";
 import type { PricingService } from "@/modules/checkout/services/pricing.service";
 import type { AuthSessionUserPort } from "@modules/auth/application/ports/auth-session-user.port";
@@ -125,6 +126,9 @@ export const TOKENS = {
   // Domain event handlers
   ProjectionHandler: createToken<ProjectionHandler>("ProjectionHandler"),
   OrderPlacedHandler: createToken<OrderPlacedHandler>("OrderPlacedHandler"),
+  RegistrationVerificationHandler: createToken<RegistrationVerificationHandler>(
+    "RegistrationVerificationHandler",
+  ),
   OrderStatusChangedHandler: createToken<OrderStatusChangedHandler>(
     "OrderStatusChangedHandler",
   ),

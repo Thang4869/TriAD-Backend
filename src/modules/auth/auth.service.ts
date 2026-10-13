@@ -58,9 +58,9 @@ export class AuthService {
       password: hashedPassword,
     });
 
-    // The repository commits user, cart and UserRegistered outbox event atomically.
-    await this.sendVerificationEmail(createdUser);
-
+    // User, cart and the registration event commit atomically.
+    // The outbox handler enqueues verification email asynchronously, so no
+    // crash window exists between the DB commit and initial email enqueue.
     return {
       user: toAuthUserResponse(createdUser),
       message:
@@ -154,13 +154,8 @@ export class AuthService {
   async resolveOAuthIdentity(data: OAuthIdentity): Promise<AuthUser> {
     const resolution = await this.repository.resolveOAuthIdentity(data);
 
-    if (resolution.created) {
-      // New identities already carry a durable UserRegistered event in the DB.
-      if (!resolution.user.isVerified) {
-        await this.sendVerificationEmail(resolution.user);
-      }
-    }
-
+    // New unverified identities receive their verification message through
+    // the already-committed UserRegistered outbox event, never inline here.
     if (!resolution.user.isVerified) {
       throw new OAuthIdentityUntrustedError();
     }

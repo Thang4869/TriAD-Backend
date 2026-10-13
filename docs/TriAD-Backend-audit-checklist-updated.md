@@ -59,7 +59,7 @@ Các dòng dưới đây là phần cần tiếp tục cập nhật. Chi tiết 
 | Ưu tiên     | Gate                               | Liên kết backlog      | Trạng thái     | Điều kiện đóng                                                                                                                                            |
 | ----------- | ---------------------------------- | --------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P0          | Durable side-effect classification | A1                    | 🟡 PARTIAL     | Auth `UserRegistered` được chuẩn bị ghi outbox cùng user/cart; Reviews vốn đã atomic. Cần chạy integration/CI và xử lý crash-window email enqueue còn hở. |
-| P0          | Rate-limit security policy         | B7                    | ⬜ OPEN        | Rà keying, bypass/lockout risk, Redis outage behavior và test health-route assumptions; JWT revocation đã harden riêng ở B2/B3. |
+| P0          | Rate-limit security policy         | B7                    | 🟡 PARTIAL     | Đã có per-IP + account/TOTP/refresh limits, HMAC identity keys, Redis fail-closed với timeout; cần CI, proxy/Redis outage và deployment verification. |
 | P0          | Orders read-after-write behavior   | A8, H2, G6, G12       | 🟡 PARTIAL     | Detail có fallback owner-scoped khi thiếu projection, list eventual; legacy checkout read được document; chờ CI, FE migration và SLO từ production. |
 | P0          | Crash/recovery evidence            | T2, T6 / audit #30    | 🟡 PARTIAL     | Lost-response retry, synchronized price-change-vs-checkout và kill-process/crash-window test có evidence.                                                 |
 | P0          | Backup/restore drill               | I9 / audit #33        | ⬜ OPEN        | Restore DB, replay outbox, rebuild projection; ghi RTO/RPO và runbook kết quả.                                                                            |
@@ -89,7 +89,7 @@ Các issue như `#102`, `#90`, `#84` cần rà từng acceptance criterion trư�
 
 1. **A1 — kiểm chứng durable Auth/Reviews + quyết định xử lý email enqueue crash window.**
 2. **A8/H2/G6/G12 — CI và regression cho Orders, canonical read API, projection boundary.**
-3. **B7/B10 — rate-limit policy và npm dependency security audit.**
+3. **B7/B10 — CI và deployment verification cho rate-limit; npm dependency security audit.**
 4. **T6 + T2 / audit #30 — kill-process/crash-window + lost-response/concurrent price scenario.**
 5. **I9 / audit #33 — backup/restore + outbox replay + projection rebuild drill.**
 6. **T7 — k6 performance evidence.**

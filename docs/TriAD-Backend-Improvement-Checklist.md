@@ -21,7 +21,7 @@
 | A1  | Auth `UserRegistered`: patch atomic user+cart+outbox cho đăng ký thường/OAuth; Reviews vốn atomic. Tồn tại crash window `sendVerificationEmail()` sau commit; cần quyết định durable email path và chạy integration/CI để chốt. | `src/modules/auth/infrastructure/repositories/prisma-auth.repository.ts`, `tests/integration/auth.repository.test.ts`, `docs/EVENT_DURABILITY.md`                            | 🟡 PARTIAL |
 | A8  | Chi tiết đơn hàng đọc projection trước, fallback owner-scoped write model nếu chưa có row (stage 13/10); list vẫn eventual và status update có thể trễ. Chưa có SLA đo thực tế, chờ CI. | `src/modules/orders/orders.service.ts`, `tests/integration/orders.repository.test.ts`, `docs/OPERATIONS.md` | 🟡 PARTIAL |
 | B6  | `THREAT_MODEL.md` đã tồn tại. Đồng bộ quyết định CSRF với threat model: giữ random double-submit hiện tại hay dùng signed/HMAC session-bound token; chỉ đổi khi threat model/evidence yêu cầu.                                  | `docs/THREAT_MODEL.md`, `src/shared/middlewares/csrf.middleware.ts`, FE `src/shared/utils/csrf.js`                                                                           | ⬜ OPEN    |
-| B7  | Rà rate-limit policy: keying, lockout/bypass risk, Redis failure mode và health-route assumptions.                                                                                                                              | `src/shared/middlewares/rate-limit.middleware.ts`, `src/modules/auth/auth.routes.ts`                                                                                         | ⬜ OPEN    |
+| B7  | Triển khai giới hạn theo IP + account cho đăng ký/login/resend, IP + token cho TOTP, IP cho refresh; email/preauth key dùng HMAC; Redis fail-closed/timeout 1s, không bỏ qua route dựa trên tên `/health`. Còn kiểm chứng CI và reverse proxy/Redis outage trong deployment. | `src/shared/middlewares/rate-limit.middleware.ts`, `src/modules/auth/auth.routes.ts`, `tests/unit/shared/middlewares/rate-limit.middleware.test.ts`, `docs/OPERATIONS.md` | 🟡 PARTIAL |
 | B10 | Chạy `npm audit` ở thời điểm nâng dependency; xử lý `multer`/dependency advisory dựa trên kết quả thực tế và chạy upload regression tests.                                                                                      | `package.json`, `src/shared/middlewares/upload.middleware.ts`                                                                                                                | ⬜ OPEN    |
 
 ## P1 — Architecture boundaries, DI & lifecycle
@@ -41,7 +41,6 @@
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
 | G2  | `Money` đã khá hoàn thiện; chỉ thêm `equals/zero/sum/allocate` khi có use case. Thay generic `Error` bằng domain error nơi phù hợp; document VND-only nếu đó là scope thật.                     | 🟡 PARTIAL     |
 | G3  | `PaymentMethod`/`PaymentStatus` đã typed hơn nhưng order/payment lifecycle chưa hoàn chỉnh vì settlement provider chưa production-wire. Hoàn thiện cùng payment use case thật, không model giả. | 🟡 PARTIAL     |
-| G6  | Đã tách nghĩa `PENDING` (draft/placed) bằng `_hasBeenPlaced`; chặn `place()` khi đã chuyển status và test hydrate/double-place; đang chờ CI. | 🟡 PARTIAL |
 | G10 | Strategy chỉ dùng khi pricing/payment thực sự có policy biến đổi; không duy trì pattern chỉ để làm đẹp README.                                                                                  | ⬜ OPEN        |
 | G11 | Inject `Clock`/`IdGenerator` ở path có business-time/determinism thực sự cần, không thay mọi `new Date()`/UUID trong infrastructure.                                                            | ⬜ OPEN        |
 | G12 | Đã kiểm tra schema JSON items ở order-history projection boundary thay vì unsafe cast; các boundary khác còn phải rà và cần CI. | 🟡 PARTIAL |
@@ -111,6 +110,8 @@
 
 ## Completed baseline — đã xóa khỏi active backlog
 
+- **G6** — Order lifecycle phân biệt draft/placed bằng `_hasBeenPlaced`; `place()` chặn trạng thái sai và regression tests đã PASS ở PR #161.
+
 Các thay đổi đã được merge vào `main` và xác minh:
 
 - **G5** — Order transition map đã thành `static readonly` (PR #158, unit tests PASS).
@@ -143,7 +144,7 @@ Các nhóm sau đã có implementation/evidence đủ mạnh và không nên ti�
 
 1. **A1** — chạy integration/CI cho outbox Auth/Reviews; quyết định xử lý email enqueue crash window (xem `docs/EVENT_DURABILITY.md`).
 2. **A8 + H2 + G6 + G12** — kiểm chứng Orders read consistency, invariant và boundary trên nhánh `commit-13102026`.
-3. **B7 + B10** — review rate-limit security policy và audit dependencies (2 critical/30 high trong log npm 13/10/2026).
+3. **B7 + B10** — kiểm chứng rate-limit policy trên CI/deploy và audit dependencies (log npm ghi 2 critical/30 high ngày 13/10/2026).
 4. **T6 + T2** — real crash/kill-process and lost-response/concurrent price scenarios.
 5. **I9** — backup/restore + outbox/projection recovery drill.
 6. **T7** — k6 performance evidence.

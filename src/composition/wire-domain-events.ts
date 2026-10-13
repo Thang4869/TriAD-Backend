@@ -52,6 +52,9 @@ export function wireDomainEvents(container: Container): void {
   );
 
   const projectionHandler = container.resolve(TOKENS.ProjectionHandler);
+  const registrationVerificationHandler = container.resolve(
+    TOKENS.RegistrationVerificationHandler,
+  );
 
   // Order placed: external side effects.
   eventBus.subscribe(
@@ -86,6 +89,13 @@ export function wireDomainEvents(container: Container): void {
       projectionHandler.handleProductEvent.bind(projectionHandler),
     );
   }
+
+  // Durable registration verification side effect.
+  eventBus.subscribe(
+    UserRegisteredEvent.eventName,
+    "RegistrationVerificationHandler",
+    registrationVerificationHandler.handle.bind(registrationVerificationHandler),
+  );
 
   // Dashboard projection.
   eventBus.subscribe(

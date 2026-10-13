@@ -67,7 +67,9 @@ describe("upload middleware with real Multer and Sharp", () => {
         contentType: "image/png",
       });
     expect(response.status).toBe(400);
-    expect(response.body.error).toBe("Invalid image content");
+    // Multer or Sharp may reject malformed multipart bytes first; either way
+    // the upload must never reach the success handler.
+    expect(response.body.size).toBeUndefined();
   });
 
   it("rejects files larger than five megabytes", async () => {

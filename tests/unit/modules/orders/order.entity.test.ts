@@ -296,6 +296,21 @@ describe("Order.place", () => {
   it("từ chối place lần hai", () => {
     expect(() => placedOrder().place()).toThrow(OrderAlreadyPlacedError);
   });
+
+  it("không place sau khi draft đã chuyển khỏi PENDING", () => {
+    const order = newOrder();
+    order.addItem("p1", "Áo", 1, new Money(100));
+    order.confirm();
+
+    expect(() => order.place()).toThrow(OrderNotMutableError);
+    expect(order.domainEvents.some((event) => event.eventName === "OrderPlaced")).toBe(false);
+  });
+
+  it("hydrate PENDING vẫn là đơn đã place, không được phát lại event", () => {
+    const order = Order.hydrate(hydrateData({ status: OrderStatus.PENDING }));
+    expect(() => order.place()).toThrow(OrderAlreadyPlacedError);
+    expect(order.domainEvents).toEqual([]);
+  });
 });
 
 describe("state machine", () => {

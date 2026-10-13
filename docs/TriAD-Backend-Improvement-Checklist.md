@@ -22,7 +22,7 @@
 | A8  | Chi tiết đơn hàng đọc projection trước, fallback owner-scoped write model nếu chưa có row (stage 13/10); list vẫn eventual và status update có thể trễ. Chưa có SLA đo thực tế, chờ CI. | `src/modules/orders/orders.service.ts`, `tests/integration/orders.repository.test.ts`, `docs/OPERATIONS.md` | 🟡 PARTIAL |
 | B6  | `THREAT_MODEL.md` đã tồn tại. Đồng bộ quyết định CSRF với threat model: giữ random double-submit hiện tại hay dùng signed/HMAC session-bound token; chỉ đổi khi threat model/evidence yêu cầu.                                  | `docs/THREAT_MODEL.md`, `src/shared/middlewares/csrf.middleware.ts`, FE `src/shared/utils/csrf.js`                                                                           | ⬜ OPEN    |
 | B7  | Triển khai giới hạn theo IP + account cho đăng ký/login/resend, IP + token cho TOTP, IP cho refresh; email/preauth key dùng HMAC; Redis fail-closed/timeout 1s, không bỏ qua route dựa trên tên `/health`. Còn kiểm chứng CI và reverse proxy/Redis outage trong deployment. | `src/shared/middlewares/rate-limit.middleware.ts`, `src/modules/auth/auth.routes.ts`, `tests/unit/shared/middlewares/rate-limit.middleware.test.ts`, `docs/OPERATIONS.md` | 🟡 PARTIAL |
-| B10 | Chạy `npm audit` ở thời điểm nâng dependency; xử lý `multer`/dependency advisory dựa trên kết quả thực tế và chạy upload regression tests.                                                                                      | `package.json`, `src/shared/middlewares/upload.middleware.ts`                                                                                                                | ⬜ OPEN    |
+| B10 | Đã thêm CI `npm audit` cho production/full lockfile, JSON artifact, summary và upload multipart regression (Multer/Sharp thật, file/field/part/pixel limits). **Chưa nâng dependency**; bước kế tiếp đánh giá advisory thực tế, nâng `multer`/`@types/multer` và regenerate lockfile rồi chạy full regression. | `.github/workflows/ci.yml`, `scripts/summarize-npm-audit.cjs`, `tests/unit/shared/middlewares/upload.multipart.test.ts`, `docs/DEPENDENCY_SECURITY_AUDIT.md` | 🟡 PARTIAL |
 
 ## P1 — Architecture boundaries, DI & lifecycle
 
@@ -144,7 +144,7 @@ Các nhóm sau đã có implementation/evidence đủ mạnh và không nên ti�
 
 1. **A1** — chạy integration/CI cho outbox Auth/Reviews; quyết định xử lý email enqueue crash window (xem `docs/EVENT_DURABILITY.md`).
 2. **A8 + H2 + G6 + G12** — kiểm chứng Orders read consistency, invariant và boundary trên nhánh `commit-13102026`.
-3. **B7 + B10** — kiểm chứng rate-limit policy trên CI/deploy và audit dependencies (log npm ghi 2 critical/30 high ngày 13/10/2026).
+3. **B10** — kiểm tra audit artifact, sửa các advisory của runtime dependencies (ưu tiên Multer), cập nhật lockfile và chạy upload regression. B7 đã PASS CI, còn xác minh proxy/Redis outage ở deployment.
 4. **T6 + T2** — real crash/kill-process and lost-response/concurrent price scenarios.
 5. **I9** — backup/restore + outbox/projection recovery drill.
 6. **T7** — k6 performance evidence.

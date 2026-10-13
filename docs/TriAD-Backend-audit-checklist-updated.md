@@ -37,7 +37,7 @@
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Transaction correctness | Checkout transaction boundary, locked product snapshot, stock update, order persistence và outbox cùng transaction; retry cho serialization/contention.                                                          |
 | Idempotency             | Redis middleware + DB uniqueness theo user; retry cùng checkout attempt có thể recover persisted order.                                                                                                          |
-| Orders/domain           | Order aggregate, static readonly transition map (G5, PR #158), optimistic version và transactional domain events; G6 đang chờ test/CI trên nhánh 13/10.                                                                                                                           |
+| Orders/domain           | Order aggregate, static readonly transition map (G5, PR #158), optimistic version và transactional domain events; G6 đã PASS CI cùng PR #161.                                                                                                                           |
 | CQRS                    | Product catalog, order history và dashboard read models đã được production-wire; projection ordering/rebuild có test/script.                                                                                     |
 | Outbox                  | Relay leases, heartbeat, stale-owner protection, retry/backoff, handler tracker, dead-letter replay, retention cleanup và maintenance indexes.                                                                   |
 | Outbox schema           | `schemaVersion: 1`, Zod validation, legacy-as-v1 và invalid/unsupported payload đi vào failure/retry path. **C8 đã đóng.**                                                                                       |
@@ -60,6 +60,7 @@ Các dòng dưới đây là phần cần tiếp tục cập nhật. Chi tiết 
 | ----------- | ---------------------------------- | --------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P0          | Durable side-effect classification | A1                    | 🟡 PARTIAL     | Auth `UserRegistered` được chuẩn bị ghi outbox cùng user/cart; Reviews vốn đã atomic. Cần chạy integration/CI và xử lý crash-window email enqueue còn hở. |
 | P0          | Rate-limit security policy         | B7                    | 🟡 PARTIAL     | Đã có per-IP + account/TOTP/refresh limits, HMAC identity keys, Redis fail-closed với timeout; cần CI, proxy/Redis outage và deployment verification. |
+| P0          | Dependency security audit          | B10                   | 🟡 PARTIAL     | CI report-only audit production/full graph và multipart regression đã thêm; chưa nâng Multer/lockfile, chờ artifact + verification trước khi đóng. |
 | P0          | Orders read-after-write behavior   | A8, H2, G6, G12       | 🟡 PARTIAL     | Detail có fallback owner-scoped khi thiếu projection, list eventual; legacy checkout read được document; chờ CI, FE migration và SLO từ production. |
 | P0          | Crash/recovery evidence            | T2, T6 / audit #30    | 🟡 PARTIAL     | Lost-response retry, synchronized price-change-vs-checkout và kill-process/crash-window test có evidence.                                                 |
 | P0          | Backup/restore drill               | I9 / audit #33        | ⬜ OPEN        | Restore DB, replay outbox, rebuild projection; ghi RTO/RPO và runbook kết quả.                                                                            |
@@ -89,7 +90,7 @@ Các issue như `#102`, `#90`, `#84` cần rà từng acceptance criterion trư�
 
 1. **A1 — kiểm chứng durable Auth/Reviews + quyết định xử lý email enqueue crash window.**
 2. **A8/H2/G6/G12 — CI và regression cho Orders, canonical read API, projection boundary.**
-3. **B7/B10 — CI và deployment verification cho rate-limit; npm dependency security audit.**
+3. **B10 — audit report từ CI, remediation Multer + cập nhật lockfile, upload regression; B7 còn deploy verification.**
 4. **T6 + T2 / audit #30 — kill-process/crash-window + lost-response/concurrent price scenario.**
 5. **I9 / audit #33 — backup/restore + outbox replay + projection rebuild drill.**
 6. **T7 — k6 performance evidence.**

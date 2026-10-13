@@ -10,6 +10,45 @@ env:
   NODE_VERSION: "22"
 
 jobs:
+  dependency-audit:
+    name: Dependency Audit (report)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - name: Verify audit report renderer
+        run: node --test tests/scripts/summarize-npm-audit.test.cjs
+      - name: Audit production and all locked dependencies
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev --json > npm-audit-production.json
+          production_exit=$?
+          npm audit --json > npm-audit-all.json
+          all_exit=$?
+          set -e
+          if [[ "$production_exit" -gt 1 || "$all_exit" -gt 1 ]]; then
+            echo "npm audit failed for a reason other than reported vulnerabilities"
+            exit 1
+          fi
+      - name: Publish dependency risk summary
+        run: node scripts/summarize-npm-audit.cjs npm-audit-production.json npm-audit-all.json
+      - name: Save audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-report
+          path: |
+            npm-audit-production.json
+            npm-audit-all.json
+          retention-days: 14
+          if-no-files-found: warn
+
   lint-and-typecheck:
     name: Lint & Type Check
     runs-on: ubuntu-latest

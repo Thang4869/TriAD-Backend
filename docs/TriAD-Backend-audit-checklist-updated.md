@@ -22,6 +22,13 @@
 
 **Định vị:** đủ mạnh làm **portfolio backend nâng cao** với bằng chứng về thiết kế và CI. Có nhiều thực hành gắn với trách nhiệm Tech Lead (trade-off, architecture boundaries, reliability); **chưa thể chứng nhận “Tech Lead 10/10”** hoặc tự gọi hệ thống production-ready tuyệt đối khi thiếu deployed/recovery evidence.
 
+**Đang đánh giá PR #166:** trên nhánh `commit-14102026`, package manifests
+và **npm-generated** lockfile đã nâng `proxy-addr@2.0.8`,
+`multer@2.4.0`/`@types/multer@2.3.0`, `bcrypt@6.0.0`/
+`@types/bcrypt@6.0.0`. Đây là **thay đổi chưa merge / chưa xác minh
+đầy đủ CI cuối**, vì vậy điểm Security và snapshot audit bên dưới
+vẫn lấy baseline `main` từ 13/10; không chấm tăng trước evidence.
+
 ## 2. Những gì đã được xác minh
 
 | Evidence | Trạng thái | Tham chiếu |

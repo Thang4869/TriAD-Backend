@@ -1,8 +1,8 @@
 # Dependency security audit and remediation plan
 
-**Reviewed:** 2026-10-13
+**Reviewed:** 2026-10-14
 **Scope:** TriAD Backend production and development lockfile dependencies.
-**Status:** PARTIAL — repeatable CI audit reports and multipart regression coverage are added; dependency upgrades remain pending.
+**Status:** PARTIAL — upgrades have been generated and committed on draft branch `commit-14102026` through npm itself. Final CI, production vulnerability delta and maintainer merge review are pending.
 
 ## Evidence and commands
 
@@ -24,6 +24,30 @@ Do not mistake the two numbers for the same exposure risk.
 A historical local `npm ci` reported vulnerabilities; the exact current
 production dependency count must come from the job's fresh audit artifact.
 Never claim a fix solely because `npm ci` succeeds.
+
+## Candidate remediation staged on `commit-14102026` (14/10/2026)
+
+The following were written by **npm on GitHub Actions runner** and committed
+as separate staged changes. They are not evidence of a safe deployed build
+until full CI, audit and maintainer review complete.
+
+| Stage | Package versions in manifest and lockfile | Intended remediation |
+| --- | --- | --- |
+| 1 | `proxy-addr@2.0.8` via exact `overrides` | Patch GHSA-jqcg-44mw-7w3h; reject unsafe proxy trust CIDRs at startup |
+| 2 | `multer@2.4.0`, `@types/multer@2.3.0` | Address multipart advisories; retain real multipart tests |
+| 3 | `bcrypt@6.0.0`, `@types/bcrypt@6.0.0` | Remove legacy `@mapbox/node-pre-gyp`/TAR chain; require native hash regression |
+
+The one-off GitHub Actions lockfile-generation workflow is removed from the
+branch after regenerating these manifests. It must not be merged or remain as
+a standing write-permission workflow. To reproduce a specific upgrade
+locally, use `scripts/b10-upgrade.ps1` and commit the two package files together.
+No manual integrity-hash edits, `npm audit fix --force`, or force pushes.
+
+**Acceptance:** `npm ci`, typecheck, lint, architecture check, native bcrypt,
+upload multipart, full test/coverage, build, production image smoke and
+frontend-to-backend E2E green; inspect the new `Dependency Audit (report)`
+artifact for remaining critical/high risks. The report-only job is **not**
+a blocking vulnerability gate.
 
 ## Verified CI baseline (2026-10-13)
 

@@ -17,11 +17,11 @@ hops**; otherwise use controlled proxy IPs/IPv4 CIDRs (for example,
 `TRUST_PROXY=10.0.0.0/8` with verified network access rules).
 
 Startup rejects broad `true`/trust-all values, arbitrary aliases, invalid
-hop counts, IPv6 CIDRs, and IPv4-mapped IPv6 CIDRs. IPv6 CIDRs remain
-intentionally unsupported while the existing `proxy-addr` dependency is
-below the patched `2.0.8`; update the lockfile separately, then review
-whether the extra restriction is still needed. Explicit IPv6 proxy **IP
-addresses** such as `::1` remain valid.
+hop counts, IPv6 CIDRs, and IPv4-mapped IPv6 CIDRs. These conservative
+startup restrictions remain a defense-in-depth policy even after the B10
+branch upgrades `proxy-addr` to `2.0.8`; review actual proxy topology before
+relaxing them. Explicit IPv6 proxy **IP addresses** such as `::1` remain
+valid.
 
 On staging, verify both direct connection spoof attempts (the supplied
 `X-Forwarded-For` must not become `req.ip`) and legitimate requests via

@@ -11,7 +11,7 @@ env:
 
 jobs:
   dependency-audit:
-    name: Dependency Audit (report)
+    name: Dependency Audit (critical gate)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,8 +21,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-      - name: Verify audit report renderer
-        run: node --test tests/scripts/summarize-npm-audit.test.cjs
+      - name: Verify audit report and critical-gate logic
+        run: node --test tests/scripts/summarize-npm-audit.test.cjs tests/scripts/assert-production-audit.test.cjs
       - name: Audit production and all locked dependencies
         shell: bash
         run: |
@@ -38,6 +38,8 @@ jobs:
           fi
       - name: Publish dependency risk summary
         run: node scripts/summarize-npm-audit.cjs npm-audit-production.json npm-audit-all.json
+      - name: Enforce zero critical production advisories
+        run: node scripts/assert-production-audit.cjs npm-audit-production.json
       - name: Save audit evidence
         if: always()
         uses: actions/upload-artifact@v4

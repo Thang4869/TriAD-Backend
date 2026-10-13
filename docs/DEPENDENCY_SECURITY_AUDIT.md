@@ -63,7 +63,11 @@ in the checked-in lockfile.
 | Low | 0 | 0 |
 | **Total** | **61** | **82** |
 
-This is a measurable improvement, **not** a clean security audit. Remaining
+This is a measurable improvement, **not** a clean security audit.
+The B10 stage adds a CI **blocking critical-only production gate**
+(`scripts/assert-production-audit.cjs`) with unit tests. Remaining high
+and moderate findings continue to be reported and must be triaged; zero
+critical is necessary but not sufficient for release readiness. Remaining
 high direct runtime dependencies identified by the npm report include
 OpenTelemetry auto-instrumentations/sdk-node, Cloudinary, Compression,
 Nodemailer and Sharp. Review their fixed ranges and API compatibility in

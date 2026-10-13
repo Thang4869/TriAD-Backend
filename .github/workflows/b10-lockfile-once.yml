@@ -1,0 +1,54 @@
+name: B10 lockfile refresh (temporary)
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  proxy-addr-lockfile:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'commit-14102026' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - name: Generate npm-managed lockfile for patched proxy-addr
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pkg set "overrides.proxy-addr=2.0.8"
+          npm install --package-lock-only --ignore-scripts --no-audit
+          node - <<'NODE'
+          const pkg = require("./package.json");
+          const lock = require("./package-lock.json");
+          if (pkg.overrides?.["proxy-addr"] !== "2.0.8") {
+            throw new Error("Missing exact proxy-addr override");
+          }
+          if (lock.packages?.["node_modules/proxy-addr"]?.version !== "2.0.8") {
+            throw new Error("proxy-addr lockfile must contain patched version 2.0.8");
+          }
+          NODE
+          git diff --check
+          git diff --stat -- package.json package-lock.json
+          if test -n "$(git diff --name-only -- . ':!package.json' ':!package-lock.json')"; then
+            echo "Unexpected generated changes outside package manifests"
+            exit 1
+          fi
+      - name: Commit npm-generated package lock to daily branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfile already patched"
+            exit 0
+          fi
+          git commit -m "fix(deps): lock patched proxy-addr 2.0.8 (B10)"
+          git push origin "HEAD:refs/heads/commit-14102026"

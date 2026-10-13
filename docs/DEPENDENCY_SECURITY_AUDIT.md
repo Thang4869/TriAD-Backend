@@ -25,6 +25,62 @@ A historical local `npm ci` reported vulnerabilities; the exact current
 production dependency count must come from the job's fresh audit artifact.
 Never claim a fix solely because `npm ci` succeeds.
 
+## Verified CI baseline (2026-10-13)
+
+Source: GitHub Actions **Dependency Audit (report)** attached to PR #163,
+generated from the checked-in npm lockfile. This is evidence of outstanding
+vulnerabilities, **not a passed security gate**.
+
+| npm severity | Production (--omit=dev) | Complete lockfile |
+| --- | ---: | ---: |
+| Critical | 2 | 2 |
+| High | 14 | 31 |
+| Moderate | 49 | 53 |
+| Low | 0 | 0 |
+| **Total** | **65** | **86** |
+
+The two critical **transitive** packages in the production report are:
+
+1. `proxy-addr` (GHSA-jqcg-44mw-7w3h), patched in `2.0.8`.
+   This can undermine Express `req.ip` when particular IPv4-mapped IPv6
+   trust subnets are configured, which directly affects B7 rate limits.
+   Prioritize lockfile remediation and verify `TRUST_PROXY` with the real
+   reverse-proxy topology. Use plain IPv4 CIDR notation for IPv4 networks
+   rather than a short IPv4-mapped IPv6 prefix.
+2. `tar` is pulled in transitively through the existing `bcrypt` v5/
+   `@mapbox/node-pre-gyp` chain. The npm report recommends
+   `bcrypt@6.0.0` (major change), so rerun password hash/compare and
+   registration/authentication regression tests after any upgrade.
+   The reported `tar` critical score aggregates several archive advisories;
+   do not assume the application directly extracts untrusted TAR archives.
+
+Other high-severity **direct** production dependencies in the report include
+`@opentelemetry/auto-instrumentations-node`,
+`@opentelemetry/sdk-node`, `bcrypt`, `cloudinary`, `compression`,
+`nodemailer` and `sharp`. Some require a coordinated major-version
+migration; several have fixes within a compatible range. Treat each as a
+separate staged change, not an indiscriminate bulk upgrade.
+
+**Note:** The current npm audit JSON did not list `multer` itself as a
+vulnerable package, but upstream published advisories confirm issues in the
+project's legacy Multer 1.x line. This is why npm audit results must be
+cross-checked against package maintainer advisories.
+
+References:
+- https://github.com/jshttp/proxy-addr/security/advisories/GHSA-jqcg-44mw-7w3h
+- https://github.com/expressjs/multer/security/advisories
+
+### Safe remediation order
+
+1. Fix `proxy-addr` via a compatible lockfile update to `>=2.0.8` and
+   validate trusted proxy IP handling.
+2. Upgrade Multer to `2.4.0` and `@types/multer` to `2.3.0` with the
+   real multipart regression matrix.
+3. Upgrade `bcrypt` to `6.0.0` in its own commit, verify password hashes
+   stored by v5 can still be checked, and re-audit its `tar` dependency path.
+4. Remediate other direct runtime dependencies by available fixed versions,
+   preserving compatible OpenTelemetry packages as a coordinated set.
+
 ## First remediation target: Multer multipart upload
 
 The checked-in `package.json` still declares Multer 1.4.x. Its 1.x line has

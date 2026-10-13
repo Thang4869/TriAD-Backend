@@ -1,6 +1,6 @@
 # TriAD-Backend — Improvement Checklist
 
-**Cập nhật:** 13/10/2026  
+**Cập nhật:** 13/10/2026 (đối chiếu GitHub `main` sau PR #163)  
 **Mốc đối chiếu:** D6/D7 tại commits `e1401ca` và `8d73b96` trên nhánh `commit-10102026`; D8 theo thay đổi trên nhánh `commit-10102026` và xác nhận PASS từ người thực hiện. H10 được đánh giá trên bản export backend ngày 09/10/2026.  
 **Mục tiêu của bản rút gọn:** chỉ giữ **OPEN / PARTIAL / CONDITIONAL**. Các mục CLOSED đã được gom vào một baseline ngắn ở cuối file.
 
@@ -18,11 +18,11 @@
 
 | Mã  | Việc còn lại                                                                                                                                                                                                                    | Evidence chính                                                                                                                                                               | Trạng thái |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| A1  | Auth `UserRegistered`: patch atomic user+cart+outbox cho đăng ký thường/OAuth; Reviews vốn atomic. Tồn tại crash window `sendVerificationEmail()` sau commit; cần quyết định durable email path và chạy integration/CI để chốt. | `src/modules/auth/infrastructure/repositories/prisma-auth.repository.ts`, `tests/integration/auth.repository.test.ts`, `docs/EVENT_DURABILITY.md`                            | 🟡 PARTIAL |
-| A8  | Chi tiết đơn hàng đọc projection trước, fallback owner-scoped write model nếu chưa có row (stage 13/10); list vẫn eventual và status update có thể trễ. Chưa có SLA đo thực tế, chờ CI. | `src/modules/orders/orders.service.ts`, `tests/integration/orders.repository.test.ts`, `docs/OPERATIONS.md` | 🟡 PARTIAL |
+| A1  | Auth/Reviews đã có tests cho atomic user/cart/outbox và CI xanh (PR #161–#163). Verification email vẫn enqueue sau commit, có crash window khi Redis/BullMQ unavailable; chưa khẳng định durable email. Ưu tiên thiết kế retry/idempotency theo outbox. | `src/modules/auth/auth.service.ts`, `src/modules/auth/infrastructure/repositories/prisma-auth.repository.ts`, `docs/EVENT_DURABILITY.md` | 🟡 PARTIAL |
+| A8  | Owner-scoped fallback read-your-writes cho chi tiết order đã PASS CI ở PR #161; list và projection đã tồn tại vẫn eventual consistent. Cần đo projection lag/SLO thực tế để đóng behavior contract đầy đủ. | `src/modules/orders/orders.service.ts`, `docs/OPERATIONS.md` | 🟡 PARTIAL |
 | B6  | `THREAT_MODEL.md` đã tồn tại. Đồng bộ quyết định CSRF với threat model: giữ random double-submit hiện tại hay dùng signed/HMAC session-bound token; chỉ đổi khi threat model/evidence yêu cầu.                                  | `docs/THREAT_MODEL.md`, `src/shared/middlewares/csrf.middleware.ts`, FE `src/shared/utils/csrf.js`                                                                           | ⬜ OPEN    |
-| B7  | Triển khai giới hạn theo IP + account cho đăng ký/login/resend, IP + token cho TOTP, IP cho refresh; email/preauth key dùng HMAC; Redis fail-closed/timeout 1s, không bỏ qua route dựa trên tên `/health`. Còn kiểm chứng CI và reverse proxy/Redis outage trong deployment. | `src/shared/middlewares/rate-limit.middleware.ts`, `src/modules/auth/auth.routes.ts`, `tests/unit/shared/middlewares/rate-limit.middleware.test.ts`, `docs/OPERATIONS.md` | 🟡 PARTIAL |
-| B10 | Đã thêm CI `npm audit` cho production/full lockfile, JSON artifact, summary và upload multipart regression (Multer/Sharp thật, file/field/part/pixel limits). **Chưa nâng dependency**; bước kế tiếp đánh giá advisory thực tế, nâng `multer`/`@types/multer` và regenerate lockfile rồi chạy full regression. | `.github/workflows/ci.yml`, `scripts/summarize-npm-audit.cjs`, `tests/unit/shared/middlewares/upload.multipart.test.ts`, `docs/DEPENDENCY_SECURITY_AUDIT.md` | 🟡 PARTIAL |
+| B7  | Per-IP + identity auth/TOTP/refresh, HMAC Redis keys, fail-closed Redis và Lua bootstrap fix đã PASS CI PR #162. Còn kiểm thử cấu hình `TRUST_PROXY`, NAT contention, outage/recovery ở staging trước khi đóng. | `src/shared/middlewares/rate-limit.middleware.ts`, `src/modules/auth/auth.routes.ts`, `docs/OPERATIONS.md` | 🟡 PENDING |
+| B10 | CI audit report-only + upload multipart regression đã PASS PR #163. Audit 13/10: production 2 critical / 14 high / 49 moderate; toàn bộ 2 critical / 31 high / 53 moderate. Chưa cập nhật dependency/lockfile: ưu tiên `proxy-addr`, `multer`, đường `bcrypt`→`tar`; audit job xanh không có nghĩa dependency an toàn. | `package.json`, `package-lock.json`, `docs/DEPENDENCY_SECURITY_AUDIT.md` | 🟡 PARTIAL |
 
 ## P1 — Architecture boundaries, DI & lifecycle
 
@@ -43,7 +43,7 @@
 | G3  | `PaymentMethod`/`PaymentStatus` đã typed hơn nhưng order/payment lifecycle chưa hoàn chỉnh vì settlement provider chưa production-wire. Hoàn thiện cùng payment use case thật, không model giả. | 🟡 PARTIAL     |
 | G10 | Strategy chỉ dùng khi pricing/payment thực sự có policy biến đổi; không duy trì pattern chỉ để làm đẹp README.                                                                                  | ⬜ OPEN        |
 | G11 | Inject `Clock`/`IdGenerator` ở path có business-time/determinism thực sự cần, không thay mọi `new Date()`/UUID trong infrastructure.                                                            | ⬜ OPEN        |
-| G12 | Đã kiểm tra schema JSON items ở order-history projection boundary thay vì unsafe cast; các boundary khác còn phải rà và cần CI. | 🟡 PARTIAL |
+| G12 | Đã thay unsafe cast tại order-history projection JSON bằng schema parser; unit/integration CI xanh ở PR #161. Các JSON/cast boundary khác vẫn cần kiểm kê có chọn lọc (H7). | 🟡 PARTIAL |
 | G13 | Chốt scope `Address`: free-form có document rõ hoặc structured address khi use case thật cần.                                                                                                   | ⬜ OPEN        |
 | G14 | Không ép Reviews/Wishlist/Notifications thành aggregate/domain-heavy nếu không có invariant đáng kể.                                                                                            | ⚪ CONDITIONAL |
 | G15 | Chia application service lớn khi responsibility/use case đã tách rõ; tránh split chỉ theo số dòng.                                                                                              | ⬜ OPEN        |
@@ -53,7 +53,7 @@
 
 | Mã  | Việc còn lại                                                                                                                                                                                                                                                       | Trạng thái     |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
-| H2  | Chốt `/api/orders` là canonical history API, giữ `/api/checkout/orders` legacy (đánh dấu deprecated trong OpenAPI) để tránh breaking FE. Chờ FE chuyển và kiểm chứng CI. | 🟡 PARTIAL |
+| H2  | Canonical `GET /api/orders` và legacy checkout order aliases đã được đánh dấu deprecated trong OpenAPI; CI PR #161 PASS. Chưa chuyển các FE consumers và chưa xóa alias để giữ backward compatibility. | 🟡 PARTIAL |
 | H4  | Chuẩn hóa naming convention cho ports/repositories/services và suffixes đang không đồng nhất.                                                                                                                                                                      | ⬜ OPEN        |
 | H5  | Giảm trộn tiếng Việt/Anh trong code comments/docs; chọn convention theo loại tài liệu.                                                                                                                                                                             | ⬜ OPEN        |
 | H7  | Phân loại remaining casts và `console.*`; thay unsafe cast bằng parser/narrowing và runtime logs bằng structured logger nơi phù hợp.                                                                                                                               | ⬜ OPEN        |
@@ -111,6 +111,9 @@
 ## Completed baseline — đã xóa khỏi active backlog
 
 - **G6** — Order lifecycle phân biệt draft/placed bằng `_hasBeenPlaced`; `place()` chặn trạng thái sai và regression tests đã PASS ở PR #161.
+- **PR #161** — G6/A8/G12/H2 hoàn tất code-level CI (Unit/Integration, Lint, Build, Production Image Smoke, FE↔BE E2E); các điều kiện deployed/FE migration vẫn theo backlog PARTIAL.
+- **PR #162** — B7 bảo vệ Redis/identity keying và outage policy, CI PASS; deployment verification chờ.
+- **PR #163** — B10 CI audit report-only, upload regression và docs PASS; dependency advisories vẫn OPEN.
 
 Các thay đổi đã được merge vào `main` và xác minh:
 
@@ -142,15 +145,16 @@ Các nhóm sau đã có implementation/evidence đủ mạnh và không nên ti�
 
 ## Current priority queue
 
-1. **A1** — chạy integration/CI cho outbox Auth/Reviews; quyết định xử lý email enqueue crash window (xem `docs/EVENT_DURABILITY.md`).
-2. **A8 + H2 + G6 + G12** — kiểm chứng Orders read consistency, invariant và boundary trên nhánh `commit-13102026`.
-3. **B10** — kiểm tra audit artifact, sửa các advisory của runtime dependencies (ưu tiên Multer), cập nhật lockfile và chạy upload regression. B7 đã PASS CI, còn xác minh proxy/Redis outage ở deployment.
-4. **T6 + T2** — real crash/kill-process and lost-response/concurrent price scenarios.
-5. **I9** — backup/restore + outbox/projection recovery drill.
-6. **T7** — k6 performance evidence.
-7. **T4** — mutation testing.
-8. **J3** — admin audit logging.
-9. **I8 + K3 + K4 + K5** — release/repo/demo/CV evidence.
+1. **A1** — khắc phục crash window của verification email: phát sinh công việc bền vững cùng transaction, outbox delivery, retry/idempotency và integration evidence.
+2. **B10** — remediation lỗ hổng production `proxy-addr`, `multer`, `bcrypt`/`tar` bằng lockfile có kiểm thử; audit hiện chỉ report-only.
+3. **T2 + T6** — synchronized concurrency, lost-response retry và kill-process/outbox recovery evidence; đo lag cho **A8**.
+4. **H7 + T3** — rà cast nguy hiểm ở API/persistence boundaries, làm chặt OpenAPI request/response contracts.
+5. **B7 + H2** — staging proxy/Redis outage và FE migration off legacy checkout aliases.
+6. **I9** — backup/restore + outbox/projection recovery drill.
+7. **T7** — k6 performance evidence.
+8. **T4** — mutation testing.
+9. **J3** — admin audit logging.
+10. **I8 + K3 + K4 + K5** — release/repo/demo/CV evidence.
 
 **H10 (CONDITIONAL):** chỉ cân nhắc nếu composition/tokens/error catalog tăng quy mô hoặc xuất hiện ownership pain thực tế.
 

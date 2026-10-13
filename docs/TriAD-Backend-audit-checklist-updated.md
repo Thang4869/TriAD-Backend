@@ -1,6 +1,6 @@
 # Checklist hoàn thiện TriAD Backend và kết nối Frontend
 
-**Cập nhật:** 13/10/2026  
+**Cập nhật:** 13/10/2026 (đối chiếu GitHub `main` sau PR #163)  
 **Mốc đối chiếu:** D6/D7 tại commits `e1401ca` và `8d73b96` trên nhánh `commit-10102026`; D8 theo thay đổi trên nhánh `commit-10102026` được người thực hiện báo PASS. H10 đánh giá theo bản export 09/10/2026. Frontend `Thang4869/TriAD-12` vẫn được dùng để đối chiếu FE↔BE.  
 **Mục đích:** chỉ giữ **evidence nền tảng** và các **gap còn cần xử lý**. Các mục đã đóng lâu không còn được liệt kê từng dòng.
 
@@ -37,7 +37,7 @@
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Transaction correctness | Checkout transaction boundary, locked product snapshot, stock update, order persistence và outbox cùng transaction; retry cho serialization/contention.                                                          |
 | Idempotency             | Redis middleware + DB uniqueness theo user; retry cùng checkout attempt có thể recover persisted order.                                                                                                          |
-| Orders/domain           | Order aggregate, static readonly transition map (G5, PR #158), optimistic version và transactional domain events; G6 đã PASS CI cùng PR #161.                                                                                                                           |
+| Orders/domain           | Order aggregate, typed transitions, G5 static readonly + G6 lifecycle đã PASS CI PR #158/#161; owner-scoped read fallback được xác minh ở PR #161.                                                                                                                           |
 | CQRS                    | Product catalog, order history và dashboard read models đã được production-wire; projection ordering/rebuild có test/script.                                                                                     |
 | Outbox                  | Relay leases, heartbeat, stale-owner protection, retry/backoff, handler tracker, dead-letter replay, retention cleanup và maintenance indexes.                                                                   |
 | Outbox schema           | `schemaVersion: 1`, Zod validation, legacy-as-v1 và invalid/unsupported payload đi vào failure/retry path. **C8 đã đóng.**                                                                                       |
@@ -58,10 +58,10 @@ Các dòng dưới đây là phần cần tiếp tục cập nhật. Chi tiết 
 
 | Ưu tiên     | Gate                               | Liên kết backlog      | Trạng thái     | Điều kiện đóng                                                                                                                                            |
 | ----------- | ---------------------------------- | --------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0          | Durable side-effect classification | A1                    | 🟡 PARTIAL     | Auth `UserRegistered` được chuẩn bị ghi outbox cùng user/cart; Reviews vốn đã atomic. Cần chạy integration/CI và xử lý crash-window email enqueue còn hở. |
-| P0          | Rate-limit security policy         | B7                    | 🟡 PARTIAL     | Đã có per-IP + account/TOTP/refresh limits, HMAC identity keys, Redis fail-closed với timeout; cần CI, proxy/Redis outage và deployment verification. |
-| P0          | Dependency security audit          | B10                   | 🟡 PARTIAL     | CI report-only audit production/full graph và multipart regression đã thêm; chưa nâng Multer/lockfile, chờ artifact + verification trước khi đóng. |
-| P0          | Orders read-after-write behavior   | A8, H2, G6, G12       | 🟡 PARTIAL     | Detail có fallback owner-scoped khi thiếu projection, list eventual; legacy checkout read được document; chờ CI, FE migration và SLO từ production. |
+| P0          | Durable side-effect classification | A1                    | 🟡 PARTIAL     | Auth/Reviews atomic outbox CI PASS; verification email enqueue vẫn xảy ra sau commit, chưa durable. Thiết kế outbox email và crash/replay tests là blocker. |
+| P0          | Rate-limit security policy         | B7                    | 🟡 PENDING     | PR #162 CI PASS (IP/identity keying, HMAC, Redis fail-closed, Lua bootstrap); còn staging reverse proxy/TRUST_PROXY, NAT và Redis outage/recovery. |
+| P0          | Dependency security audit          | B10                   | 🟡 PARTIAL     | PR #163 CI audit/upload PASS; production 2 critical, 14 high, 49 moderate. Chưa nâng vulnerable dependencies/lockfile; report-only không phải pass security gate. |
+| P0          | Orders read-after-write behavior   | A8, H2, G12           | 🟡 PARTIAL     | PR #161 CI PASS cho owner-scoped fallback/JSON parser/OpenAPI aliases; list eventual, chưa đo SLO/FE migration. G6 đã hoàn thành. |
 | P0          | Crash/recovery evidence            | T2, T6 / audit #30    | 🟡 PARTIAL     | Lost-response retry, synchronized price-change-vs-checkout và kill-process/crash-window test có evidence.                                                 |
 | P0          | Backup/restore drill               | I9 / audit #33        | ⬜ OPEN        | Restore DB, replay outbox, rebuild projection; ghi RTO/RPO và runbook kết quả.                                                                            |
 | P1          | Mutation testing                   | T4                    | ⬜ OPEN        | Mutation report cho domain/value objects/core services với threshold hợp lý trong CI hoặc artifact tái lập.                                               |
@@ -88,10 +88,10 @@ Các issue như `#102`, `#90`, `#84` cần rà từng acceptance criterion trư�
 
 ## 5. Thứ tự thực hiện đề xuất
 
-1. **A1 — kiểm chứng durable Auth/Reviews + quyết định xử lý email enqueue crash window.**
-2. **A8/H2/G6/G12 — CI và regression cho Orders, canonical read API, projection boundary.**
-3. **B10 — audit report từ CI, remediation Multer + cập nhật lockfile, upload regression; B7 còn deploy verification.**
-4. **T6 + T2 / audit #30 — kill-process/crash-window + lost-response/concurrent price scenario.**
+1. **A1 — durable verification email qua outbox + retry/idempotency + crash/recovery tests.**
+2. **B10 — fix production advisories từ CI audit: proxy-addr, Multer, bcrypt/tar + lockfile và upload regression.**
+3. **T2 + T6 / audit #30 — lost-response/price concurrency, kill-process và projection lag SLO.**
+4. **H7 + T3 — unsafe cast boundary và OpenAPI contract behavior; B7/H2 chờ staging/FE migration.**
 5. **I9 / audit #33 — backup/restore + outbox replay + projection rebuild drill.**
 6. **T7 — k6 performance evidence.**
 7. **T4 — mutation testing cho domain/core.**
@@ -123,4 +123,4 @@ Dự án có thể được trình bày ở mức rất mạnh khi:
 - Không refactor một adapter singleton nếu không có lợi ích testability/lifecycle cụ thể.
 - Không gọi dự án “10/10” chỉ vì checklist hết ô OPEN.
 
-> **NEXT:** xác minh stage Orders A8/H2/G6/G12 trên nhánh `commit-13102026`, sau đó A1 email crash window và B10 dependency audit.
+> **NEXT:** A1 verification-email outbox reliability; B10 dependency remediation chờ lockfile regeneration/test. PR #161–#163 đã PASS CI; không đồng nghĩa đã hoàn thành các verification ở deployment.

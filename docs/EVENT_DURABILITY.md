@@ -2,7 +2,7 @@
 
 **Reviewed:** 2026-10-10  
 **Scope:** Auth and Reviews; production event relay + downstream projections.  
-**Status:** Implementation prepared from the 2026-10-09 export; mark validated only after CI/integration tests run in the repository.
+**Status:** Auth/Reviews atomic writes have CI/integration evidence through PR #161–#163; verification email post-commit enqueue remains a durable-delivery gap.
 
 ## Classification matrix
 
@@ -31,4 +31,4 @@
 4. Verify rollback injection for password and OAuth registrations, single event on repeated OAuth callback, existing Reviews transactional tests.
 5. Run an outbox relay restart/crash-window scenario before claiming end-to-end crash recovery in production.
 
-**Next:** B2+B3 JWT/token-class hardening; independently prioritize verification-email post-commit delivery gap if email reliability is a production requirement.
+**Next:** implement a durable verification-email outbox delivery path with idempotent enqueue/replay semantics. JWT B2/B3 is already implemented; do not reopen it.

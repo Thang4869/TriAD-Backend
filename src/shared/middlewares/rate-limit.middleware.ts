@@ -72,9 +72,6 @@ export const rateLimiter = (options?: {
       success: false,
       error: "Too many requests, please try again later.",
     },
-    skip: (req) => {
-      return req.path === "/health";
-    },
   });
 };
 

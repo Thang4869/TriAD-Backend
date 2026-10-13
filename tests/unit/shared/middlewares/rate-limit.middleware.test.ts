@@ -105,30 +105,11 @@ describe("rate-limit middleware", () => {
     }
   });
 
-  it("should skip health only; admin requests remain rate limited", () => {
+  it("does not exempt an API path named /health from abuse protection", () => {
     rateLimiter();
-    const options = vi.mocked(rateLimit).mock.calls[0]?.[0];
-    expect(options).toBeDefined();
-    const skipFn = options?.skip;
-    expect(skipFn).toBeDefined();
-
-    const mockRes = {} as Response;
-    const healthReq = {
-      path: "/health",
-      user: { role: "USER" },
-    } as unknown as Request;
-    const adminReq = {
-      path: "/api",
-      user: { role: "ADMIN" },
-    } as unknown as Request;
-    const normalReq = {
-      path: "/api",
-      user: { role: "USER" },
-    } as unknown as Request;
-
-    expect(skipFn?.(healthReq, mockRes)).toBe(true);
-    expect(skipFn?.(adminReq, mockRes)).toBe(false);
-    expect(skipFn?.(normalReq, mockRes)).toBe(false);
+    const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
+    // The health routes are mounted outside /api; no path-based exemption is needed.
+    expect(options?.skip).toBeUndefined();
   });
 
   it("should create strictRateLimiter with 50 max and 15min window", () => {
@@ -290,7 +271,7 @@ describe("auth and 2FA abuse rate-limit keys", () => {
     expect(first).toBe(generate(req("user@example.com")));
     expect(first).not.toContain("user@example.com");
     expect(first).not.toContain("User@Example.COM");
-    expect(first).toMatch(/^192\\.0\\.2\\.20:[a-f0-9]{64}$/);
+    expect(first).toMatch(/^192\.0\.2\.20:[a-f0-9]{64}$/);
     expect(first).not.toContain("198.51.100.1");
   });
 
@@ -301,7 +282,7 @@ describe("auth and 2FA abuse rate-limit keys", () => {
     const token = "SECRET.JWT.PREAUTH";
     const key = generate({ ip: "192.0.2.11", body: { preAuthToken: token } } as Request);
     expect(key).not.toContain(token);
-    expect(key).toMatch(/^192\\.0\\.2\\.11:[a-f0-9]{64}$/);
+    expect(key).toMatch(/^192\.0\.2\.11:[a-f0-9]{64}$/);
   });
 
   it("shares missing identity buckets rather than letting malformed input evade limits", () => {
@@ -338,12 +319,13 @@ describe("rate-limit Redis fail-closed policy", () => {
     const sendCommand = commandBridge();
     const redisClient = redis as typeof redis & { status: string };
     const old = redisClient.status;
+    const earlierCalls = vi.mocked(redis.call).mock.calls.length;
     redisClient.status = "reconnecting";
     try {
       await expect(sendCommand("INCR", "test-key")).rejects.toBeInstanceOf(
         DependencyUnavailableError,
       );
-      expect(redis.call).not.toHaveBeenCalled();
+      expect(vi.mocked(redis.call).mock.calls).toHaveLength(earlierCalls);
     } finally {
       redisClient.status = old;
     }

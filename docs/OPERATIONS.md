@@ -7,6 +7,31 @@
 3. Confirm PostgreSQL and Redis connectivity before restarting workers.
 4. Do not manually delete outbox rows; they are production recovery state.
 
+## Orders read-after-write behavior
+
+Checkout returns the committed write-side order directly, including an
+idempotency-retry recovery path. The canonical `GET /api/orders` list is
+served from `order_history_projection` and is eventually consistent.
+`GET /api/orders/{orderId}` tries the projection first, then queries
+the owner-scoped write model if the projection row is absent, so a newly
+committed order remains readable by ID even before the outbox relay catches up.
+
+This fallback is intentionally **missing-row only**. An existing projection
+may lag behind a later order-status update; this endpoint does not guarantee
+immediate visibility of those updates. No fixed projection-lag SLA has been
+measured yet. Monitor outbox lag and establish an SLO from deployment evidence
+before claiming a numeric staleness bound.
+
+`/api/checkout/orders` and `/api/checkout/orders/{orderId}` are legacy
+direct-write read endpoints kept for frontend compatibility. Prefer the
+`/api/orders` API in new clients. The two API families have different
+response shapes; do not silently redirect legacy traffic without updating
+consumers and contract tests.
+
+When investigating a missing order, first check the owner-scoped `orders`
+row, then `order_history_projection`, then outbox lag/dead letters.
+Never bypass the `userId` ownership check in fallback queries.
+
 ## Outbox lag or dead letters
 
 - Inspect `triad_backend_outbox_lag_seconds`, `triad_backend_outbox_dead_lettered_events`, claimed/published/failed counters and `outbox_events` rows with `publishedAt IS NULL`.

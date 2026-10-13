@@ -51,7 +51,8 @@ export class Order extends AggregateRoot {
   private _shippingFee: Money;
   private _tax: Money;
   private _discountCode?: string;
-  private _placed = false;
+  // PENDING can be a draft or an already-placed order. Status alone cannot distinguish them.
+  private _hasBeenPlaced = false;
 
   private constructor(
     id: string,
@@ -159,7 +160,7 @@ export class Order extends AggregateRoot {
   }
 
   private assertMutable(): void {
-    if (this._placed) {
+    if (this._hasBeenPlaced) {
       throw new OrderNotMutableError("ALREADY_PLACED");
     }
     if (this._status !== OrderStatus.PENDING) {
@@ -224,13 +225,16 @@ export class Order extends AggregateRoot {
   }
 
   place(): void {
-    if (this._placed) {
+    if (this._hasBeenPlaced) {
       throw new OrderAlreadyPlacedError();
+    }
+    if (this._status !== OrderStatus.PENDING) {
+      throw new OrderNotMutableError("NOT_PENDING");
     }
     if (this._items.length === 0) {
       throw new EmptyOrderError();
     }
-    this._placed = true;
+    this._hasBeenPlaced = true;
     this.raise(
       new OrderPlacedEvent(
         this.id,
@@ -348,7 +352,7 @@ export class Order extends AggregateRoot {
         ),
       );
     }
-    order._placed = true;
+    order._hasBeenPlaced = true;
     if (data.version !== undefined) {
       order.setVersionFromPersistence(data.version);
     }

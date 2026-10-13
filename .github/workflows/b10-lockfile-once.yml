@@ -3,7 +3,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 jobs:
-  multer-lockfile:
+  bcrypt-lockfile:
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'commit-14102026' }}
     runs-on: ubuntu-latest
     permissions:
@@ -17,21 +17,24 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-      - name: Generate npm-managed lockfile for Multer 2.4.0 and typings
+      - name: Generate npm-managed lockfile for bcrypt 6.0.0 and typings
         shell: bash
         run: |
           set -euo pipefail
-          npm install --save-exact --package-lock-only --ignore-scripts --no-audit multer@2.4.0
-          npm install --save-dev --save-exact --package-lock-only --ignore-scripts --no-audit @types/multer@2.3.0
+          npm install --save-exact --package-lock-only --ignore-scripts --no-audit bcrypt@6.0.0
+          npm install --save-dev --save-exact --package-lock-only --ignore-scripts --no-audit @types/bcrypt@6.0.0
           node - <<'NODE'
           const pkg = require("./package.json");
           const lock = require("./package-lock.json");
-          if (pkg.dependencies.multer !== "2.4.0" || pkg.devDependencies["@types/multer"] !== "2.3.0") {
-            throw new Error("Multer package versions must be pinned exactly");
+          if (pkg.dependencies.bcrypt !== "6.0.0" || pkg.devDependencies["@types/bcrypt"] !== "6.0.0") {
+            throw new Error("bcrypt package versions must be pinned exactly");
           }
-          if (lock.packages?.["node_modules/multer"]?.version !== "2.4.0" ||
-              lock.packages?.["node_modules/@types/multer"]?.version !== "2.3.0") {
-            throw new Error("Multer lockfile must contain patched runtime and matching typings");
+          if (lock.packages?.["node_modules/bcrypt"]?.version !== "6.0.0" ||
+              lock.packages?.["node_modules/@types/bcrypt"]?.version !== "6.0.0") {
+            throw new Error("bcrypt lockfile must contain runtime v6 and matching typings");
+          }
+          if (lock.packages?.["node_modules/@mapbox/node-pre-gyp"] != null) {
+            throw new Error("bcrypt v5 native download helper still in the dependency graph");
           }
           NODE
           git diff --check
@@ -51,5 +54,5 @@ jobs:
             echo "Lockfile already patched"
             exit 0
           fi
-          git commit -m "fix(deps): upgrade Multer 2.4.0 and typings (B10)"
+          git commit -m "fix(deps): upgrade bcrypt 6.0.0 and remove old native tar chain (B10)"
           git push origin "HEAD:refs/heads/commit-14102026"

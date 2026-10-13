@@ -1,126 +1,75 @@
-# Checklist hoàn thiện TriAD Backend và kết nối Frontend
+# TriAD Backend — Audit & đánh giá hiện trạng
 
-**Cập nhật:** 13/10/2026 (đối chiếu GitHub `main` sau PR #163)  
-**Mốc đối chiếu:** D6/D7 tại commits `e1401ca` và `8d73b96` trên nhánh `commit-10102026`; D8 theo thay đổi trên nhánh `commit-10102026` được người thực hiện báo PASS. H10 đánh giá theo bản export 09/10/2026. Frontend `Thang4869/TriAD-12` vẫn được dùng để đối chiếu FE↔BE.  
-**Mục đích:** chỉ giữ **evidence nền tảng** và các **gap còn cần xử lý**. Các mục đã đóng lâu không còn được liệt kê từng dòng.
+**Cập nhật:** 14/10/2026 · **Nguồn kiểm chứng:** `main` sau [PR #164](https://github.com/Thang4869/TriAD-Backend/pull/164), [CI của repository](https://github.com/Thang4869/TriAD-Backend/actions) và [Dependency Security Audit](DEPENDENCY_SECURITY_AUDIT.md). **Phạm vi điểm:** Backend; frontend chỉ được đánh giá ở mức tích hợp FE↔BE E2E.
 
-> Checklist này không phải thang điểm tuyệt đối. Mục tiêu là làm cho claim về OOP, Clean Code, production readiness và portfolio có bằng chứng tái lập được.
+> Các điểm dưới đây là **ước lượng chuyên môn**, không phải benchmark độc lập, chứng nhận Tech Lead hay cam kết production SLA. Không đưa điểm AI vào CV như một KPI.
 
-## Quy ước
+## 1. Điểm hiện tại — đánh giá lại theo bằng chứng mới
 
-| Trạng thái     | Ý nghĩa                                                          |
-| -------------- | ---------------------------------------------------------------- |
-| ✅ BASELINE    | Đã hoàn thành, chỉ giữ summary để làm mốc.                       |
-| 🟡 PARTIAL     | Đã có implementation/evidence nhưng còn gap cụ thể.              |
-| 🟡 PENDING     | Code đã sẵn sàng nhưng cần môi trường/provider thật để xác minh. |
-| ⬜ OPEN        | Chưa hoàn tất hoặc chưa có đủ evidence.                          |
-| ⬜ NEXT        | Ưu tiên thực hiện ngay tiếp theo.                                |
-| ⚪ CONDITIONAL | Chỉ làm khi use case/business/runtime thực sự cần.               |
+| Hạng mục | Điểm / 10 | Bằng chứng và hạn chế quan trọng |
+| --- | ---: | --- |
+| **OOP / SOLID / DDD** | **9.2** | Aggregate/VO, DI, typed transitions, UoW, domain events; payment/Saga chưa có runtime provider thật. |
+| **Clean Architecture** | **9.3** | Modular monolith, ports/adapters, modular composition root, dependency-cruiser CI gate. |
+| **Clean Code / Maintainability** | **8.7** | Error taxonomy, structured boundaries tốt; naming, cast, TypeScript/ESLint tooling và API drift vẫn cần cleanup. |
+| **Testing / CI** | **9.4** | Unit/integration/contract, architecture, build, production image runtime smoke, full FE↔BE E2E đều xanh ở PR #164; chưa có mutation/load gate. |
+| **Reliability / concurrency** | **9.0** | Serializable checkout, idempotency, outbox retry/lease/tracker, order projection; A1 đã chuyển sang outbox nhưng chưa có kill-process/recovery drill đầy đủ. |
+| **Security** | **7.1** | JWT/CSRF/rate limit/OAuth/upload có kiểm thử; **2 critical + 14 high production dependency advisories** chưa remediation, staging proxy/Redis chưa chứng minh. |
+| **Production readiness** | **7.8** | Docker multi-stage + production image smoke PASS; thiếu deployed smoke, backup/restore RTO/RPO, SLO và dependency cleanup. |
+| **Observability / Ops** | **8.5** | OTEL, Prometheus, Winston, alert/runbook foundation; còn dashboard SLO, log tracing correlation và admin audit trail. |
+| **Tổng thể Backend (tham khảo)** | **~8.6** | Trung bình 8 mảng trên, làm tròn 1 chữ số; trọng số ngang nhau chỉ để so sánh tiến độ nội bộ. |
 
-## 1. Snapshot đánh giá hiện tại
+**So với bản cũ (~9.2/10):** việc hạ điểm là **đổi chuẩn đánh giá nghiêm hơn về security và evidence production**, không có nghĩa code OOP/architecture bị thoái hóa. Sau B7/A1, các cơ chế protection/recovery tốt hơn, nhưng một `npm audit` report-only **không** sửa lỗ hổng đã phát hiện. Điểm phải tăng theo evidence mới, không theo số checkbox đóng.
 
-| Mảng                      |    Đánh giá | Nhận định                                                                                                                                  |
-| ------------------------- | ----------: | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| OOP / SOLID / DDD         |     ~9.3/10 | Aggregate, value object, ports/adapters, DI, specification, state transition, UoW và event-driven boundaries đã mạnh.                      |
-| Architecture              |     ~9.4/10 | Modular monolith, dependency boundary gate, composition root theo module; request-scope không dùng đã được gỡ theo bước D8.                |
-| Clean Code                |     ~9.0/10 | `src/container.ts` gọn hơn; event wiring và health-route construction được tách; cast/tooling/naming cleanup vẫn còn.                      |
-| Testing / CI              |     ~9.4/10 | Coverage gate, architecture gate, integration tests, Docker build và full FE↔BE journey đã có.                                             |
-| Reliability / concurrency |     ~9.3/10 | Transactional outbox, lease/retry/dead-letter, idempotency, optimistic concurrency và projection ordering đã có.                           |
-| Security                  |     ~8.8/10 | CSRF, OAuth state, rate limiting, hidden production routes, upload validation và threat model đã có; JWT revocation hardening đã merge; rate-limit/dependency audit còn cần làm. |
-| Production readiness      |     ~8.7/10 | Local production stack và CI build tốt; runtime image smoke đã PASS; vẫn thiếu recovery drill và deployed evidence đầy đủ.                             |
-| Observability / Ops       |     ~9.0/10 | OTEL, metrics, alerts, structured logging foundation và runbooks đã có; còn SLO/dashboard/audit logging.                                   |
-| **Tổng thể Backend**      | **~9.2/10** | Đủ mạnh để đưa vào CV/portfolio; chưa nên tự nhận “10/10” hoặc “production-ready tuyệt đối”.                                               |
+**Định vị:** đủ mạnh làm **portfolio backend nâng cao** với bằng chứng về thiết kế và CI. Có nhiều thực hành gắn với trách nhiệm Tech Lead (trade-off, architecture boundaries, reliability); **chưa thể chứng nhận “Tech Lead 10/10”** hoặc tự gọi hệ thống production-ready tuyệt đối khi thiếu deployed/recovery evidence.
 
-## 2. Completed baseline — chỉ giữ mốc, không mở lại thành task
+## 2. Những gì đã được xác minh
 
-| Nhóm                    | Evidence hiện có                                                                                                                                                                                                 |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Transaction correctness | Checkout transaction boundary, locked product snapshot, stock update, order persistence và outbox cùng transaction; retry cho serialization/contention.                                                          |
-| Idempotency             | Redis middleware + DB uniqueness theo user; retry cùng checkout attempt có thể recover persisted order.                                                                                                          |
-| Orders/domain           | Order aggregate, typed transitions, G5 static readonly + G6 lifecycle đã PASS CI PR #158/#161; owner-scoped read fallback được xác minh ở PR #161.                                                                                                                           |
-| CQRS                    | Product catalog, order history và dashboard read models đã được production-wire; projection ordering/rebuild có test/script.                                                                                     |
-| Outbox                  | Relay leases, heartbeat, stale-owner protection, retry/backoff, handler tracker, dead-letter replay, retention cleanup và maintenance indexes.                                                                   |
-| Outbox schema           | `schemaVersion: 1`, Zod validation, legacy-as-v1 và invalid/unsupported payload đi vào failure/retry path. **C8 đã đóng.**                                                                                       |
-| Architecture            | Custom DI container, ports/adapters và `dependency-cruiser` boundary enforcement trong CI; negative probe đã chứng minh rule hoạt động.                                                                          |
-| Composition root (D6)   | Registrations tách qua `src/composition/register-*.ts`; event handlers và 14 subscriptions được wire riêng, có test chống đăng ký trùng; HealthService được compose ngoài routes.                                |
-| Auth DI identity (D7)   | `registerAuthModule()` dùng một `PrismaAuthRepository` cho `TOKENS.AuthRepository` và `TOKENS.AuthSessionUser`; không khởi tạo trùng adapter.                                                                    |
-| Request scope (D8)      | Đã gỡ middleware tạo `req.container` không được dùng và Express type augmentation tương ứng; giữ nguyên `Lifetime.Scoped`/`createScope()` trong core DI. Người thực hiện báo PASS; cần lưu evidence cùng commit. |
-| Security foundation     | CSRF bootstrap, CORS/cookie handling, OAuth state store, upload content validation, request size limits, `/metrics` và `/api/docs` không mount ở production.                                                     |
-| Threat modeling         | `docs/THREAT_MODEL.md` đã được thêm để ghi trust boundaries, attack surface, mitigations và residual risks.                                                                                                      |
-| Testing                 | Global unit coverage threshold ~90%; domain/value-object target 100%; PostgreSQL/Redis integration tests; concurrency/retry/projection tests.                                                                    |
-| Full-stack evidence     | GitHub Actions đã chạy flow login → product → cart → checkout → persisted order giữa frontend và backend.                                                                                                        |
-| Runtime foundation      | Docker multi-stage/non-root, Compose, Postgres/Redis/BullMQ/OTEL; production image smoke đã PASS ở PR #160.                                                                          |
-| Documentation           | README đã giảm over-claim: Saga/payment chưa production-wire, production checkout là transaction-based, docs production được bảo vệ.                                                                             |
+| Evidence | Trạng thái | Tham chiếu |
+| --- | --- | --- |
+| Orders G5/G6, read-after-write fallback, OpenAPI aliases | **PASS CI, merged** | [#158](https://github.com/Thang4869/TriAD-Backend/pull/158), [#161](https://github.com/Thang4869/TriAD-Backend/pull/161) |
+| B7 rate-limit identity/IP, Redis fail-closed | **PASS CI, merged**; thiếu staging proof | [#162](https://github.com/Thang4869/TriAD-Backend/pull/162) |
+| B10 audit report & multipart regression | **PASS CI, merged**; vulnerabilities còn tồn tại | [#163](https://github.com/Thang4869/TriAD-Backend/pull/163) |
+| A1 registration verification qua transactional outbox | **PASS CI, merged**; relay kill/replay/SMTP drill chưa đủ | [#164](https://github.com/Thang4869/TriAD-Backend/pull/164) |
+| Image runtime smoke và FE↔BE checkout journey | **PASS CI** | [#160](https://github.com/Thang4869/TriAD-Backend/pull/160), [#164](https://github.com/Thang4869/TriAD-Backend/pull/164) |
 
-## 3. Active audit gates
+**B10 — audit baseline từ CI 13/10/2026** (không thay cho lần quét mới sau khi upgrade):
 
-Các dòng dưới đây là phần cần tiếp tục cập nhật. Chi tiết kỹ thuật nằm trong `docs/TriAD-Backend-Improvement-Checklist.md`.
+| Mức độ | Production | Full lockfile |
+| --- | ---: | ---: |
+| Critical | 2 | 2 |
+| High | 14 | 31 |
+| Moderate | 49 | 53 |
+| **Tổng** | **65** | **86** |
 
-| Ưu tiên     | Gate                               | Liên kết backlog      | Trạng thái     | Điều kiện đóng                                                                                                                                            |
-| ----------- | ---------------------------------- | --------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0          | Durable side-effect classification | A1                    | 🟡 PARTIAL     | Initial verification enqueue moved behind transactional UserRegistered outbox with stable token/job key; CI + true relay crash/recovery + SMTP delivery proof pending, resend still best-effort. |
-| P0          | Rate-limit security policy         | B7                    | 🟡 PENDING     | PR #162 CI PASS (IP/identity keying, HMAC, Redis fail-closed, Lua bootstrap); còn staging reverse proxy/TRUST_PROXY, NAT và Redis outage/recovery. |
-| P0          | Dependency security audit          | B10                   | 🟡 PARTIAL     | PR #163 CI audit/upload PASS; production 2 critical, 14 high, 49 moderate. Chưa nâng vulnerable dependencies/lockfile; report-only không phải pass security gate. |
-| P0          | Orders read-after-write behavior   | A8, H2, G12           | 🟡 PARTIAL     | PR #161 CI PASS cho owner-scoped fallback/JSON parser/OpenAPI aliases; list eventual, chưa đo SLO/FE migration. G6 đã hoàn thành. |
-| P0          | Crash/recovery evidence            | T2, T6 / audit #30    | 🟡 PARTIAL     | Lost-response retry, synchronized price-change-vs-checkout và kill-process/crash-window test có evidence.                                                 |
-| P0          | Backup/restore drill               | I9 / audit #33        | ⬜ OPEN        | Restore DB, replay outbox, rebuild projection; ghi RTO/RPO và runbook kết quả.                                                                            |
-| P1          | Mutation testing                   | T4                    | ⬜ OPEN        | Mutation report cho domain/value objects/core services với threshold hợp lý trong CI hoặc artifact tái lập.                                               |
-| P1          | Load/performance evidence          | T7                    | ⬜ OPEN        | k6 scenario cho checkout/hot product; ghi p50/p95/p99, throughput, error/conflict rate và test environment.                                               |
-| Conditional | Bounded-context token/error split  | H10                   | ⚪ CONDITIONAL | Chỉ tách `TOKENS`/error catalog/composition nếu quy mô hoặc ownership gây khó review và bảo trì; hiện chưa có lý do refactor thêm.                        |
-| P1          | Observability production proof     | J1, J2                | 🟡 PARTIAL     | trace/span correlation ổn định; dashboard/SLO/burn-rate/runbook links nếu muốn claim operability mạnh.                                                    |
-| P1          | Admin audit trail                  | J3                    | ⬜ OPEN        | Sensitive admin actions có actor, target, time, correlation ID, outcome.                                                                                  |
-| P2          | Deployed auth/CSRF/OAuth smoke     | audit #12/#23         | 🟡 PENDING     | Chạy trên domain thật: login, refresh, logout, CSRF và OAuth callback với provider thật.                                                                  |
-| P2          | Release/repository hygiene         | I8, K3, issue hygiene | ⬜ OPEN        | Tag/semver/changelog khi phù hợp; SECURITY/CONTRIBUTING/license/metadata; đóng issue đã được implementation hoàn tất.                                     |
-| P2          | Demo/portfolio evidence            | K4, K5                | ⬜ OPEN        | Demo/deploy hoặc protected/static OpenAPI artifact; CV chỉ dùng metrics có thể tái lập.                                                                   |
-| Conditional | Saga payment/refund runtime        | F1 / audit #24        | ⚪ CONDITIONAL | Chỉ production-wire khi có payment/refund adapter thật hoặc demo adapter được mô tả rõ và có compensation/resume tests.                                   |
+Rủi ro ưu tiên: `proxy-addr` IP spoofing/Express `req.ip` ([GHSA-jqcg-44mw-7w3h](https://github.com/jshttp/proxy-addr/security/advisories/GHSA-jqcg-44mw-7w3h)), `tar` qua dependency của `bcrypt`, và legacy `multer` multipart DoS ([upstream advisories](https://github.com/expressjs/multer/security/advisories)). Nhánh ứng dụng vẫn khai báo `multer` 1.x và `bcrypt` 5.x. Không tự đánh đồng số advisories với số đường khai thác có thể chạm tới trong runtime.
 
-## 4. Các issue đang mở nhưng có dấu hiệu đã được implementation đóng
+## 3. Những gate còn thiếu — theo thứ tự quan trọng
 
-Rà và đóng/link PR/commit/test thay vì để backlog GitHub lệch với source:
+| Gate | Mã | Cần thấy bằng chứng nào để đóng? |
+| --- | --- | --- |
+| **Security release gate** | **B10** | `package-lock.json` mới và npm audit production, targeted dependency upgrades, upload/auth regression, Docker smoke. Không có critical/high chưa triage hoặc chưa được chấp nhận có thời hạn. |
+| **Outbox crash/recovery** | **A1 / T6** | Relay crash/restart, Redis/BullMQ outage, retry/dead-letter + resend; không mất durable intent, không overclaim exactly-once SMTP. |
+| **Distributed checkout consistency** | **T2 / A8** | Lost-response retry, concurrent price update, projection lag p95/p99 và API eventual-consistency contract. |
+| **Operational recovery** | **I9 / I6** | PostgreSQL restore + outbox replay + rebuild read model; RTO/RPO đo được, SIGTERM/readiness drain. |
+| **Staging security** | **B7 / B6** | Proxy trust/IP spoof test, Redis fail-closed recovery, CSRF threat review, OAuth/refresh/logout smoke trên domain. |
+| **API / FE compatibility** | **H2 / T3 / H7** | FE dùng canonical order endpoints, request/response schemas kiểm thử, không còn unsafe cast quan trọng. |
+| **Production observability** | **J1 / J2 / J3** | trace/span in logs, SLO dashboard/alerts, admin audit records. |
+| **Portfolio proof** | **T4 / T7 / K3–K5** | Mutation report, k6 results, license/SECURITY/CONTRIBUTING, demo hoặc protected OpenAPI. |
 
-- `#104` — full frontend-to-backend checkout journey in CI.
-- `#103` — dependency boundaries in CI.
-- `#101` — validate/version persisted outbox payloads.
-- `#100` — controlled dead-letter replay and retention tooling.
-- `#86` — order status concurrency + transactional outbox.
+**Ngoài blocker:** payment/refund provider, Saga orchestration F1, thêm DI/ports/Strategy (D3/D5/H10/G10) chỉ khi use case thực sự xuất hiện. Không tạo pattern cho đẹp checklist.
 
-Các issue như `#102`, `#90`, `#84` cần rà từng acceptance criterion trước khi đóng vì còn phần deployed/runtime/failure-policy có thể chưa hoàn tất.
+## 4. Kết luận và mục tiêu mốc tiếp theo
 
-## 5. Thứ tự thực hiện đề xuất
+**Ưu tiên triển khai ngay:** B10 (`proxy-addr` → Multer → `bcrypt`/`tar`, từng staged commit); tiếp theo A1/T6 kill/restart recovery và I9 backup/restore evidence. Tối ưu đánh giá lúc này bằng **giảm rủi ro runtime**, không thêm lớp OOP tượng trưng.
 
-1. **A1 — durable verification email qua outbox + retry/idempotency + crash/recovery tests.**
-2. **B10 — fix production advisories từ CI audit: proxy-addr, Multer, bcrypt/tar + lockfile và upload regression.**
-3. **T2 + T6 / audit #30 — lost-response/price concurrency, kill-process và projection lag SLO.**
-4. **H7 + T3 — unsafe cast boundary và OpenAPI contract behavior; B7/H2 chờ staging/FE migration.**
-5. **I9 / audit #33 — backup/restore + outbox replay + projection rebuild drill.**
-6. **T7 — k6 performance evidence.**
-7. **T4 — mutation testing cho domain/core.**
-8. **J3 — admin audit logging.**
-9. **I8/K3/K4/K5 — release, repo hygiene, demo và CV evidence.**
+**Mục tiêu thực tế để cải thiện điểm:** ưu tiên kéo Security lên mức có đủ evidence, thiết lập quality gate dependency phù hợp và chứng minh khôi phục sau sự cố; rồi mới đầu tư perf/mutation/portfolio. Không hứa đạt đúng 10/10 chỉ nhờ hoàn thành danh sách.
 
-**H10 là CONDITIONAL** — chỉ xem xét lại khi phát sinh nhu cầu thực tế về ownership/quy mô.
+**Review bắt buộc trước merge/release:** B10 dependency/risk acceptance; A1 TTL/SMTP + dead-letter policy; B6 CSRF, B7 trusted proxy; H2 backward-compatibility; production RTO/RPO. Quyết định/owner/acceptance chi tiết trong [Improvement Checklist](TriAD-Backend-Improvement-Checklist.md#các-quyết-định-cần-duyệt).
 
-## 6. Definition of Done cho mốc portfolio rất mạnh
+## 5. Liên kết kiểm chứng và tham khảo
 
-Dự án có thể được trình bày ở mức rất mạnh khi:
+- Source/CI: [TriAD Backend](https://github.com/Thang4869/TriAD-Backend) · [TriAD Frontend](https://github.com/Thang4869/TriAD-12) · [Actions](https://github.com/Thang4869/TriAD-Backend/actions) · [PRs](https://github.com/Thang4869/TriAD-Backend/pulls) · [Issues](https://github.com/Thang4869/TriAD-Backend/issues).
+- Source docs: [Architecture](../README.md) · [Operations](OPERATIONS.md) · [Event durability](EVENT_DURABILITY.md) · [Dependency audit](DEPENDENCY_SECURITY_AUDIT.md) · [Threat model](THREAT_MODEL.md).
+- External standard/advisories: [OWASP ASVS](https://github.com/OWASP/ASVS) · [proxy-addr security advisory](https://github.com/jshttp/proxy-addr/security/advisories/GHSA-jqcg-44mw-7w3h) · [Multer security advisories](https://github.com/expressjs/multer/security/advisories).
 
-- `typecheck`, lint, architecture check, unit/integration/full-stack tests và build đều xanh.
-- Durable side effects có policy crash/retry/idempotency rõ.
-- Production image được **khởi chạy và smoke-test** trong CI, không chỉ build thành công.
-- Có recovery drill cho DB/outbox/projection và ghi lại RTO/RPO quan sát được.
-- JWT/security policy không phụ thuộc vào assumption ngầm.
-- Có ít nhất một performance artifact và một mutation-testing artifact tái lập được.
-- README/ARCHITECTURE/OPERATIONS/THREAT_MODEL thống nhất với code hiện tại.
-- GitHub issue/PR/commit/test evidence không mâu thuẫn trạng thái implementation.
-- CV dùng số liệu CI/load/mutation/concurrency thật, không dùng điểm AI như KPI.
-
-## 7. Không cần làm chỉ để “tăng điểm OOP”
-
-- Không biến mọi module CRUD thành aggregate.
-- Không tạo interface cho mọi class.
-- Không bắt mọi event nội bộ đi qua outbox.
-- Không thêm State/Strategy/Saga chỉ để có tên pattern.
-- Không refactor một adapter singleton nếu không có lợi ích testability/lifecycle cụ thể.
-- Không gọi dự án “10/10” chỉ vì checklist hết ô OPEN.
-
-> **NEXT:** A1 verification-email outbox reliability; B10 dependency remediation chờ lockfile regeneration/test. PR #161–#163 đã PASS CI; không đồng nghĩa đã hoàn thành các verification ở deployment.
+> **Bản Audit ghi nhận điểm và bằng chứng.** Chi tiết next actions, status và các quyết định phê duyệt nằm ở **Improvement Checklist**; tránh duy trì hai backlog trùng nội dung.

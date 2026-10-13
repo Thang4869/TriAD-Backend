@@ -1,18 +1,10 @@
 import prisma from "@core/database/prisma";
-import { OrderStatus } from "../../domain/order-status";
 import type {
-  OrderHistoryItemView,
   OrderHistoryReadPort,
   OrderHistoryView,
 } from "../../application/order-history-read.port";
 import { toSafeMoneyNumber } from "@shared/infrastructure/money-number";
-
-type ProjectionItem = {
-  productId: string;
-  productName: string;
-  quantity: number;
-  unitPrice: number;
-};
+import { parseOrderHistoryItems } from "./parse-order-history-items";
 
 export class PrismaOrderHistoryReadRepository implements OrderHistoryReadPort {
   async findByUser(
@@ -59,26 +51,19 @@ export class PrismaOrderHistoryReadRepository implements OrderHistoryReadPort {
       Awaited<ReturnType<typeof prisma.orderHistoryProjection.findFirst>>
     >,
   ): OrderHistoryView {
-    const items = row.items as unknown as ProjectionItem[];
-
-    const mappedItems: OrderHistoryItemView[] = items.map((item) => ({
-      productId: item.productId,
-      productName: item.productName,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-    }));
+    const items = parseOrderHistoryItems(row.items);
 
     return {
       orderId: row.orderId,
       userId: row.userId,
       orderNumber: row.orderNumber,
-      status: row.status as OrderStatus,
+      status: row.status,
       paymentStatus: row.paymentStatus,
       subtotal: toSafeMoneyNumber(row.subtotal),
       tax: toSafeMoneyNumber(row.tax),
       shippingFee: toSafeMoneyNumber(row.shippingFee),
       total: toSafeMoneyNumber(row.total),
-      items: mappedItems,
+      items,
       placedAt: row.placedAt,
       updatedAt: row.updatedAt,
     };

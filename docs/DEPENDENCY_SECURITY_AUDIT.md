@@ -40,7 +40,8 @@ Relevant advisories and upstream guidance:
 - https://github.com/expressjs/multer/blob/main/CHANGELOG.md
 
 The image route uses `multer.memoryStorage()`, a single `image` field,
-5 MiB file size, zero text fields and one multipart part.
+5 MiB file size and zero text fields (the single-file route permits only
+one uploaded file).
 `validateUploadedImage` performs Sharp metadata checks and a 40M-pixel cap.
 Memory storage avoids disk cleanup exposure, but does not negate malformed
 multipart/stream processing vulnerabilities.

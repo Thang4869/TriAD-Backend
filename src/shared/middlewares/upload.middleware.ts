@@ -30,7 +30,6 @@ export const uploadProductImage = multer({
     fileSize: MAX_FILE_SIZE_BYTES,
     files: 1,
     fields: 0,
-    parts: 1,
     fieldNameSize: 100,
   },
 }).single("image");

@@ -2,7 +2,7 @@
 
 **Reviewed:** 2026-10-14
 **Scope:** TriAD Backend production and development lockfile dependencies.
-**Status:** PARTIAL — upgrades have been generated and committed on draft branch `commit-14102026` through npm itself. Final CI, production vulnerability delta and maintainer merge review are pending.
+**Status:** PARTIAL — upgrades have been generated and committed on draft branch `commit-14102026` through npm itself. Production audit results are recorded below; final Docker/E2E CI and maintainer merge review are pending. Twelve high-severity production findings remain.
 
 ## Evidence and commands
 
@@ -48,6 +48,28 @@ upload multipart, full test/coverage, build, production image smoke and
 frontend-to-backend E2E green; inspect the new `Dependency Audit (report)`
 artifact for remaining critical/high risks. The report-only job is **not**
 a blocking vulnerability gate.
+
+## Post-upgrade CI audit (14/10/2026)
+
+Artifact: **Dependency Audit (report)** on PR #166, commit `76a0992`.
+Version upgrades produced by npm on GitHub Actions runner are reflected
+in the checked-in lockfile.
+
+| npm severity | Production after | Full lockfile after |
+| --- | ---: | ---: |
+| Critical | **0** | **0** |
+| High | 12 | 29 |
+| Moderate | 49 | 53 |
+| Low | 0 | 0 |
+| **Total** | **61** | **82** |
+
+This is a measurable improvement, **not** a clean security audit. Remaining
+high direct runtime dependencies identified by the npm report include
+OpenTelemetry auto-instrumentations/sdk-node, Cloudinary, Compression,
+Nodemailer and Sharp. Review their fixed ranges and API compatibility in
+separate staged upgrade commits. Do not block necessary releases using
+an arbitrary high threshold without an explicit risk review, but do not
+call a report-only CI job a security pass either.
 
 ## Verified CI baseline (2026-10-13)
 
@@ -110,8 +132,8 @@ References:
 **Stage 1 shipped:** `TRUST_PROXY` config validation rejects trust-all,
 IPv6 CIDR and IPv4-mapped CIDR values before Express initializes.
 `tests/unit/config/trust-proxy.test.ts` exercises raw client headers.
-This mitigates one unsafe configuration class; it does **not** remove
-`proxy-addr` from the vulnerable lockfile.
+This mitigated an unsafe configuration class before the subsequent npm-generated
+`proxy-addr@2.0.8` lockfile upgrade on the same branch.
 
 ### Regenerate exact lockfile via npm on a connected machine
 
@@ -224,7 +246,7 @@ as a regression suite across the v5→v6 migration.
 
 ## First remediation target: Multer multipart upload
 
-The checked-in `package.json` still declares Multer 1.4.x. Its 1.x line has
+The original `main` baseline before PR #166 declared Multer 1.4.x. Its 1.x line has
 multiple published malformed multipart/stream cleanup denial-of-service
 advisories, including GHSA-44fp-w29j-9vj5 and GHSA-fjgf-rc76-4x9p.
 The maintained 2.4.0 release includes subsequent security fixes.
@@ -245,8 +267,8 @@ multipart/stream processing vulnerabilities.
 
 A targeted upgrade must modify **both** manifests and the exact npm lockfile
 using npm itself; updating only `package.json` breaks `npm ci`.
-The current maintained candidate is `multer@2.4.0` with matching
-`@types/multer@2.3.0`. Run this upgrade from the active checkout:
+PR #166 now pins `multer@2.4.0` and `@types/multer@2.3.0`.
+For future reproduction or review of the upgrade on a clean branch:
 
 ```powershell
 npm install multer@2.4.0 --save-exact

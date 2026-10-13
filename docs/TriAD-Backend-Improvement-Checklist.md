@@ -17,7 +17,7 @@
 
 | Ưu tiên | Mã | Việc cần làm / điều kiện đóng | Trạng thái |
 | --- | --- | --- | --- |
-| **P0** | **B10** | Đã có **3 commit nâng dependency bằng npm** trên nhánh `commit-14102026`: `proxy-addr@2.0.8`, `multer@2.4.0` + typings, `bcrypt@6.0.0` + typings (loại `node-pre-gyp/tar` cũ). **Chờ CI đầy đủ**, tái quét audit production và phân loại advisory còn tồn tại trước merge. | **PARTIAL — CI pending** |
+| **P0** | **B10** | Đã nâng và kiểm thử code: `proxy-addr@2.0.8`, `multer@2.4.0`/`@types/multer@2.3.0`, `bcrypt@6.0.0`/`@types/bcrypt@6.0.0`; npm lockfile generated bởi CI. Audit mới: **production 0 critical / 12 high / 49 moderate**; full graph 0/29/53. Lint/typecheck, unit/integration PASS; Docker smoke/E2E và phân loại high còn chờ xác minh trước merge. | **PARTIAL — 0 critical, 12 high** |
 | **P0** | **A1 / T6** | Kiểm thử kill/restart relay, Redis/BullMQ outage, dead-letter replay cho initial verification email; xác nhận job idempotency, TTL, trễ giao hàng và giới hạn resend. Lưu trace/log từ môi trường có DB/Redis thật. | **PARTIAL — code CI PASS** |
 | **P1** | **T2 / T6 / A8** | Lost-response checkout retry, concurrent price change và relay/process crash; đo projection lag thực tế, công bố contract consistency cho order list/detail. | PARTIAL |
 | **P1** | **I9 / I6** | Backup → restore PostgreSQL, replay outbox, rebuild projection; ghi RTO/RPO; readiness-draining + SIGTERM drill. | OPEN |

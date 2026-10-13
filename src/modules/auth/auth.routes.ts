@@ -3,7 +3,10 @@ import { validate } from "@shared/middlewares/validation.middleware";
 import { authMiddleware, oauthStateStore } from "@/container";
 import {
   authRateLimiter,
+  authIpRateLimiter,
   totpRateLimiter,
+  totpIpRateLimiter,
+  refreshRateLimiter,
 } from "@shared/middlewares/rate-limit.middleware";
 import { csrfProtection } from "@shared/middlewares/csrf.middleware";
 import { authController } from "@/container";
@@ -50,6 +53,7 @@ const oauthStart =
 
 router.post(
   "/register",
+  authIpRateLimiter,
   authRateLimiter,
   validate(registerSchema),
   authController.register,
@@ -61,18 +65,21 @@ router.get(
 );
 router.post(
   "/resend-verification",
+  authIpRateLimiter,
   authRateLimiter,
   validate(resendVerificationSchema),
   authController.resendVerification,
 );
 router.post(
   "/login",
+  authIpRateLimiter,
   authRateLimiter,
   validate(loginSchema),
   authController.login,
 );
 router.post(
   "/refresh",
+  refreshRateLimiter,
   csrfProtection,
   validate(refreshSchema),
   authController.refresh,
@@ -83,6 +90,7 @@ router.post("/2fa/enable", authMiddleware, authController.enable2FA);
 router.post("/2fa/verify", authMiddleware, authController.verify2FA);
 router.post(
   "/verify-totp",
+  totpIpRateLimiter,
   totpRateLimiter,
   validate(verify2FASchema),
   authController.verifyTOTP,

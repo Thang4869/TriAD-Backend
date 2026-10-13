@@ -7,6 +7,46 @@
 3. Confirm PostgreSQL and Redis connectivity before restarting workers.
 4. Do not manually delete outbox rows; they are production recovery state.
 
+## Rate-limit policy and Redis outage response (B7)
+
+The general `/api` limiter uses `RATE_LIMIT_WINDOW_MS` (default 60 seconds)
+and `RATE_LIMIT_MAX` (default 100), keyed by Express `req.ip`.
+Health probes are **outside** the `/api` rate-limiter mount; no path-name
+skip exists. The auth routes have additional independent Redis budgets:
+
+| Request group | Window | Budget | Key scope |
+| --- | --- | --- | --- |
+| Register / login / resend verification | 1 hour | 60 | Trusted client IP, combined across routes |
+| Register / login / resend verification | 1 hour | 10 | Trusted client IP + normalized email |
+| Verify TOTP | 15 minutes | 20 | Trusted client IP |
+| Verify TOTP | 15 minutes | 5 | Trusted client IP + pre-auth token |
+| Refresh token | 15 minutes | 30 | Trusted client IP |
+
+Email and pre-auth token bucket components use domain-separated HMAC-SHA256
+with `JWT_ACCESS_SECRET`; raw identifiers/tokens must not be stored in
+rate-limit Redis keys. Rotating that signing secret also changes rate-limit
+bucket identities. The IP component is derived from Express `req.ip`;
+never read an untrusted `X-Forwarded-For` header directly. Configure
+`TRUST_PROXY` for the actual trusted reverse-proxy topology only, otherwise
+clients may be incorrectly grouped or may spoof apparent addresses.
+
+**Fail-closed:** Redis not ready => immediately reject the limiting check;
+a Redis command that rejects or does not respond within one second is mapped
+to `DependencyUnavailableError` (503). `passOnStoreError: false` prevents
+the request from continuing without a limit. A timed-out Redis operation may
+still complete later internally; the timeout bounds the HTTP wait, not the
+underlying Redis command lifecycle. Lua `SCRIPT LOAD` during
+rate-limit store initialization is the sole exception: it must queue until
+Redis is ready instead of rejecting during module import. Subsequent HTTP
+rate-limit commands still fail closed. Monitor 503 rates and Redis connectivity.
+
+**Residual risks and release verification:** shared offices/NAT users can
+exhaust each other's IP budget; IP rotation and IPv6 privacy addresses can
+evade simple per-address limits. Tune thresholds from deployed observations.
+Check reverse-proxy trust configuration, health probes, Redis outage and
+recovery, 429 responses, and normal login/TOTP/refresh flows before declaring
+this security gate fully closed.
+
 ## Orders read-after-write behavior
 
 Checkout returns the committed write-side order directly, including an

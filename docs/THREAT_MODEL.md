@@ -1436,6 +1436,22 @@ Rate-limit state stored in Redis should use bounded expiration periods to avoid 
 
 ---
 
+### B7 policy review (2026-10-13)
+
+- Two-layer auth throttling prevents an attacker from bypassing the per-email
+  limit merely by rotating requested email addresses on the same IP.
+- Email and TOTP pre-auth token components are HMAC-digested, not copied into
+  Redis keys. A missing/invalid identity uses a shared bucket.
+- Refresh and TOTP routes also have independent per-IP budgets.
+- Redis failures fail closed with a bounded HTTP wait and 503 response, rather
+  than silently permitting brute-force attempts.
+- IP is taken from Express `req.ip`; safe `TRUST_PROXY` configuration is an
+  environment responsibility. NAT user contention, IPv6 address rotation and
+  distributed-source credential stuffing remain residual risks.
+- Production verification and CI evidence are required before closing B7.
+
+---
+
 ## 43. Replay Attacks
 
 Potentially replayable operations include:

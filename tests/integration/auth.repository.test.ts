@@ -1,6 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import prisma from "@core/database/prisma";
 import { PrismaAuthRepository } from "@modules/auth/infrastructure/repositories/prisma-auth.repository";
+import { RegistrationVerificationHandler } from "@modules/auth/event-handlers/registration-verification.handler";
+import { deserializeOutboxEvent } from "@core/outbox/outbox-event-schema";
+import type { UserRegisteredEvent } from "@shared/domain/events/user-events";
+import type { TokenStorePort } from "@modules/auth/application/ports/token-store.port";
+import type { EmailService } from "@shared/services/email.service";
 
 describe("PrismaAuthRepository (integration)", () => {
   const repository = new PrismaAuthRepository();
@@ -55,6 +61,76 @@ describe("PrismaAuthRepository (integration)", () => {
       aggregateId: user.id,
     });
     expect(events[0].publishedAt).toBeNull();
+  });
+
+  it("replays a committed registration event after an email queue failure", async () => {
+    const email = `durable-verification-${randomUUID()}@test.com`;
+    const user = await repository.createUser({
+      email,
+      password: "hashed",
+      firstName: "A",
+      lastName: "B",
+    });
+    const outbox = await prisma.outboxEvent.findFirstOrThrow({
+      where: { aggregateId: user.id, eventName: "UserRegistered" },
+    });
+    const event = deserializeOutboxEvent(outbox.payload, {
+      eventName: outbox.eventName,
+      aggregateId: outbox.aggregateId,
+    }) as UserRegisteredEvent;
+
+    const set = vi.fn().mockResolvedValue(undefined);
+    const sendVerificationEmail = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("queue temporarily unavailable"))
+      .mockResolvedValue(undefined);
+    const handler = new RegistrationVerificationHandler(
+      repository,
+      { set } as unknown as TokenStorePort,
+      { sendVerificationEmail } as unknown as EmailService,
+    );
+
+    await expect(handler.handle(event)).rejects.toThrow(
+      "queue temporarily unavailable",
+    );
+    expect(
+      await prisma.outboxEvent.findUniqueOrThrow({ where: { id: outbox.id } }),
+    ).toMatchObject({ publishedAt: null });
+
+    await expect(handler.handle(event)).resolves.toBeUndefined();
+    expect(sendVerificationEmail).toHaveBeenCalledTimes(2);
+    expect(set).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(set).mock.calls[0][0]).toBe(
+      vi.mocked(set).mock.calls[1][0],
+    );
+    expect(vi.mocked(sendVerificationEmail).mock.calls[0][2]).toBe(
+      vi.mocked(sendVerificationEmail).mock.calls[1][2],
+    );
+  });
+
+  it("skips verification email after an OAuth account is already verified", async () => {
+    const user = await repository.createOAuthUser({
+      email: `oauth-verification-${randomUUID()}@test.com`,
+      firstName: "OAuth",
+      lastName: "User",
+    });
+    const outbox = await prisma.outboxEvent.findFirstOrThrow({
+      where: { aggregateId: user.id, eventName: "UserRegistered" },
+    });
+    const event = deserializeOutboxEvent(outbox.payload, {
+      eventName: outbox.eventName,
+      aggregateId: outbox.aggregateId,
+    }) as UserRegisteredEvent;
+    const set = vi.fn();
+    const sendVerificationEmail = vi.fn();
+    await new RegistrationVerificationHandler(
+      repository,
+      { set } as unknown as TokenStorePort,
+      { sendVerificationEmail } as unknown as EmailService,
+    ).handle(event);
+
+    expect(set).not.toHaveBeenCalled();
+    expect(sendVerificationEmail).not.toHaveBeenCalled();
   });
 
   it("updateUser cập nhật đúng field truyền vào", async () => {

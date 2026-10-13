@@ -21,6 +21,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
+      - name: Verify audit report renderer
+        run: node --test tests/scripts/summarize-npm-audit.test.cjs
       - name: Audit production and all locked dependencies
         shell: bash
         run: |

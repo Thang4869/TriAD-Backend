@@ -58,7 +58,13 @@ describe("upload.middleware", () => {
     const options = capturedOptions.current;
     expect(options).toMatchObject({
       storage: expect.anything(),
-      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+      limits: {
+        fileSize: 5 * 1024 * 1024,
+        files: 1,
+        fields: 0,
+        parts: 1,
+        fieldNameSize: 100,
+      },
     });
     expect(options.fileFilter).toBeInstanceOf(Function);
   });
@@ -82,7 +88,7 @@ describe("upload.middleware", () => {
   });
 
   it("should accept valid image content", async () => {
-    sharpMetadata.mockResolvedValue({ format: "jpeg" });
+    sharpMetadata.mockResolvedValue({ format: "jpeg", width: 100, height: 100 });
 
     const req = {
       file: {
@@ -110,6 +116,28 @@ describe("upload.middleware", () => {
 
     await validateUploadedImage(req, {} as any, next);
 
+    expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
+  });
+
+  it("should reject images that exceed the pixel budget even when compressed size is small", async () => {
+    sharpMetadata.mockResolvedValue({ format: "png", width: 10000, height: 10000 });
+    const next = vi.fn();
+    await validateUploadedImage(
+      { file: { buffer: Buffer.from("fake-image") } } as any,
+      {} as any,
+      next,
+    );
+    expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
+  });
+
+  it("should reject incomplete image metadata without dimensions", async () => {
+    sharpMetadata.mockResolvedValue({ format: "png" });
+    const next = vi.fn();
+    await validateUploadedImage(
+      { file: { buffer: Buffer.from("fake-image") } } as any,
+      {} as any,
+      next,
+    );
     expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
   });
 

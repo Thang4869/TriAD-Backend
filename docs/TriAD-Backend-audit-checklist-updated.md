@@ -1,6 +1,6 @@
 # Checklist hoàn thiện TriAD Backend và kết nối Frontend
 
-**Cập nhật:** 10/10/2026  
+**Cập nhật:** 13/10/2026  
 **Mốc đối chiếu:** D6/D7 tại commits `e1401ca` và `8d73b96` trên nhánh `commit-10102026`; D8 theo thay đổi trên nhánh `commit-10102026` được người thực hiện báo PASS. H10 đánh giá theo bản export 09/10/2026. Frontend `Thang4869/TriAD-12` vẫn được dùng để đối chiếu FE↔BE.  
 **Mục đích:** chỉ giữ **evidence nền tảng** và các **gap còn cần xử lý**. Các mục đã đóng lâu không còn được liệt kê từng dòng.
 
@@ -26,8 +26,8 @@
 | Clean Code                |     ~9.0/10 | `src/container.ts` gọn hơn; event wiring và health-route construction được tách; cast/tooling/naming cleanup vẫn còn.                      |
 | Testing / CI              |     ~9.4/10 | Coverage gate, architecture gate, integration tests, Docker build và full FE↔BE journey đã có.                                             |
 | Reliability / concurrency |     ~9.3/10 | Transactional outbox, lease/retry/dead-letter, idempotency, optimistic concurrency và projection ordering đã có.                           |
-| Security                  |     ~8.8/10 | CSRF, OAuth state, rate limiting, hidden production routes, upload validation và threat model đã có; JWT/Redis policies còn cần hardening. |
-| Production readiness      |     ~8.7/10 | Local production stack và CI build tốt; thiếu runtime image smoke, recovery drill và deployed evidence đầy đủ.                             |
+| Security                  |     ~8.8/10 | CSRF, OAuth state, rate limiting, hidden production routes, upload validation và threat model đã có; JWT revocation hardening đã merge; rate-limit/dependency audit còn cần làm. |
+| Production readiness      |     ~8.7/10 | Local production stack và CI build tốt; runtime image smoke đã PASS; vẫn thiếu recovery drill và deployed evidence đầy đủ.                             |
 | Observability / Ops       |     ~9.0/10 | OTEL, metrics, alerts, structured logging foundation và runbooks đã có; còn SLO/dashboard/audit logging.                                   |
 | **Tổng thể Backend**      | **~9.2/10** | Đủ mạnh để đưa vào CV/portfolio; chưa nên tự nhận “10/10” hoặc “production-ready tuyệt đối”.                                               |
 
@@ -37,7 +37,7 @@
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Transaction correctness | Checkout transaction boundary, locked product snapshot, stock update, order persistence và outbox cùng transaction; retry cho serialization/contention.                                                          |
 | Idempotency             | Redis middleware + DB uniqueness theo user; retry cùng checkout attempt có thể recover persisted order.                                                                                                          |
-| Orders/domain           | Order aggregate, typed transitions, optimistic version và transactional domain events.                                                                                                                           |
+| Orders/domain           | Order aggregate, static readonly transition map (G5, PR #158), optimistic version và transactional domain events; G6 đang chờ test/CI trên nhánh 13/10.                                                                                                                           |
 | CQRS                    | Product catalog, order history và dashboard read models đã được production-wire; projection ordering/rebuild có test/script.                                                                                     |
 | Outbox                  | Relay leases, heartbeat, stale-owner protection, retry/backoff, handler tracker, dead-letter replay, retention cleanup và maintenance indexes.                                                                   |
 | Outbox schema           | `schemaVersion: 1`, Zod validation, legacy-as-v1 và invalid/unsupported payload đi vào failure/retry path. **C8 đã đóng.**                                                                                       |
@@ -49,7 +49,7 @@
 | Threat modeling         | `docs/THREAT_MODEL.md` đã được thêm để ghi trust boundaries, attack surface, mitigations và residual risks.                                                                                                      |
 | Testing                 | Global unit coverage threshold ~90%; domain/value-object target 100%; PostgreSQL/Redis integration tests; concurrency/retry/projection tests.                                                                    |
 | Full-stack evidence     | GitHub Actions đã chạy flow login → product → cart → checkout → persisted order giữa frontend và backend.                                                                                                        |
-| Runtime foundation      | Docker multi-stage/non-root, production Compose, Postgres, Redis, BullMQ, OTEL collector, health endpoints và graceful shutdown cơ bản.                                                                          |
+| Runtime foundation      | Docker multi-stage/non-root, Compose, Postgres/Redis/BullMQ/OTEL; production image smoke đã PASS ở PR #160.                                                                          |
 | Documentation           | README đã giảm over-claim: Saga/payment chưa production-wire, production checkout là transaction-based, docs production được bảo vệ.                                                                             |
 
 ## 3. Active audit gates
@@ -59,9 +59,8 @@ Các dòng dưới đây là phần cần tiếp tục cập nhật. Chi tiết 
 | Ưu tiên     | Gate                               | Liên kết backlog      | Trạng thái     | Điều kiện đóng                                                                                                                                            |
 | ----------- | ---------------------------------- | --------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P0          | Durable side-effect classification | A1                    | 🟡 PARTIAL     | Auth `UserRegistered` được chuẩn bị ghi outbox cùng user/cart; Reviews vốn đã atomic. Cần chạy integration/CI và xử lý crash-window email enqueue còn hở. |
-| P0          | Access-token/JWT semantics         | B2, B3                | ⬜ OPEN        | Dùng `jti`/hash thay whole JWT cho revocation key; claim set có `iss`/`aud`/type/`jti` và verify theo token class.                                        |
-| P0          | Redis/security failure policy      | B2, B7                | ⬜ OPEN        | Fail-open/fail-closed được quyết định, log/metric rõ, test được.                                                                                          |
-| P0          | Production image runtime smoke     | I7 / audit #32        | 🟡 PARTIAL     | Đã chuẩn bị job `production-image-smoke` trong `ci.yml`; yêu cầu CI PASS cho migrations, readiness, API, route protection và SIGTERM exit 0.              |
+| P0          | Rate-limit security policy         | B7                    | ⬜ OPEN        | Rà keying, bypass/lockout risk, Redis outage behavior và test health-route assumptions; JWT revocation đã harden riêng ở B2/B3. |
+| P0          | Orders read-after-write behavior   | A8, H2, G6, G12       | 🟡 PARTIAL     | Detail có fallback owner-scoped khi thiếu projection, list eventual; legacy checkout read được document; chờ CI, FE migration và SLO từ production. |
 | P0          | Crash/recovery evidence            | T2, T6 / audit #30    | 🟡 PARTIAL     | Lost-response retry, synchronized price-change-vs-checkout và kill-process/crash-window test có evidence.                                                 |
 | P0          | Backup/restore drill               | I9 / audit #33        | ⬜ OPEN        | Restore DB, replay outbox, rebuild projection; ghi RTO/RPO và runbook kết quả.                                                                            |
 | P1          | Mutation testing                   | T4                    | ⬜ OPEN        | Mutation report cho domain/value objects/core services với threshold hợp lý trong CI hoặc artifact tái lập.                                               |
@@ -89,8 +88,8 @@ Các issue như `#102`, `#90`, `#84` cần rà từng acceptance criterion trư�
 ## 5. Thứ tự thực hiện đề xuất
 
 1. **A1 — kiểm chứng durable Auth/Reviews + quyết định xử lý email enqueue crash window.**
-2. **B2 + B3 — JWT `jti`/hash, `iss`/`aud`/token type và revocation semantics.**
-3. **I7 / audit #32 — smoke image production vừa build trong CI.**
+2. **A8/H2/G6/G12 — CI và regression cho Orders, canonical read API, projection boundary.**
+3. **B7/B10 — rate-limit policy và npm dependency security audit.**
 4. **T6 + T2 / audit #30 — kill-process/crash-window + lost-response/concurrent price scenario.**
 5. **I9 / audit #33 — backup/restore + outbox replay + projection rebuild drill.**
 6. **T7 — k6 performance evidence.**
@@ -123,4 +122,4 @@ Dự án có thể được trình bày ở mức rất mạnh khi:
 - Không refactor một adapter singleton nếu không có lợi ích testability/lifecycle cụ thể.
 - Không gọi dự án “10/10” chỉ vì checklist hết ô OPEN.
 
-> **NEXT:** A1 — chạy đầy đủ integration/CI trên repo thực, xác minh đường email enqueue; sau đó B2+B3 JWT/revocation. Xem `docs/EVENT_DURABILITY.md`.
+> **NEXT:** xác minh stage Orders A8/H2/G6/G12 trên nhánh `commit-13102026`, sau đó A1 email crash window và B10 dependency audit.

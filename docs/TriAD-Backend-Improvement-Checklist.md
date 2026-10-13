@@ -1,6 +1,6 @@
 # TriAD-Backend — Improvement Checklist
 
-**Cập nhật:** 10/10/2026  
+**Cập nhật:** 13/10/2026  
 **Mốc đối chiếu:** D6/D7 tại commits `e1401ca` và `8d73b96` trên nhánh `commit-10102026`; D8 theo thay đổi trên nhánh `commit-10102026` và xác nhận PASS từ người thực hiện. H10 được đánh giá trên bản export backend ngày 09/10/2026.  
 **Mục tiêu của bản rút gọn:** chỉ giữ **OPEN / PARTIAL / CONDITIONAL**. Các mục CLOSED đã được gom vào một baseline ngắn ở cuối file.
 
@@ -19,12 +19,9 @@
 | Mã  | Việc còn lại                                                                                                                                                                                                                    | Evidence chính                                                                                                                                                               | Trạng thái |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | A1  | Auth `UserRegistered`: patch atomic user+cart+outbox cho đăng ký thường/OAuth; Reviews vốn atomic. Tồn tại crash window `sendVerificationEmail()` sau commit; cần quyết định durable email path và chạy integration/CI để chốt. | `src/modules/auth/infrastructure/repositories/prisma-auth.repository.ts`, `tests/integration/auth.repository.test.ts`, `docs/EVENT_DURABILITY.md`                            | 🟡 PARTIAL |
-| A8  | Chốt read-after-write consistency cho Orders. Checkout trả write result trực tiếp nhưng order/history đọc projection; document SLA hoặc fallback có chủ đích nếu UX cần read-your-writes.                                       | `src/modules/checkout/checkout.service.ts`, `src/modules/orders/orders.service.ts`, `src/modules/orders/infrastructure/repositories/prisma-order-history-read.repository.ts` | ⬜ OPEN    |
-| B2  | Access-token revocation không nên dùng whole JWT làm Redis key. Dùng `jti` hoặc hash ngắn; quyết định fail-open/fail-closed khi Redis lỗi và có logging/metric.                                                                 | `src/modules/auth/services/token.service.ts`, `src/shared/constants/security.constant.ts`                                                                                    | ⬜ OPEN    |
-| B3  | Chuẩn hóa JWT claims theo token class: `jti`, `iss`, `aud`, purpose/type; verify đúng loại token thay vì chỉ signature/expiry.                                                                                                  | `src/modules/auth/services/token.service.ts`, `src/shared/utils/jwt.ts`, access-token verifier port                                                                          | ⬜ OPEN    |
+| A8  | Chi tiết đơn hàng đọc projection trước, fallback owner-scoped write model nếu chưa có row (stage 13/10); list vẫn eventual và status update có thể trễ. Chưa có SLA đo thực tế, chờ CI. | `src/modules/orders/orders.service.ts`, `tests/integration/orders.repository.test.ts`, `docs/OPERATIONS.md` | 🟡 PARTIAL |
 | B6  | `THREAT_MODEL.md` đã tồn tại. Đồng bộ quyết định CSRF với threat model: giữ random double-submit hiện tại hay dùng signed/HMAC session-bound token; chỉ đổi khi threat model/evidence yêu cầu.                                  | `docs/THREAT_MODEL.md`, `src/shared/middlewares/csrf.middleware.ts`, FE `src/shared/utils/csrf.js`                                                                           | ⬜ OPEN    |
 | B7  | Rà rate-limit policy: keying, lockout/bypass risk, Redis failure mode và health-route assumptions.                                                                                                                              | `src/shared/middlewares/rate-limit.middleware.ts`, `src/modules/auth/auth.routes.ts`                                                                                         | ⬜ OPEN    |
-| B9  | Chuyển test-only fallback secrets khỏi production config module sang test setup/env.                                                                                                                                            | `src/config/index.ts`, `tests/setup.ts`                                                                                                                                      | ⬜ OPEN    |
 | B10 | Chạy `npm audit` ở thời điểm nâng dependency; xử lý `multer`/dependency advisory dựa trên kết quả thực tế và chạy upload regression tests.                                                                                      | `package.json`, `src/shared/middlewares/upload.middleware.ts`                                                                                                                | ⬜ OPEN    |
 
 ## P1 — Architecture boundaries, DI & lifecycle
@@ -44,11 +41,10 @@
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
 | G2  | `Money` đã khá hoàn thiện; chỉ thêm `equals/zero/sum/allocate` khi có use case. Thay generic `Error` bằng domain error nơi phù hợp; document VND-only nếu đó là scope thật.                     | 🟡 PARTIAL     |
 | G3  | `PaymentMethod`/`PaymentStatus` đã typed hơn nhưng order/payment lifecycle chưa hoàn chỉnh vì settlement provider chưa production-wire. Hoàn thiện cùng payment use case thật, không model giả. | 🟡 PARTIAL     |
-| G5  | Đưa order transition table thành `static readonly`; chỉ dùng State pattern nếu behavior theo state đủ phức tạp.                                                                                 | ⬜ OPEN        |
-| G6  | Loại hoặc định nghĩa rõ `_placed` vì dễ trùng semantics với persisted/hydrated state.                                                                                                           | ⬜ OPEN        |
+| G6  | Đã tách nghĩa `PENDING` (draft/placed) bằng `_hasBeenPlaced`; chặn `place()` khi đã chuyển status và test hydrate/double-place; đang chờ CI. | 🟡 PARTIAL |
 | G10 | Strategy chỉ dùng khi pricing/payment thực sự có policy biến đổi; không duy trì pattern chỉ để làm đẹp README.                                                                                  | ⬜ OPEN        |
 | G11 | Inject `Clock`/`IdGenerator` ở path có business-time/determinism thực sự cần, không thay mọi `new Date()`/UUID trong infrastructure.                                                            | ⬜ OPEN        |
-| G12 | Giữ mapper/aggregate mapping ở module có invariant thật; projection/CRUD read model có thể trả DTO. Loại unsafe cast tại boundary.                                                              | ⬜ OPEN        |
+| G12 | Đã kiểm tra schema JSON items ở order-history projection boundary thay vì unsafe cast; các boundary khác còn phải rà và cần CI. | 🟡 PARTIAL |
 | G13 | Chốt scope `Address`: free-form có document rõ hoặc structured address khi use case thật cần.                                                                                                   | ⬜ OPEN        |
 | G14 | Không ép Reviews/Wishlist/Notifications thành aggregate/domain-heavy nếu không có invariant đáng kể.                                                                                            | ⚪ CONDITIONAL |
 | G15 | Chia application service lớn khi responsibility/use case đã tách rõ; tránh split chỉ theo số dòng.                                                                                              | ⬜ OPEN        |
@@ -58,7 +54,7 @@
 
 | Mã  | Việc còn lại                                                                                                                                                                                                                                                       | Trạng thái     |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
-| H2  | Rà duplicate order list/detail surface giữa checkout/orders; giữ một ownership/API boundary rõ.                                                                                                                                                                    | ⬜ OPEN        |
+| H2  | Chốt `/api/orders` là canonical history API, giữ `/api/checkout/orders` legacy (đánh dấu deprecated trong OpenAPI) để tránh breaking FE. Chờ FE chuyển và kiểm chứng CI. | 🟡 PARTIAL |
 | H4  | Chuẩn hóa naming convention cho ports/repositories/services và suffixes đang không đồng nhất.                                                                                                                                                                      | ⬜ OPEN        |
 | H5  | Giảm trộn tiếng Việt/Anh trong code comments/docs; chọn convention theo loại tài liệu.                                                                                                                                                                             | ⬜ OPEN        |
 | H7  | Phân loại remaining casts và `console.*`; thay unsafe cast bằng parser/narrowing và runtime logs bằng structured logger nơi phù hợp.                                                                                                                               | ⬜ OPEN        |
@@ -87,7 +83,6 @@
 | I2  | Production packaging đã tốt; còn resource policy, unused volume cleanup và cách orchestration `prisma migrate deploy` rõ ràng hơn.                                                                                                                                  | 🟡 PARTIAL |
 | I4  | Dockerfile đã multi-stage/non-root/healthcheck. Supply-chain hardening như pin digest/SBOM/scanning là bước tăng cường, không phải blocker.                                                                                                                         | 🟡 PARTIAL |
 | I6  | Graceful shutdown đã có; thêm readiness-draining state trả 503 trước teardown và SIGTERM integration/runtime test.                                                                                                                                                  | 🟡 PARTIAL |
-| I7  | Đã chuẩn bị CI production-image-smoke: build image, chạy Prisma migrations từ image, kiểm tra readiness/API/routes và graceful SIGTERM trước khi publish GHCR. Chờ GitHub Actions PASS; dependency/security scan, schema drift và release checks vẫn chưa hoàn tất. | 🟡 PARTIAL |
 | I8  | Khi readiness đủ, thêm release discipline: tag/semver, `CHANGELOG.md`, branch protection/release notes phù hợp.                                                                                                                                                     | ⬜ OPEN    |
 | I9  | Document/tune Prisma pool/timeouts, backup/restore, Redis `noeviction` cho queue và recovery drill; cân nhắc tách queue Redis khỏi cache/rate-limit khi tải thật yêu cầu.                                                                                           | ⬜ OPEN    |
 | I10 | Đồng bộ `.env.example` với SMTP/Cloudinary/OAuth/operational keys và document secret injection; không commit secret thật.                                                                                                                                           | ⬜ OPEN    |
@@ -116,6 +111,14 @@
 
 ## Completed baseline — đã xóa khỏi active backlog
 
+Các thay đổi đã được merge vào `main` và xác minh:
+
+- **G5** — Order transition map đã thành `static readonly` (PR #158, unit tests PASS).
+- **B2/B3** — JWT phân lớp access/refresh/preauth theo `jti`, `iss`, `aud`, `tokenType`; Redis revocation key là hash SHA-256 của `jti`, fail-closed với log/metric và tests.
+- **B9** — Test-only secrets được tách khỏi production config sang Vitest setup (commit `15bec82` đã có trong `main`).
+- **I7** — Production image runtime smoke đã PASS trên GitHub Actions của PR #160, cùng lint, build, unit/integration và FE↔BE E2E.
+
+
 Các nhóm sau đã có implementation/evidence đủ mạnh và không nên tiếp tục chiếm diện tích checklist bằng từng dòng CLOSED:
 
 - Checkout correctness: transaction boundary, price snapshot, stock, order persistence, retry/contention.
@@ -139,8 +142,8 @@ Các nhóm sau đã có implementation/evidence đủ mạnh và không nên ti�
 ## Current priority queue
 
 1. **A1** — chạy integration/CI cho outbox Auth/Reviews; quyết định xử lý email enqueue crash window (xem `docs/EVENT_DURABILITY.md`).
-2. **B2 + B3** — JWT/revocation hardening.
-3. **I7** — production image runtime smoke in CI.
+2. **A8 + H2 + G6 + G12** — kiểm chứng Orders read consistency, invariant và boundary trên nhánh `commit-13102026`.
+3. **B7 + B10** — review rate-limit security policy và audit dependencies (2 critical/30 high trong log npm 13/10/2026).
 4. **T6 + T2** — real crash/kill-process and lost-response/concurrent price scenarios.
 5. **I9** — backup/restore + outbox/projection recovery drill.
 6. **T7** — k6 performance evidence.
@@ -159,4 +162,4 @@ Các nhóm sau đã có implementation/evidence đủ mạnh và không nên ti�
 - Không production-wire Saga trước khi payment/refund semantics tồn tại.
 - Không xem số lượng checkbox CLOSED là bằng chứng “Tech Lead” hoặc “10/10”.
 
-> **NEXT:** `A1` — kiểm chứng atomic Auth/Reviews và email crash window, sau đó `B2+B3` JWT hardening.
+> **NEXT:** xác minh CI/kiểm thử cho nhóm Orders A8/H2/G6/G12, sau đó A1 email crash window và B10 dependency audit.

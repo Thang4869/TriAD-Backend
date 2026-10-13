@@ -7,6 +7,9 @@
  * /api/orders:
  *   get:
  *     summary: Lấy danh sách đơn hàng của user hiện tại
+ *     description: >-
+ *       Canonical order-history endpoint. Data comes from the asynchronous
+ *       projection and may briefly lag behind newly committed orders.
  *     tags: [Orders]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -23,6 +26,10 @@
  * /api/orders/{orderId}:
  *   get:
  *     summary: Lấy chi tiết 1 đơn hàng của user hiện tại
+ *     description: >-
+ *       Uses the order-history projection when available. Falls back to the
+ *       owner-scoped write model when the projection has not yet been created.
+ *       A present but stale projection can still lag behind status updates.
  *     tags: [Orders]
  *     security: [{ bearerAuth: [] }]
  *     parameters:

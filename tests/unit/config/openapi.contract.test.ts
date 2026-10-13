@@ -15,4 +15,17 @@ describe("OpenAPI contract", () => {
       }),
     );
   });
+
+  it("marks checkout read aliases as legacy while retaining canonical order reads", () => {
+    const paths = (
+      swaggerSpec as {
+        paths?: Record<string, { get?: { deprecated?: boolean } }>;
+      }
+    ).paths ?? {};
+
+    expect(paths["/api/checkout/orders"]?.get?.deprecated).toBe(true);
+    expect(paths["/api/checkout/orders/{orderId}"]?.get?.deprecated).toBe(true);
+    expect(paths["/api/orders"]?.get?.deprecated).not.toBe(true);
+    expect(paths["/api/orders/{orderId}"]?.get?.deprecated).not.toBe(true);
+  });
 });

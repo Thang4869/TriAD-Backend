@@ -62,6 +62,11 @@
  * /api/checkout/orders:
  *   get:
  *     summary: Lấy danh sách đơn hàng đã đặt của user hiện tại
+ *     deprecated: true
+ *     description: >-
+ *       Legacy checkout-owned read endpoint backed by committed orders.
+ *       New clients should use GET /api/orders for the canonical history API.
+ *       This route remains for existing frontend compatibility.
  *     tags: [Checkout]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -78,6 +83,11 @@
  * /api/checkout/orders/{orderId}:
  *   get:
  *     summary: Lấy chi tiết 1 đơn hàng của user hiện tại
+ *     deprecated: true
+ *     description: >-
+ *       Legacy direct-write read endpoint. New clients should use
+ *       GET /api/orders/{orderId}; the canonical detail endpoint falls back
+ *       to the write model when the projection is missing.
  *     tags: [Checkout]
  *     security: [{ bearerAuth: [] }]
  *     parameters:

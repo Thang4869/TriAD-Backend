@@ -3,7 +3,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 jobs:
-  proxy-addr-lockfile:
+  multer-lockfile:
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'commit-14102026' }}
     runs-on: ubuntu-latest
     permissions:
@@ -17,20 +17,21 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-      - name: Generate npm-managed lockfile for patched proxy-addr
+      - name: Generate npm-managed lockfile for Multer 2.4.0 and typings
         shell: bash
         run: |
           set -euo pipefail
-          npm pkg set "overrides.proxy-addr=2.0.8"
-          npm install --package-lock-only --ignore-scripts --no-audit
+          npm install --save-exact --package-lock-only --ignore-scripts --no-audit multer@2.4.0
+          npm install --save-dev --save-exact --package-lock-only --ignore-scripts --no-audit @types/multer@2.3.0
           node - <<'NODE'
           const pkg = require("./package.json");
           const lock = require("./package-lock.json");
-          if (pkg.overrides?.["proxy-addr"] !== "2.0.8") {
-            throw new Error("Missing exact proxy-addr override");
+          if (pkg.dependencies.multer !== "2.4.0" || pkg.devDependencies["@types/multer"] !== "2.3.0") {
+            throw new Error("Multer package versions must be pinned exactly");
           }
-          if (lock.packages?.["node_modules/proxy-addr"]?.version !== "2.0.8") {
-            throw new Error("proxy-addr lockfile must contain patched version 2.0.8");
+          if (lock.packages?.["node_modules/multer"]?.version !== "2.4.0" ||
+              lock.packages?.["node_modules/@types/multer"]?.version !== "2.3.0") {
+            throw new Error("Multer lockfile must contain patched runtime and matching typings");
           }
           NODE
           git diff --check
@@ -50,5 +51,5 @@ jobs:
             echo "Lockfile already patched"
             exit 0
           fi
-          git commit -m "fix(deps): lock patched proxy-addr 2.0.8 (B10)"
+          git commit -m "fix(deps): upgrade Multer 2.4.0 and typings (B10)"
           git push origin "HEAD:refs/heads/commit-14102026"

@@ -3,6 +3,10 @@ import {
   rateLimiter,
   strictRateLimiter,
   authRateLimiter,
+  authIpRateLimiter,
+  totpRateLimiter,
+  totpIpRateLimiter,
+  refreshRateLimiter,
 } from "@shared/middlewares/rate-limit.middleware";
 import { Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
@@ -241,5 +245,73 @@ describe("rate-limit middleware", () => {
         RATE_LIMIT_MAX: originalMax,
       });
     });
+  });
+});
+
+describe("auth and 2FA abuse rate-limit keys", () => {
+  function optionForPrefix(prefix: string) {
+    const storeIndex = vi.mocked(RedisStore).mock.calls.findIndex(
+      ([options]) => (options as { prefix?: string }).prefix === prefix,
+    );
+    // The mocked factory is called in the same order as RedisStore creation.
+    return vi.mocked(rateLimit).mock.calls[storeIndex]?.[0];
+  }
+
+  it("sets independent IP-wide budgets to prevent rotating accounts or preauth tokens", () => {
+    expect(authIpRateLimiter).toBeDefined();
+    expect(totpIpRateLimiter).toBeDefined();
+    expect(refreshRateLimiter).toBeDefined();
+    expect(optionForPrefix("ratelimit:auth-ip:")).toMatchObject({
+      windowMs: 60 * 60 * 1000,
+      max: 60,
+    });
+    expect(optionForPrefix("ratelimit:totp-ip:")).toMatchObject({
+      windowMs: 15 * 60 * 1000,
+      max: 20,
+    });
+    expect(optionForPrefix("ratelimit:refresh-ip:")).toMatchObject({
+      windowMs: 15 * 60 * 1000,
+      max: 30,
+    });
+  });
+
+  it("normalizes the email and does not expose it in Redis keys", () => {
+    expect(authRateLimiter).toBeDefined();
+    const generate = optionForPrefix("ratelimit:auth:")?.keyGenerator as
+      (req: Request) => string;
+    const req = (email: string) => ({
+      ip: "192.0.2.20",
+      body: { email },
+      headers: { "x-forwarded-for": "198.51.100.1" },
+    }) as unknown as Request;
+    const first = generate(req(" User@Example.COM "));
+    expect(first).toBe(generate(req("user@example.com")));
+    expect(first).not.toContain("user@example.com");
+    expect(first).not.toContain("User@Example.COM");
+    expect(first).toMatch(/^192\\.0\\.2\\.20:[a-f0-9]{64}$/);
+    expect(first).not.toContain("198.51.100.1");
+  });
+
+  it("never includes raw preauth secrets in its Redis key", () => {
+    expect(totpRateLimiter).toBeDefined();
+    const generate = optionForPrefix("ratelimit:totp:")?.keyGenerator as
+      (req: Request) => string;
+    const token = "SECRET.JWT.PREAUTH";
+    const key = generate({ ip: "192.0.2.11", body: { preAuthToken: token } } as Request);
+    expect(key).not.toContain(token);
+    expect(key).toMatch(/^192\\.0\\.2\\.11:[a-f0-9]{64}$/);
+  });
+
+  it("shares missing identity buckets rather than letting malformed input evade limits", () => {
+    const authGenerate = optionForPrefix("ratelimit:auth:")?.keyGenerator as
+      (req: Request) => string;
+    const totpGenerate = optionForPrefix("ratelimit:totp:")?.keyGenerator as
+      (req: Request) => string;
+    const req = { ip: "192.0.2.21", body: {} } as Request;
+    expect(authGenerate(req)).toBe("192.0.2.21:missing");
+    expect(totpGenerate(req)).toBe("192.0.2.21:missing");
+    expect(authGenerate({ ...req, body: { email: {} } } as Request)).toBe(
+      "192.0.2.21:missing",
+    );
   });
 });

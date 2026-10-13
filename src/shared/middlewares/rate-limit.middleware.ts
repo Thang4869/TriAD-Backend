@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { RedisReply, RedisStore } from "rate-limit-redis";
 import { Request } from "express";
@@ -51,18 +52,61 @@ export const strictRateLimiter = rateLimiter({
   prefix: "ratelimit:strict:",
 });
 
+// Domain-separated HMAC prevents email addresses and pre-auth secrets from
+// appearing as plaintext Redis keys. Use a stable configured secret across replicas.
+function identityDigest(purpose: string, value: string): string {
+  return createHmac("sha256", config.JWT_ACCESS_SECRET)
+    .update(`triad:rate-limit:v1:${purpose}:${value}`)
+    .digest("hex");
+}
+
+const requestIp = (req: Request): string => req.ip || "unknown";
+
+const emailBucket = (req: Request): string => {
+  const raw = req.body?.email;
+  if (typeof raw !== "string") return "missing";
+  const normalized = raw.trim().toLowerCase();
+  return normalized ? identityDigest("email", normalized) : "missing";
+};
+
+const preAuthBucket = (req: Request): string => {
+  const raw = req.body?.preAuthToken;
+  return typeof raw === "string" && raw.length > 0
+    ? identityDigest("preauth", raw)
+    : "missing";
+};
+
+// Prevent account enumeration / rotating email addresses from bypassing
+// the per-identity threshold; budget is per trusted Express client IP.
+export const authIpRateLimiter = rateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 60,
+  prefix: "ratelimit:auth-ip:",
+});
+
 export const authRateLimiter = rateLimiter({
   windowMs: 60 * 60 * 1000,
   max: 10,
   prefix: "ratelimit:auth:",
-  keyGenerator: (req) =>
-    `${req.ip || "unknown"}:${String(req.body?.email || "unknown").toLowerCase()}`,
+  keyGenerator: (req) => `${requestIp(req)}:${emailBucket(req)}`,
+});
+
+export const totpIpRateLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  prefix: "ratelimit:totp-ip:",
 });
 
 export const totpRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 5,
   prefix: "ratelimit:totp:",
-  keyGenerator: (req) =>
-    `${req.ip || "unknown"}:${String(req.body?.preAuthToken || "missing")}`,
+  keyGenerator: (req) => `${requestIp(req)}:${preAuthBucket(req)}`,
+});
+
+// Token refresh should not have only the global per-minute request budget.
+export const refreshRateLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  prefix: "ratelimit:refresh-ip:",
 });

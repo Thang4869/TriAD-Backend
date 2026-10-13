@@ -35,7 +35,10 @@ a Redis command that rejects or does not respond within one second is mapped
 to `DependencyUnavailableError` (503). `passOnStoreError: false` prevents
 the request from continuing without a limit. A timed-out Redis operation may
 still complete later internally; the timeout bounds the HTTP wait, not the
-underlying Redis command lifecycle. Monitor 503 rates and Redis connectivity.
+underlying Redis command lifecycle. Lua `SCRIPT LOAD` during
+rate-limit store initialization is the sole exception: it must queue until
+Redis is ready instead of rejecting during module import. Subsequent HTTP
+rate-limit commands still fail closed. Monitor 503 rates and Redis connectivity.
 
 **Residual risks and release verification:** shared offices/NAT users can
 exhaust each other's IP budget; IP rotation and IPv6 privacy addresses can

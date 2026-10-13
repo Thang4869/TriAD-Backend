@@ -315,6 +315,22 @@ describe("rate-limit Redis fail-closed policy", () => {
     });
   });
 
+  it("queues startup SCRIPT LOAD until Redis becomes ready without rejecting during module import", async () => {
+    const sendCommand = commandBridge();
+    const redisClient = redis as typeof redis & { status: string };
+    const old = redisClient.status;
+    redisClient.status = "connecting";
+    vi.mocked(redis.call).mockResolvedValueOnce("sha-of-lua-script");
+    try {
+      await expect(sendCommand("SCRIPT", "LOAD", "return 1")).resolves.toBe(
+        "sha-of-lua-script",
+      );
+      expect(redis.call).toHaveBeenCalledWith("SCRIPT", "LOAD", "return 1");
+    } finally {
+      redisClient.status = old;
+    }
+  });
+
   it("returns a 503-class dependency error immediately if Redis is disconnected", async () => {
     const sendCommand = commandBridge();
     const redisClient = redis as typeof redis & { status: string };

@@ -3,6 +3,9 @@ import { OrderStatus, PaymentMethod, PaymentStatus } from "@prisma/client";
 import { prisma } from "@core/database/prisma";
 import { PrismaOrdersRepository } from "@modules/orders/infrastructure/repositories/prisma-orders.repository";
 import { Order } from "@modules/orders/domain/order.entity";
+import { OrdersService } from "@modules/orders/orders.service";
+import { PrismaOrderHistoryReadRepository } from "@modules/orders/infrastructure/repositories/prisma-order-history-read.repository";
+import { ResourceNotFoundError } from "@shared/errors/application-error";
 
 describe("PrismaOrdersRepository.updateStatusWithEvents", () => {
   const repository = new PrismaOrdersRepository();
@@ -375,5 +378,85 @@ describe("PrismaOrdersRepository.updateStatusWithEvents", () => {
     }
 
     expect(order.domainEvents).toHaveLength(0);
+  });
+});
+
+describe("OrdersService read-after-write fallback", () => {
+  it("reads a committed order before its projection exists, without exposing another user's order", async () => {
+    const suffix = crypto.randomUUID();
+    const user = await prisma.user.create({
+      data: {
+        email: `read-after-write-${suffix}@example.com`,
+        firstName: "Read",
+        lastName: "Model",
+        isVerified: true,
+      },
+    });
+    const product = await prisma.product.create({
+      data: {
+        name: "Read model item",
+        description: "Projection lag scenario",
+        price: 150,
+        stock: 2,
+        category: "test",
+        images: [],
+        slug: `read-model-${suffix}`,
+        isActive: true,
+      },
+    });
+    const order = await prisma.order.create({
+      data: {
+        orderNumber: `ORDER-RAW-${suffix}`,
+        userId: user.id,
+        status: OrderStatus.PENDING,
+        paymentMethod: PaymentMethod.COD,
+        paymentStatus: PaymentStatus.PENDING,
+        subtotal: 150,
+        tax: 0,
+        shippingFee: 0,
+        total: 150,
+        discountAmount: 0,
+        customerName: "Read Model",
+        customerEmail: user.email,
+        customerPhone: "0123456789",
+        customerAddress: "Test Address",
+        items: {
+          create: {
+            productId: product.id,
+            quantity: 1,
+            price: 150,
+            total: 150,
+          },
+        },
+      },
+    });
+    const service = new OrdersService(
+      new PrismaOrdersRepository(),
+      new PrismaOrderHistoryReadRepository(),
+    );
+
+    expect(await prisma.orderHistoryProjection.findUnique({
+      where: { orderId: order.id },
+    })).toBeNull();
+
+    const result = await service.getOrderById(order.id, user.id);
+    expect(result).toMatchObject({
+      orderId: order.id,
+      userId: user.id,
+      orderNumber: order.orderNumber,
+      total: 150,
+      items: [
+        {
+          productId: product.id,
+          productName: product.name,
+          quantity: 1,
+          unitPrice: 150,
+        },
+      ],
+    });
+
+    await expect(
+      service.getOrderById(order.id, crypto.randomUUID()),
+    ).rejects.toThrow(ResourceNotFoundError);
   });
 });

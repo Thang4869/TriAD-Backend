@@ -174,8 +174,63 @@ describe("OrdersService.getOrderById", () => {
     expect(readPort.findByIdAndUser).toHaveBeenCalledWith("order-1", "user-1");
   });
 
-  it("không tìm thấy (hoặc không thuộc về user) → ResourceNotFoundError", async () => {
+  it("trả kết quả projection và không truy vấn write model khi đã sẵn sàng", async () => {
     const repository = createRepository();
+    const readPort = createReadPort();
+
+    const result = await createService(repository, readPort).getOrderById(
+      "order-1",
+      "user-1",
+    );
+
+    expect(result).toEqual(ORDER_HISTORY);
+    expect(repository.findByIdAndUser).not.toHaveBeenCalled();
+  });
+
+  it("fallback về write model khi projection chưa bắt kịp", async () => {
+    const repository = createRepository({
+      findByIdAndUser: vi.fn().mockResolvedValue({
+        ...ORDER,
+        items: [
+          {
+            id: "item-1",
+            orderId: "order-1",
+            productId: "p-1",
+            quantity: 2,
+            price: 50,
+            total: 100,
+            product: { id: "p-1", name: "T-shirt", images: [] },
+          },
+        ],
+      }),
+    });
+    const readPort = createReadPort({
+      findByIdAndUser: vi.fn().mockResolvedValue(null),
+    });
+
+    const result = await createService(repository, readPort).getOrderById(
+      "order-1",
+      "user-1",
+    );
+
+    expect(repository.findByIdAndUser).toHaveBeenCalledWith("order-1", "user-1");
+    expect(result).toEqual({
+      ...ORDER_HISTORY,
+      items: [
+        {
+          productId: "p-1",
+          productName: "T-shirt",
+          quantity: 2,
+          unitPrice: 50,
+        },
+      ],
+    });
+  });
+
+  it("không tìm thấy trên cả projection và write model → 404", async () => {
+    const repository = createRepository({
+      findByIdAndUser: vi.fn().mockResolvedValue(null),
+    });
     const readPort = createReadPort({
       findByIdAndUser: vi.fn().mockResolvedValue(null),
     });
@@ -183,6 +238,8 @@ describe("OrdersService.getOrderById", () => {
     await expect(
       createService(repository, readPort).getOrderById("order-1", "user-2"),
     ).rejects.toThrow(new ResourceNotFoundError("Order not found"));
+
+    expect(repository.findByIdAndUser).toHaveBeenCalledWith("order-1", "user-2");
   });
 });
 

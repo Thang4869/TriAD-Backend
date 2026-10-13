@@ -65,12 +65,42 @@ export class OrdersService implements IOrdersService {
     };
   }
 
-  async getOrderById(orderId: string, userId: string) {
-    const order = await this.readPort.findByIdAndUser(orderId, userId);
-    if (!order) {
+  async getOrderById(orderId: string, userId: string): Promise<OrderHistoryView> {
+    const projected = await this.readPort.findByIdAndUser(orderId, userId);
+    if (projected) {
+      return projected;
+    }
+
+    // A newly committed order may not have reached the async projection yet.
+    // Keep the ownership condition in the write-side query as well.
+    const persisted = await this.repository.findByIdAndUser(orderId, userId);
+    if (!persisted) {
       throw new ResourceNotFoundError("Order not found");
     }
-    return order;
+
+    return this.toHistoryView(persisted);
+  }
+
+  private toHistoryView(order: OrderView): OrderHistoryView {
+    return {
+      orderId: order.id,
+      userId: order.userId,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      subtotal: order.subtotal,
+      tax: order.tax,
+      shippingFee: order.shippingFee,
+      total: order.total,
+      items: order.items.map((item) => ({
+        productId: item.productId,
+        productName: item.product.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+      })),
+      placedAt: order.createdAt,
+      updatedAt: order.updatedAt,
+    };
   }
 
   async adminGetOrders(filters: AdminOrderFilters, page = 1, limit = 10) {

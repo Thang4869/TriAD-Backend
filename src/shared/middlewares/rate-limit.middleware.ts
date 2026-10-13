@@ -4,6 +4,40 @@ import { RedisReply, RedisStore } from "rate-limit-redis";
 import { Request } from "express";
 import redis from "@core/redis/client";
 import config from "@config";
+import { DependencyUnavailableError } from "@shared/errors/application-error";
+
+// The main Redis client supports long-lived queue consumers. HTTP rate-limit
+// lookups must instead fail promptly and closed when Redis is unavailable.
+const RATE_LIMIT_STORE_TIMEOUT_MS = 1000;
+
+function sendRateLimitCommand(...args: string[]): Promise<RedisReply> {
+  if (redis.status !== "ready") {
+    return Promise.reject(new DependencyUnavailableError("Rate limit store unavailable"));
+  }
+
+  return new Promise<RedisReply>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new DependencyUnavailableError("Rate limit store timed out")),
+      RATE_LIMIT_STORE_TIMEOUT_MS,
+    );
+
+    try {
+      Promise.resolve(redis.call(args[0], ...args.slice(1))).then(
+        (reply) => {
+          clearTimeout(timeout);
+          resolve(reply as RedisReply);
+        },
+        () => {
+          clearTimeout(timeout);
+          reject(new DependencyUnavailableError("Rate limit store unavailable"));
+        },
+      );
+    } catch {
+      clearTimeout(timeout);
+      reject(new DependencyUnavailableError("Rate limit store unavailable"));
+    }
+  });
+}
 
 export const rateLimiter = (options?: {
   windowMs?: number;
@@ -21,11 +55,7 @@ export const rateLimiter = (options?: {
   return rateLimit({
     store: new RedisStore({
       prefix,
-      sendCommand: (...args: string[]) =>
-        redis.call(
-          args[0],
-          ...args.slice(1),
-        ) as Promise<unknown> as Promise<RedisReply>,
+      sendCommand: sendRateLimitCommand,
     }),
     windowMs,
     max,
@@ -36,6 +66,8 @@ export const rateLimiter = (options?: {
       }),
     standardHeaders: true,
     legacyHeaders: false,
+    // Redis outage must not silently disable abuse protection.
+    passOnStoreError: false,
     message: {
       success: false,
       error: "Too many requests, please try again later.",

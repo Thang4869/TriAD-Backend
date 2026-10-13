@@ -13,6 +13,7 @@ import rateLimit from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import redis from "@core/redis/client";
 import config from "@config";
+import { DependencyUnavailableError } from "@shared/errors/application-error";
 
 vi.mock("express-rate-limit", () => ({
   default: vi.fn().mockImplementation((_options) => {
@@ -27,6 +28,7 @@ vi.mock("rate-limit-redis", () => ({
 vi.mock("@core/redis/client", () => ({
   default: {
     call: vi.fn(),
+    status: "ready",
   },
 }));
 
@@ -313,5 +315,60 @@ describe("auth and 2FA abuse rate-limit keys", () => {
     expect(authGenerate({ ...req, body: { email: {} } } as Request)).toBe(
       "192.0.2.21:missing",
     );
+  });
+});
+
+describe("rate-limit Redis fail-closed policy", () => {
+  function commandBridge() {
+    rateLimiter();
+    const options = vi.mocked(RedisStore).mock.calls.at(-1)?.[0] as
+      { sendCommand: (...args: string[]) => Promise<unknown> } | undefined;
+    if (!options) throw new Error("Missing Redis store in rate-limit test");
+    return options.sendCommand;
+  }
+
+  it("explicitly rejects bypass-on-store-error", () => {
+    rateLimiter();
+    expect(vi.mocked(rateLimit).mock.calls.at(-1)?.[0]).toMatchObject({
+      passOnStoreError: false,
+    });
+  });
+
+  it("returns a 503-class dependency error immediately if Redis is disconnected", async () => {
+    const sendCommand = commandBridge();
+    const redisClient = redis as typeof redis & { status: string };
+    const old = redisClient.status;
+    redisClient.status = "reconnecting";
+    try {
+      await expect(sendCommand("INCR", "test-key")).rejects.toBeInstanceOf(
+        DependencyUnavailableError,
+      );
+      expect(redis.call).not.toHaveBeenCalled();
+    } finally {
+      redisClient.status = old;
+    }
+  });
+
+  it("maps Redis command rejections to dependency errors (not a rate-limit bypass)", async () => {
+    const sendCommand = commandBridge();
+    vi.mocked(redis.call).mockRejectedValueOnce(new Error("secret redis endpoint"));
+    await expect(sendCommand("INCR", "test-key")).rejects.toThrow(
+      "Rate limit store unavailable",
+    );
+  });
+
+  it("bounds an unresponsive Redis command without exposing key material", async () => {
+    vi.useFakeTimers();
+    try {
+      const sendCommand = commandBridge();
+      vi.mocked(redis.call).mockImplementationOnce(() => new Promise(() => {}));
+      const pending = expect(sendCommand("INCR", "sensitive-token")).rejects.toThrow(
+        "Rate limit store timed out",
+      );
+      await vi.advanceTimersByTimeAsync(1000);
+      await pending;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

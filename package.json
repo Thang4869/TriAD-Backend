@@ -127,5 +127,8 @@
       "eslint --fix",
       "prettier --write"
     ]
+  },
+  "overrides": {
+    "proxy-addr": "2.0.8"
   }
 }

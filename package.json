@@ -45,7 +45,7 @@
     "@opentelemetry/semantic-conventions": "^1.28.0",
     "@prisma/client": "^5.22.0",
     "async-retry": "^1.3.3",
-    "bcrypt": "^5.1.1",
+    "bcrypt": "6.0.0",
     "bullmq": "^5.1.8",
     "cloudinary": "^1.41.0",
     "compression": "^1.8.1",
@@ -57,7 +57,7 @@
     "helmet": "^7.2.0",
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5-lts.1",
+    "multer": "2.4.0",
     "nodemailer": "^9.0.5",
     "opossum": "^10.0.0",
     "passport": "^0.7.0",
@@ -80,14 +80,14 @@
     "@testcontainers/postgresql": "^10.13.2",
     "@testcontainers/redis": "^10.13.2",
     "@types/async-retry": "^1.4.9",
-    "@types/bcrypt": "^5.0.2",
+    "@types/bcrypt": "6.0.0",
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.25",
     "@types/helmet": "^0.0.48",
     "@types/jsonwebtoken": "^9.0.5",
-    "@types/multer": "^1.4.13",
+    "@types/multer": "2.3.0",
     "@types/node": "^26.2.0",
     "@types/nodemailer": "^8.0.1",
     "@types/opossum": "^8.1.9",
@@ -127,5 +127,8 @@
       "eslint --fix",
       "prettier --write"
     ]
+  },
+  "overrides": {
+    "proxy-addr": "2.0.8"
   }
 }

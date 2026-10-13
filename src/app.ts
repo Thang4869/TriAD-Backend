@@ -8,6 +8,7 @@ import cookieParser from "cookie-parser";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "@config/swagger";
 import config from "@config";
+import { parseTrustProxy } from "@config/trust-proxy";
 
 import { rateLimiter } from "@shared/middlewares/rate-limit.middleware";
 import { notFoundHandler } from "@shared/middlewares/error-handler.middleware";
@@ -32,12 +33,7 @@ import { csrfProtection } from "@shared/middlewares/csrf.middleware";
 import { AuthorizationError } from "@shared/errors/application-error";
 
 const app: Application = express();
-const trustProxy = /^\d+$/.test(config.TRUST_PROXY)
-  ? Number(config.TRUST_PROXY)
-  : config.TRUST_PROXY.split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-app.set("trust proxy", trustProxy);
+app.set("trust proxy", parseTrustProxy(config.TRUST_PROXY));
 
 app.use(
   helmet({

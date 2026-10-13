@@ -7,6 +7,27 @@
 3. Confirm PostgreSQL and Redis connectivity before restarting workers.
 4. Do not manually delete outbox rows; they are production recovery state.
 
+## Trusted proxy configuration (B10/B7)
+
+`TRUST_PROXY` is a security boundary for Express `req.ip`, HTTP rate
+limiting, IP-based logs and audit information. Default `0` ignores
+`X-Forwarded-For` from untrusted clients. Set an explicit number of proxy
+hops only when requests can reach the app **exclusively through those proxy
+hops**; otherwise use controlled proxy IPs/IPv4 CIDRs (for example,
+`TRUST_PROXY=10.0.0.0/8` with verified network access rules).
+
+Startup rejects broad `true`/trust-all values, arbitrary aliases, invalid
+hop counts, IPv6 CIDRs, and IPv4-mapped IPv6 CIDRs. These conservative
+startup restrictions remain a defense-in-depth policy even after the B10
+branch upgrades `proxy-addr` to `2.0.8`; review actual proxy topology before
+relaxing them. Explicit IPv6 proxy **IP addresses** such as `::1` remain
+valid.
+
+On staging, verify both direct connection spoof attempts (the supplied
+`X-Forwarded-For` must not become `req.ip`) and legitimate requests via
+the configured proxy. Incorrect trust configuration can both bypass IP
+rate limits and unfairly group different users into one shared bucket.
+
 ## Rate-limit policy and Redis outage response (B7)
 
 The general `/api` limiter uses `RATE_LIMIT_WINDOW_MS` (default 60 seconds)

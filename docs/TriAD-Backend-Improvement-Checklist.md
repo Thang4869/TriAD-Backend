@@ -17,7 +17,7 @@
 
 | Ưu tiên | Mã | Việc cần làm / điều kiện đóng | Trạng thái |
 | --- | --- | --- | --- |
-| **P0** | **B10** | Nâng `proxy-addr` ≥2.0.8, `multer` 2.4.0 + typings và rà `bcrypt` 6.x → `tar`. Commit `package.json` + `package-lock.json` cùng nhau; audit production và regression đều PASS; phân loại high/critical còn lại. | **OPEN — blocker security** |
+| **P0** | **B10** | Đã nâng và kiểm thử code: `proxy-addr@2.0.8`, `multer@2.4.0`/`@types/multer@2.3.0`, `bcrypt@6.0.0`/`@types/bcrypt@6.0.0`; npm lockfile generated bởi CI. Audit mới: **production 0 critical / 12 high / 49 moderate**; full graph 0/29/53. Lint/typecheck, unit/integration PASS; Docker smoke/E2E và phân loại high còn chờ xác minh trước merge. | **PARTIAL — 0 critical, 12 high** |
 | **P0** | **A1 / T6** | Kiểm thử kill/restart relay, Redis/BullMQ outage, dead-letter replay cho initial verification email; xác nhận job idempotency, TTL, trễ giao hàng và giới hạn resend. Lưu trace/log từ môi trường có DB/Redis thật. | **PARTIAL — code CI PASS** |
 | **P1** | **T2 / T6 / A8** | Lost-response checkout retry, concurrent price change và relay/process crash; đo projection lag thực tế, công bố contract consistency cho order list/detail. | PARTIAL |
 | **P1** | **I9 / I6** | Backup → restore PostgreSQL, replay outbox, rebuild projection; ghi RTO/RPO; readiness-draining + SIGTERM drill. | OPEN |
@@ -44,7 +44,7 @@
 
 ## Thứ tự triển khai tiếp theo (mỗi stage một commit)
 
-1. **B10 / Security:** `proxy-addr` + test trust proxy; **Multer** + real multipart tests; **bcrypt/tar** + hash compatibility tests; kiểm tra lại audit lockfile. Không dùng `npm audit fix --force`.
+1. **B10 / Security:** kiểm thử CI **nhánh đã nâng** (proxy trust, multipart, bcrypt real-native, Docker/E2E), so sánh audit production trước/sau và phân loại direct high còn lại trước merge; không dùng `npm audit fix --force`.
 2. **A1 / Reliability:** test end-to-end replay cho registration email, kill/restart relay, Redis outage, dead-letter và verification-link TTL.
 3. **T2/T6/I9:** checkout retry + concurrency; backup/restore/rebuild projection; lưu logs/RTO/RPO/lag evidence.
 4. **B7/H2/H7/T3:** staging security, FE migration và schema/API boundary cleanup.

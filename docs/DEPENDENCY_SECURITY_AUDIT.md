@@ -49,6 +49,44 @@ frontend-to-backend E2E green; inspect the new `Dependency Audit (report)`
 artifact for remaining critical/high risks. The report-only job is **not**
 a blocking vulnerability gate.
 
+## B10 batch 2 — compatible dependency upgrades (15/10/2026)
+
+On branch `commit-15102026-2`, an npm-capable CI runner generated a
+`package-lock.json` update for three **direct dependencies within their
+existing semver ranges**. No manual lockfile integrity edits were made.
+
+| Dependency | Locked before | Locked now |
+| --- | --- | --- |
+| `compression` | 1.8.1 | **1.8.2** |
+| `nodemailer` | 9.0.5 | **9.1.1** |
+| `sharp` | 0.35.3 | **0.35.5** |
+
+A separate **major-version** follow-up stage upgraded
+`nodemailer` from 9.1.1 to `10.0.16`, using an npm-generated manifest
+and lockfile. Nodemailer 10 requires Node.js 20+; production/CI use Node 22.
+This step must pass typecheck and SMTP composition smoke tests, and the
+production audit must be re-run to verify whether the reported high advisory
+is resolved. `@types/nodemailer` remains in dev dependencies pending a
+type compatibility review.
+
+Temporary workflows used solely to regenerate each npm lockfile have been
+removed from the branch. The refreshed GitHub Actions production npm audit (15/10/2026)
+reports **0 critical / 10 high / 49 moderate**. The full dependency graph
+reports **0 critical / 27 high / 53 moderate**. Compared to the previously
+merged baseline, the compatible patch batch removed **2 high findings** in
+production and full graphs. `nodemailer` is **still** a direct high finding,
+while `compression` and `sharp` are no longer listed as direct high findings.
+
+The new post-Nodemailer-10 GitHub Actions audit reports **0 critical / 9 high /
+49 moderate** in production and **0 critical / 26 high / 53 moderate** for the
+full graph. This is a reduction of **three high findings** relative to
+the previously merged PR #166 (12 high production).
+
+This batch **requires full unit/integration, build and E2E validation**
+and full CI before any claim about high-vulnerability reduction or release
+readiness. `cloudinary` and OpenTelemetry still require separate compatibility
+decisions; no blind major-version upgrade is attempted.
+
 ## Post-upgrade CI audit (14/10/2026)
 
 Artifact: **Dependency Audit (report)** on PR #166, commit `76a0992`.

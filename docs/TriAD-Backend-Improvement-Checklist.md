@@ -28,7 +28,7 @@
 | **P2** | **J1 / J2 / J3** | Trace/span ID trong logs; SLO + dashboard/alert runbook; audit trail admin với actor/target/outcome. | PARTIAL |
 | **P2** | **T7 / T4** | k6 checkout/load evidence (p95/p99/errors) và mutation-test report cho domain/core. | OPEN |
 | **P2** | **I2 / I4 / I8 / I10** | Pin/scanning/SBOM, deployment resource/migration strategy, release tags/changelog và env/secret injection review. | PARTIAL |
-| **P3** | **K2 / K3 / K4 / K5** | Đã thêm [SECURITY.md](../SECURITY.md) và [CONTRIBUTING.md](../CONTRIBUTING.md) trong PR #174; license phải do chủ repo duyệt, còn ADR, demo/protected OpenAPI và CV evidence. | **PARTIAL — LICENSE review** |
+| **P3** | **K2 / K3 / K4 / K5** | Đã thêm [ADR-0001](adr/0001-transactional-checkout-outbox.md), [SECURITY.md](../SECURITY.md), [CONTRIBUTING.md](../CONTRIBUTING.md) tại PR #174. `LICENSE` cần chủ repo phê duyệt; demo, protected OpenAPI và CV evidence còn OPEN. | **PARTIAL — license/demo review** |
 
 **Backlog có điều kiện, không phải blocker:** D3/D5/H10 (thêm DI/port/split chỉ khi cần), F1/G3/G10 (payment/Saga/Strategy khi có provider use case thật), G2/G11/G13–G16 (domain cleanup theo invariant), H4/H5/H8/H12/H13 (naming/dependency hygiene), T1/T8 (test helpers/API tests), J4 (error docs/versioning). Không tăng số lượng pattern/interface để theo đuổi “10/10”.
 

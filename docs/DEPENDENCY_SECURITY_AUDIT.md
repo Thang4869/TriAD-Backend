@@ -49,6 +49,24 @@ frontend-to-backend E2E green; inspect the new `Dependency Audit (report)`
 artifact for remaining critical/high risks. The report-only job is **not**
 a blocking vulnerability gate.
 
+## B10 batch 2 — compatible dependency upgrades (15/10/2026)
+
+On branch `commit-15102026-2`, an npm-capable CI runner generated a
+`package-lock.json` update for three **direct dependencies within their
+existing semver ranges**. No manual lockfile integrity edits were made.
+
+| Dependency | Locked before | Locked now |
+| --- | --- | --- |
+| `compression` | 1.8.1 | **1.8.2** |
+| `nodemailer` | 9.0.5 | **9.1.1** |
+| `sharp` | 0.35.3 | **0.35.5** |
+
+The temporary workflow used solely to regenerate this lockfile has been
+removed from the branch. This batch **requires a fresh production npm audit**
+and full CI before any claim about high-vulnerability reduction or release
+readiness. `cloudinary` and OpenTelemetry still require separate compatibility
+decisions; no blind major-version upgrade is attempted.
+
 ## Post-upgrade CI audit (14/10/2026)
 
 Artifact: **Dependency Audit (report)** on PR #166, commit `76a0992`.

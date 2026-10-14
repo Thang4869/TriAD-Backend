@@ -17,7 +17,7 @@
 
 | Ưu tiên | Mã | Việc cần làm / điều kiện đóng | Trạng thái |
 | --- | --- | --- | --- |
-| **P0** | **B10** | [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166) đã merge, CI PASS: **0 critical**, còn **12 high/49 moderate** production. B10 tiếp tục qua các đợt remediation/triage high (OpenTelemetry/Cloudinary/Compression/Nodemailer/Sharp), giữ audit critical gate. | **PARTIAL — 12 high còn mở** |
+| **P0** | **B10** | [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166) đã merge, CI PASS: **0 critical**, còn **12 high/49 moderate** production. B10 tiếp tục qua các đợt remediation/triage high (OpenTelemetry/Cloudinary/Compression/Nodemailer/Sharp), giữ audit critical gate. | **PARTIAL — 12 high trên main; CI batch 2 pending** |
 | **P0** | **A1 / T6** | Đã sửa mất verification token nếu DB update lỗi; thêm integration PostgreSQL với outbox relay, persisted handler tracker, lease từ worker chết và Redis/BullMQ failure/recovery. **Chờ CI trên nhánh ngày**; vẫn cần kill-process drill thực, SMTP/BullMQ dead-letter recovery + TTL evidence. | **PARTIAL — CI pending / live drill OPEN** |
 | **P1** | **T2 / T6 / A8** | Lost-response checkout retry, concurrent price change và relay/process crash; đo projection lag thực tế, công bố contract consistency cho order list/detail. | PARTIAL |
 | **P1** | **I9 / I6** | Backup → restore PostgreSQL, replay outbox, rebuild projection; ghi RTO/RPO; readiness-draining + SIGTERM drill. | OPEN |

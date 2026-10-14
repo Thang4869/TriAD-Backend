@@ -13,26 +13,26 @@
 | **Clean Code / Maintainability** | **8.7** | Error taxonomy, structured boundaries tốt; naming, cast, TypeScript/ESLint tooling và API drift vẫn cần cleanup. |
 | **Testing / CI** | **9.4** | Unit/integration/contract, architecture, build, production image runtime smoke, full FE↔BE E2E đều xanh ở PR #164; chưa có mutation/load gate. |
 | **Reliability / concurrency** | **9.0** | Serializable checkout, idempotency, outbox retry/lease/tracker, order projection; A1 đã chuyển sang outbox nhưng chưa có kill-process/recovery drill đầy đủ. |
-| **Security** | **7.1** | JWT/CSRF/rate limit/OAuth/upload có kiểm thử; **2 critical + 14 high production dependency advisories** chưa remediation, staging proxy/Redis chưa chứng minh. |
+| **Security** | **7.8** | JWT/CSRF/rate limit/OAuth/upload; **0 critical** sau PR #166, vẫn **12 high** production và chưa có staging proxy/Redis evidence. |
 | **Production readiness** | **7.8** | Docker multi-stage + production image smoke PASS; thiếu deployed smoke, backup/restore RTO/RPO, SLO và dependency cleanup. |
 | **Observability / Ops** | **8.5** | OTEL, Prometheus, Winston, alert/runbook foundation; còn dashboard SLO, log tracing correlation và admin audit trail. |
-| **Tổng thể Backend (tham khảo)** | **~8.6** | Trung bình 8 mảng trên, làm tròn 1 chữ số; trọng số ngang nhau chỉ để so sánh tiến độ nội bộ. |
+| **Tổng thể Backend (tham khảo)** | **~8.7** | Trung bình 8 mảng làm tròn; điểm tham khảo, chưa chứng nhận production readiness. |
 
-**So với bản cũ (~9.2/10):** việc hạ điểm là **đổi chuẩn đánh giá nghiêm hơn về security và evidence production**, không có nghĩa code OOP/architecture bị thoái hóa. Sau B7/A1, các cơ chế protection/recovery tốt hơn, nhưng một `npm audit` report-only **không** sửa lỗ hổng đã phát hiện. Điểm phải tăng theo evidence mới, không theo số checkbox đóng.
+**So với bản đánh giá lịch sử (~9.2/10):** việc chấm nghiêm hơn là **đổi chuẩn đánh giá nghiêm hơn về security và evidence production**, không có nghĩa code OOP/architecture bị thoái hóa. Sau B7/A1, các cơ chế protection/recovery tốt hơn, nhưng một `npm audit` report-only **không** sửa lỗ hổng đã phát hiện. Điểm phải tăng theo evidence mới, không theo số checkbox đóng.
 
 **Định vị:** đủ mạnh làm **portfolio backend nâng cao** với bằng chứng về thiết kế và CI. Có nhiều thực hành gắn với trách nhiệm Tech Lead (trade-off, architecture boundaries, reliability); **chưa thể chứng nhận “Tech Lead 10/10”** hoặc tự gọi hệ thống production-ready tuyệt đối khi thiếu deployed/recovery evidence.
 
-**Đang đánh giá [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166):** trên nhánh `commit-14102026`, package manifests
+**Đã merge [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166):** trên nhánh `commit-14102026`, package manifests
 và **npm-generated** lockfile đã nâng `proxy-addr@2.0.8`,
 `multer@2.4.0`/`@types/multer@2.3.0`, `bcrypt@6.0.0`/
-`@types/bcrypt@6.0.0`. Đây là **thay đổi chưa merge / chưa xác minh
-đầy đủ CI cuối**, vì vậy điểm Security và snapshot audit bên dưới
-vẫn lấy baseline `main` từ 13/10; không chấm tăng trước deployed evidence.
+`@types/bcrypt@6.0.0`. Đã xác nhận **Lint, Unit/Integration, Build, Docker runtime smoke, FE↔BE E2E,
+critical audit gate PASS**. Security vẫn phải thận trọng vì 12 high production
+chưa được triage hoặc fix; deployment evidence và risk acceptance còn thiếu.
 
 **CI audit của nhánh nâng dependency (14/10/2026):** production
 **0 critical / 12 high / 49 moderate**; toàn bộ
 **0 critical / 29 high / 53 moderate**. Unit & Integration, Lint & Type Check
-đã PASS; image runtime smoke và FE↔BE E2E đang được xác minh.
+và image runtime smoke / FE↔BE E2E đã PASS tại PR #166.
 Dù critical về **0**, B10 còn **PARTIAL** vì 12 high production chưa triage.
 
 ## 2. Những gì đã được xác minh
@@ -73,7 +73,7 @@ Rủi ro ưu tiên: `proxy-addr` IP spoofing/Express `req.ip` ([GHSA-jqcg-44mw-7
 
 ## 4. Kết luận và mục tiêu mốc tiếp theo
 
-**Ưu tiên triển khai ngay:** B10 (`proxy-addr` → Multer → `bcrypt`/`tar`, từng staged commit); tiếp theo A1/T6 kill/restart recovery và I9 backup/restore evidence. Tối ưu đánh giá lúc này bằng **giảm rủi ro runtime**, không thêm lớp OOP tượng trưng.
+**Ưu tiên triển khai ngay:** A1/T6 recovery evidence cho verification email; tiếp tục B10 (12 high production), sau đó I9 backup/restore và T2 concurrent checkout. Tối ưu đánh giá lúc này bằng **giảm rủi ro runtime**, không thêm lớp OOP tượng trưng.
 
 **Mục tiêu thực tế để cải thiện điểm:** ưu tiên kéo Security lên mức có đủ evidence, thiết lập quality gate dependency phù hợp và chứng minh khôi phục sau sự cố; rồi mới đầu tư perf/mutation/portfolio. Không hứa đạt đúng 10/10 chỉ nhờ hoàn thành danh sách.
 

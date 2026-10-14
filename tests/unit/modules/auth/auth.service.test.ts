@@ -714,6 +714,38 @@ describe("AuthService", () => {
       expect(result).toHaveProperty("accessToken");
     });
 
+    it("does not consume the verification link if persistence fails", async () => {
+      tokenStore.get.mockResolvedValueOnce("user-id");
+      repository.findUserById = vi
+        .fn()
+        .mockResolvedValue({ ...baseUser, isVerified: false });
+      repository.updateUser = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("database temporarily unavailable"));
+
+      await expect(service.verifyEmail("token")).rejects.toThrow(
+        "database temporarily unavailable",
+      );
+      expect(tokenStore.delete).not.toHaveBeenCalled();
+      expect(mockTokenService.generateTokens).not.toHaveBeenCalled();
+    });
+
+    it("persists verification before deleting the one-use link", async () => {
+      tokenStore.get.mockResolvedValueOnce("user-id");
+      repository.findUserById = vi
+        .fn()
+        .mockResolvedValue({ ...baseUser, isVerified: false });
+      repository.updateUser = vi
+        .fn()
+        .mockResolvedValue({ ...baseUser, isVerified: true });
+
+      await service.verifyEmail("token");
+
+      const updateOrder = vi.mocked(repository.updateUser).mock.invocationCallOrder[0];
+      const deleteOrder = tokenStore.delete.mock.invocationCallOrder[0];
+      expect(updateOrder).toBeLessThan(deleteOrder);
+    });
+
     it("returns tokens directly if user is already verified (real generateTokens)", async () => {
       tokenStore.get.mockResolvedValueOnce("user-id");
 

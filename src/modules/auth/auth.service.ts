@@ -76,18 +76,21 @@ export class AuthService {
     const foundUser = await this.repository.findUserById(userId);
     if (!foundUser) throw new ValidationError("User not found");
 
-    await this.tokenStore.delete(`email-verify:${token}`);
-
     if (foundUser.isVerified) {
+      await this.tokenStore.delete(`email-verify:${token}`);
       return this.tokenService.generateTokens(foundUser);
     }
 
     const user = UserEntity.hydrate(toEntityData(foundUser));
     user.verify();
 
+    // A failed database write must not consume the only verification link.
+    // If Redis deletion fails after the commit, retry sees an already-verified
+    // user and can safely finish token cleanup.
     const updatedUser = await this.repository.updateUser(user.id, {
       isVerified: true,
     });
+    await this.tokenStore.delete(`email-verify:${token}`);
     // UserEmailVerified has no durable subscriber; do not publish best-effort events.
     return this.tokenService.generateTokens(updatedUser);
   }

@@ -27,6 +27,11 @@ jobs:
           npm pkg set             "dependencies.@opentelemetry/api=1.9.1" "dependencies.@opentelemetry/core=2.12.0"             "dependencies.@opentelemetry/auto-instrumentations-node=0.81.0"             "dependencies.@opentelemetry/exporter-trace-otlp-http=0.223.0"             "dependencies.@opentelemetry/instrumentation-express=0.71.0"             "dependencies.@opentelemetry/resources=2.12.0"             "dependencies.@opentelemetry/sdk-node=0.223.0"             "dependencies.@opentelemetry/semantic-conventions=1.43.0"
           # Print the full npm resolution path, rather than hiding the root
           # dependency that actually conflicts with the new OTel generation.
+          # Rebuild the lockfile in the same npm invocation. Incremental npm
+          # resolution cannot replace the old OTEL 0.5x peer graph safely;
+          # keep a local reference to compare changes, then discard it.
+          cp package-lock.json /tmp/triad-package-lock-before-otel.json
+          rm package-lock.json
           npm install --package-lock-only --ignore-scripts --no-audit || {
             for report in "$HOME"/.npm/_logs/*-eresolve-report.txt; do
               if test -f "$report"; then cat "$report"; fi
@@ -51,6 +56,19 @@ jobs:
               throw new Error("OpenTelemetry package not pinned: " + name);
             }
           }
+          NODE
+          node - <<'NODE'
+          const oldLock = require("/tmp/triad-package-lock-before-otel.json");
+          const newLock = require("./package-lock.json");
+          const names = ["proxy-addr", "multer", "bcrypt", "cloudinary", "nodemailer", "sharp"];
+          for (const name of names) {
+            const oldVersion = oldLock.packages["node_modules/" + name]?.version;
+            const newVersion = newLock.packages["node_modules/" + name]?.version;
+            if (oldVersion !== newVersion) {
+              console.log("Non-OTel package changed", name, oldVersion, newVersion);
+            }
+          }
+          console.log("Lockfile entries", Object.keys(oldLock.packages).length, "→", Object.keys(newLock.packages).length);
           NODE
           git diff --check
           if test -n "$(git diff --name-only -- . ':!package.json' ':!package-lock.json')"; then

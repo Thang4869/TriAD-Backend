@@ -1,6 +1,6 @@
 # Event durability policy — TriAD Backend
 
-**Reviewed:** 2026-10-14  
+**Reviewed:** 2026-10-15  
 **Scope:** Auth and Reviews; production event relay + downstream projections.  
 **Status:** Initial verification email is durable through the merged [PR #164](https://github.com/Thang4869/TriAD-Backend/pull/164), CI PASS. A new A1/T6 batch includes persisted relay recovery regression tests; CI pending. No live kill-process/SMTP evidence or exactly-once delivery claim.
 
@@ -31,6 +31,39 @@
 - `AuthService.verifyEmail()` now persists `isVerified=true` before deleting the Redis verification token. Database failure must not consume the only link (unit regression).
 - `tests/integration/auth.registration-outbox-recovery.test.ts` uses real PostgreSQL outbox records, lease writes, `OutboxRelay` and `PrismaOutboxHandlerTracker`. It tests abandoned leases, a Redis token-store outage and a BullMQ enqueue outage with persisted retry/backoff and deterministic job identity.
 - The integration tests isolate claim selection to their own outbox IDs to avoid consuming unrelated fixtures. They do **not** simulate a real OS-level process kill or live Redis/BullMQ/SMTP connections. This remains an explicit staging release gate.
+
+## A1/T6 post-PR #167 crash and dead-letter evidence
+
+GitHub Actions for draft [PR #169](https://github.com/Thang4869/TriAD-Backend/pull/169)
+passed its **Unit & Integration Tests** including the new tests:
+
+- `tests/integration/auth.registration-process-crash.test.ts` starts an actual
+  child Node.js process with `OutboxRelay`, waits until the persisted
+  `UserRegistered` lease enters the handler, sends OS-level `SIGKILL`,
+  confirms the record is not marked published, expires only the lease **in the
+  test DB** and lets a new relay finish with one SUCCESS handler log.
+  It uses the same Prisma schema as its parent Vitest worker.
+- `tests/integration/auth.registration-outbox-recovery.test.ts` verifies that
+  exhausting attempt #10 dead-letters registration verification; an operator
+  can replay the dead letter with `OutboxMaintenanceService`, after which
+  the handler can complete and record SUCCESS.
+
+**Scope:** PostgreSQL and the relay/tracker are real, but Redis token storage,
+BullMQ enqueue and SMTP are replaced by controlled test doubles. The kill is
+real; the 30-second lease wait is accelerated by updating its expiry. This is
+not an end-to-end proof of external email delivery.
+
+### Remaining staging release drill
+
+Run with a dedicated staging database, real Redis/BullMQ, and a safe/test SMTP
+transport. Register a disposable account; record outbox event ID and the
+verification job ID. Kill the relay **before** its handler completes, restart,
+and check that lease expiry permits replay. Disconnect Redis, reconnect, then
+confirm retry/backoff and that only the intended BullMQ job exists. Exercise
+SMTP retries until dead-letter handling, confirm operator replay works, and
+measure link usability relative to the 15-minute token TTL and total queue
+delay. Capture timelines, duplicate-delivery observations and recovery logs;
+do not label this test complete using mocks alone.
 
 ## Reproducible evidence / release gate
 

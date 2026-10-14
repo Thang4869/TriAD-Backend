@@ -12,7 +12,7 @@
 | **Clean Architecture** | **9.3** | Modular monolith, ports/adapters, modular composition root, dependency-cruiser CI gate. |
 | **Clean Code / Maintainability** | **8.7** | Error taxonomy, structured boundaries tốt; naming, cast, TypeScript/ESLint tooling và API drift vẫn cần cleanup. |
 | **Testing / CI** | **9.4** | Unit/integration/contract, architecture, build, production image runtime smoke, full FE↔BE E2E đều xanh ở PR #164; chưa có mutation/load gate. |
-| **Reliability / concurrency** | **9.0** | Serializable checkout, idempotency, outbox retry/lease/tracker, order projection; A1 đã chuyển sang outbox nhưng chưa có kill-process/recovery drill đầy đủ. |
+| **Reliability / concurrency** | **9.0** | Serializable checkout, idempotency, outbox retry/lease/tracker, order projection; A1 đã chuyển sang outbox nhưng đã có automated SIGKILL/DB lease recovery (PR #169); vẫn thiếu live Redis/SMTP drill. |
 | **Security** | **7.8** | JWT/CSRF/rate limit/OAuth/upload; **0 critical** sau PR #166, vẫn **12 high** production và chưa có staging proxy/Redis evidence. |
 | **Production readiness** | **7.8** | Docker multi-stage + production image smoke PASS; thiếu deployed smoke, backup/restore RTO/RPO, SLO và dependency cleanup. |
 | **Observability / Ops** | **8.5** | OTEL, Prometheus, Winston, alert/runbook foundation; còn dashboard SLO, log tracing correlation và admin audit trail. |

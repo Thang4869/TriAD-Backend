@@ -62,7 +62,14 @@ existing semver ranges**. No manual lockfile integrity edits were made.
 | `sharp` | 0.35.3 | **0.35.5** |
 
 The temporary workflow used solely to regenerate this lockfile has been
-removed from the branch. This batch **requires a fresh production npm audit**
+removed from the branch. The refreshed GitHub Actions production npm audit (15/10/2026)
+reports **0 critical / 10 high / 49 moderate**. The full dependency graph
+reports **0 critical / 27 high / 53 moderate**. Compared to the previously
+merged baseline, the compatible patch batch removed **2 high findings** in
+production and full graphs. `nodemailer` is **still** a direct high finding,
+while `compression` and `sharp` are no longer listed as direct high findings.
+
+This batch **requires full unit/integration, build and E2E validation**
 and full CI before any claim about high-vulnerability reduction or release
 readiness. `cloudinary` and OpenTelemetry still require separate compatibility
 decisions; no blind major-version upgrade is attempted.

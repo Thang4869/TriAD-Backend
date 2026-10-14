@@ -61,7 +61,15 @@ existing semver ranges**. No manual lockfile integrity edits were made.
 | `nodemailer` | 9.0.5 | **9.1.1** |
 | `sharp` | 0.35.3 | **0.35.5** |
 
-The temporary workflow used solely to regenerate this lockfile has been
+A separate **major-version** follow-up stage upgraded
+`nodemailer` from 9.1.1 to `10.0.16`, using an npm-generated manifest
+and lockfile. Nodemailer 10 requires Node.js 20+; production/CI use Node 22.
+This step must pass typecheck and SMTP composition smoke tests, and the
+production audit must be re-run to verify whether the reported high advisory
+is resolved. `@types/nodemailer` remains in dev dependencies pending a
+type compatibility review.
+
+Temporary workflows used solely to regenerate each npm lockfile have been
 removed from the branch. The refreshed GitHub Actions production npm audit (15/10/2026)
 reports **0 critical / 10 high / 49 moderate**. The full dependency graph
 reports **0 critical / 27 high / 53 moderate**. Compared to the previously

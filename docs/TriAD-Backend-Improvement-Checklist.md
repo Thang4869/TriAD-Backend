@@ -1,6 +1,6 @@
 # TriAD Backend — Improvement Checklist
 
-**Cập nhật:** 14/10/2026 · **Nguồn:** `main` sau [PR #164](https://github.com/Thang4869/TriAD-Backend/pull/164) · **Mục đích:** chỉ giữ công việc còn cần làm, các quyết định và tiêu chí nghiệm thu.
+**Cập nhật:** 14/10/2026 · **Nguồn:** `main` sau [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166) · **Mục đích:** chỉ giữ công việc còn cần làm, các quyết định và tiêu chí nghiệm thu.
 
 > `PASS CI` là bằng chứng về code/test, **không** đồng nghĩa đã xác minh hoạt động ở production. Điểm đánh giá và rủi ro nằm trong [Audit Checklist](TriAD-Backend-audit-checklist-updated.md).
 
@@ -11,14 +11,14 @@
 - **Security code:** JWT access/refresh/pre-auth B2/B3, CSRF baseline, OAuth state, B7 layered rate limiting + Redis fail-closed — [PR #162](https://github.com/Thang4869/TriAD-Backend/pull/162). B7 **chưa** có staging proxy/outage proof.
 - **Reliability:** auth user/cart/`UserRegistered` cùng transaction; initial verification enqueue đã chuyển qua outbox A1, replay/idempotency tests CI PASS — [PR #164](https://github.com/Thang4869/TriAD-Backend/pull/164). Chưa chứng minh SMTP exactly-once (không phải cam kết của hệ thống).
 - **Quality gates:** unit/integration/contract/architecture/build và FE↔BE E2E trong CI; image runtime smoke đã PASS — [PR #160](https://github.com/Thang4869/TriAD-Backend/pull/160), [#164](https://github.com/Thang4869/TriAD-Backend/pull/164).
-- **B10 groundwork:** `npm audit` tách production/full graph, báo cáo và test multipart/upload thật đã PASS — [PR #163](https://github.com/Thang4869/TriAD-Backend/pull/163). **Dependency vulnerable chưa được nâng cấp.**
+- **B10 remediation batch 1:** npm-generated lockfile đã vá `proxy-addr`, nâng Multer/bcrypt và bật CI gate chặn production critical; tất cả CI PASS [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166). **Production còn 12 high chưa triage hết**.
 
 ## Backlog ưu tiên (chỉ các gap có tác động)
 
 | Ưu tiên | Mã | Việc cần làm / điều kiện đóng | Trạng thái |
 | --- | --- | --- | --- |
-| **P0** | **B10** | Đã nâng và kiểm thử code: `proxy-addr@2.0.8`, `multer@2.4.0`/`@types/multer@2.3.0`, `bcrypt@6.0.0`/`@types/bcrypt@6.0.0`; npm lockfile generated bởi CI. Audit mới: **production 0 critical / 12 high / 49 moderate**; full graph 0/29/53. Lint/typecheck, unit/integration PASS; Docker smoke/E2E và phân loại high còn chờ xác minh trước merge. | **PARTIAL — 0 critical, 12 high** |
-| **P0** | **A1 / T6** | Kiểm thử kill/restart relay, Redis/BullMQ outage, dead-letter replay cho initial verification email; xác nhận job idempotency, TTL, trễ giao hàng và giới hạn resend. Lưu trace/log từ môi trường có DB/Redis thật. | **PARTIAL — code CI PASS** |
+| **P0** | **B10** | [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166) đã merge, CI PASS: **0 critical**, còn **12 high/49 moderate** production. B10 tiếp tục qua các đợt remediation/triage high (OpenTelemetry/Cloudinary/Compression/Nodemailer/Sharp), giữ audit critical gate. | **PARTIAL — 12 high còn mở** |
+| **P0** | **A1 / T6** | Đã sửa mất verification token nếu DB update lỗi; thêm integration PostgreSQL với outbox relay, persisted handler tracker, lease từ worker chết và Redis/BullMQ failure/recovery. **Chờ CI trên nhánh ngày**; vẫn cần kill-process drill thực, SMTP/BullMQ dead-letter recovery + TTL evidence. | **PARTIAL — CI pending / live drill OPEN** |
 | **P1** | **T2 / T6 / A8** | Lost-response checkout retry, concurrent price change và relay/process crash; đo projection lag thực tế, công bố contract consistency cho order list/detail. | PARTIAL |
 | **P1** | **I9 / I6** | Backup → restore PostgreSQL, replay outbox, rebuild projection; ghi RTO/RPO; readiness-draining + SIGTERM drill. | OPEN |
 | **P1** | **B7** | Staging: `TRUST_PROXY`, spoofed `X-Forwarded-For`, shared NAT, Redis disconnect/reconnect, HTTP 429/503. Đóng chỉ khi có log/evidence cấu hình thật. | PENDING deployment |
@@ -44,8 +44,8 @@
 
 ## Thứ tự triển khai tiếp theo (mỗi stage một commit)
 
-1. **B10 / Security:** kiểm thử CI **nhánh đã nâng** (proxy trust, multipart, bcrypt real-native, Docker/E2E), so sánh audit production trước/sau và phân loại direct high còn lại trước merge; không dùng `npm audit fix --force`.
-2. **A1 / Reliability:** test end-to-end replay cho registration email, kill/restart relay, Redis outage, dead-letter và verification-link TTL.
+1. **A1 / T6:** kiểm chứng CI cho integration recovery và verify-email DB error; chạy kill-process/SMTP/Redis drill thật, ghi bằng chứng lease/retry/dead-letter + TTL.
+2. **B10:** xử lý 12 high production vulnerabilities theo gói dependency có rủi ro thấp → cao, cập nhật lockfile và audit evidence; không dùng `npm audit fix --force`.
 3. **T2/T6/I9:** checkout retry + concurrency; backup/restore/rebuild projection; lưu logs/RTO/RPO/lag evidence.
 4. **B7/H2/H7/T3:** staging security, FE migration và schema/API boundary cleanup.
 5. **J3/T7/T4/K3:** admin audit trail, load/mutation artifacts và portfolio evidence.

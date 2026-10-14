@@ -25,7 +25,14 @@ jobs:
           # npm install of individually supplied packages starts from the
           # previous 0.5x tree and may fail ERESOLVE during transition.
           npm pkg set             "dependencies.@opentelemetry/api=1.9.1" "dependencies.@opentelemetry/core=2.12.0"             "dependencies.@opentelemetry/auto-instrumentations-node=0.81.0"             "dependencies.@opentelemetry/exporter-trace-otlp-http=0.223.0"             "dependencies.@opentelemetry/instrumentation-express=0.71.0"             "dependencies.@opentelemetry/resources=2.12.0"             "dependencies.@opentelemetry/sdk-node=0.223.0"             "dependencies.@opentelemetry/semantic-conventions=1.43.0"
-          npm install --package-lock-only --ignore-scripts --no-audit
+          # Print the full npm resolution path, rather than hiding the root
+          # dependency that actually conflicts with the new OTel generation.
+          npm install --package-lock-only --ignore-scripts --no-audit || {
+            for report in "$HOME"/.npm/_logs/*-eresolve-report.txt; do
+              if test -f "$report"; then cat "$report"; fi
+            done
+            exit 1
+          }
           node - <<'NODE'
           const pkg = require("./package.json");
           const lock = require("./package-lock.json");

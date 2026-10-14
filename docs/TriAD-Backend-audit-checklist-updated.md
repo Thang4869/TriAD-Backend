@@ -1,6 +1,6 @@
 # TriAD Backend — Audit & đánh giá hiện trạng
 
-**Cập nhật:** 14/10/2026 · **Nguồn kiểm chứng:** `main` sau [PR #164](https://github.com/Thang4869/TriAD-Backend/pull/164), [CI của repository](https://github.com/Thang4869/TriAD-Backend/actions) và [Dependency Security Audit](DEPENDENCY_SECURITY_AUDIT.md). **Phạm vi điểm:** Backend; frontend chỉ được đánh giá ở mức tích hợp FE↔BE E2E.
+**Cập nhật:** 15/10/2026 · **Nguồn kiểm chứng:** `main` sau [PR #171](https://github.com/Thang4869/TriAD-Backend/pull/171), [CI của repository](https://github.com/Thang4869/TriAD-Backend/actions) và [Dependency Security Audit](DEPENDENCY_SECURITY_AUDIT.md). **Phạm vi điểm:** Backend; frontend chỉ được đánh giá ở mức tích hợp FE↔BE E2E.
 
 > Các điểm dưới đây là **ước lượng chuyên môn**, không phải benchmark độc lập, chứng nhận Tech Lead hay cam kết production SLA. Không đưa điểm AI vào CV như một KPI.
 
@@ -13,7 +13,7 @@
 | **Clean Code / Maintainability** | **8.7** | Error taxonomy, structured boundaries tốt; naming, cast, TypeScript/ESLint tooling và API drift vẫn cần cleanup. |
 | **Testing / CI** | **9.4** | Unit/integration/contract, architecture, build, production image runtime smoke, full FE↔BE E2E đều xanh ở PR #164; chưa có mutation/load gate. |
 | **Reliability / concurrency** | **9.0** | Serializable checkout, idempotency, outbox retry/lease/tracker, order projection; A1 đã chuyển sang outbox nhưng đã có automated SIGKILL/DB lease recovery (PR #169); vẫn thiếu live Redis/SMTP drill. |
-| **Security** | **7.8** | JWT/CSRF/rate limit/OAuth/upload; **0 critical** sau PR #166, vẫn **12 high** production và chưa có staging proxy/Redis evidence. |
+| **Security** | **7.8** | JWT/CSRF/rate limit/OAuth/upload; sau [#170](https://github.com/Thang4869/TriAD-Backend/pull/170), audit production **0 critical / 9 high**. Cloudinary v2 đang kiểm thử [#172](https://github.com/Thang4869/TriAD-Backend/pull/172); staging proxy/Redis/SMTP evidence chưa đủ. |
 | **Production readiness** | **7.8** | Docker multi-stage + production image smoke PASS; thiếu deployed smoke, backup/restore RTO/RPO, SLO và dependency cleanup. |
 | **Observability / Ops** | **8.5** | OTEL, Prometheus, Winston, alert/runbook foundation; còn dashboard SLO, log tracing correlation và admin audit trail. |
 | **Tổng thể Backend (tham khảo)** | **~8.7** | Trung bình 8 mảng làm tròn; điểm tham khảo, chưa chứng nhận production readiness. |
@@ -54,7 +54,7 @@ Dù critical về **0**, B10 còn **PARTIAL** vì 12 high production chưa triag
 | Moderate | 49 | 53 |
 | **Tổng** | **65** | **86** |
 
-Rủi ro ưu tiên: `proxy-addr` IP spoofing/Express `req.ip` ([GHSA-jqcg-44mw-7w3h](https://github.com/jshttp/proxy-addr/security/advisories/GHSA-jqcg-44mw-7w3h)), `tar` qua dependency của `bcrypt`, và legacy `multer` multipart DoS ([upstream advisories](https://github.com/expressjs/multer/security/advisories)). Nhánh ứng dụng vẫn khai báo `multer` 1.x và `bcrypt` 5.x. Không tự đánh đồng số advisories với số đường khai thác có thể chạm tới trong runtime.
+Rủi ro ưu tiên: `proxy-addr` IP spoofing/Express `req.ip` ([GHSA-jqcg-44mw-7w3h](https://github.com/jshttp/proxy-addr/security/advisories/GHSA-jqcg-44mw-7w3h)), `tar` qua dependency của `bcrypt`, và legacy `multer` multipart DoS ([upstream advisories](https://github.com/expressjs/multer/security/advisories)). Các dependency Multer/bcrypt legacy đã được nâng trong [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166). Không tự đánh đồng số advisories với số đường khai thác có thể chạm tới trong runtime.
 
 ## 3. Những gate còn thiếu — theo thứ tự quan trọng
 

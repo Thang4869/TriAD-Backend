@@ -114,6 +114,45 @@ jobs:
           path: coverage/
           retention-days: 7
 
+  backup-restore-drill:
+    name: PostgreSQL Backup Restore Drill (I9)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: triad_recovery_source
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test -d triad_recovery_source"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      RECOVERY_DRILL_ENABLED: "true"
+      PGPASSWORD: test
+      DATABASE_URL: postgresql://test:test@127.0.0.1:5432/triad_recovery_source
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "${{ env.NODE_VERSION }}"
+          cache: npm
+      - run: npm ci
+      - run: npx prisma migrate deploy
+      - run: npx prisma generate
+      - name: Validate recovery-drill destructive-operation guards
+        run: node --test tests/scripts/recovery-drill.test.cjs
+      - name: Backup, restore and rebuild both projections
+        shell: bash
+        run: bash scripts/recovery-drill.sh
+
   build:
     name: Build Application
     runs-on: ubuntu-latest

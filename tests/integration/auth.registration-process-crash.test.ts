@@ -44,10 +44,15 @@ describe("A1/T6 real process crash (PostgreSQL)", () => {
     const row = await prisma.outboxEvent.findFirstOrThrow({
       where: { aggregateId: user.id, eventName: "UserRegistered" },
     });
+    // Vitest may initialize Prisma before a worker-scoped DATABASE_URL is set.
+    // Use the actual schema on the parent's Prisma connection for the child.
+    const schemas = await prisma.$queryRaw<Array<{ schema: string }>>`SELECT current_schema() AS schema`;
+    const databaseUrl = new URL(process.env.DATABASE_URL!);
+    databaseUrl.searchParams.set("schema", schemas[0].schema);
     const child = spawn(process.execPath, [
       "-r", "ts-node/register", "-r", "tsconfig-paths/register",
       resolve("scripts/test-support/registration-relay-crash-child.ts"), row.id,
-    ], { cwd: process.cwd(), env: { ...process.env, TS_NODE_BASEURL: "./" } });
+    ], { cwd: process.cwd(), env: { ...process.env, DATABASE_URL: databaseUrl.toString(), TS_NODE_BASEURL: "./" } });
     try {
       let output = "";
       const started = new Promise<void>((accept, reject) => {

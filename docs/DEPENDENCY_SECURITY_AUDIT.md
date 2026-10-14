@@ -1,8 +1,8 @@
 # TriAD Backend — Dependency Security (B10)
 
-**Reviewed:** 2026-10-15 · **Reference:** merged [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166) and [PR #170](https://github.com/Thang4869/TriAD-Backend/pull/170), new [Draft PR #172](https://github.com/Thang4869/TriAD-Backend/pull/172).
+**Reviewed:** 2026-10-15 · **Reference:** merged PRs [#166](https://github.com/Thang4869/TriAD-Backend/pull/166), [#170](https://github.com/Thang4869/TriAD-Backend/pull/170), [#172](https://github.com/Thang4869/TriAD-Backend/pull/172), [#173](https://github.com/Thang4869/TriAD-Backend/pull/173).
 
-**Status:** **PARTIAL**. CI reports zero production critical vulnerabilities; high advisories remain. A passing `npm ci` or audit critical gate does not mean all dependencies are safe.
+**Status:** **Production dependency audit clean (main)**: 0 critical/high/moderate; **full graph still 16 high / 5 moderate**. Staging risk review remains OPEN. A passing `npm ci` or audit critical gate does not mean all dependencies are safe.
 
 ## Verified production audit snapshots
 
@@ -12,6 +12,7 @@
 | B10 batch 1, [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166) | **0** | 12 | 49 | 29 |
 | B10 batch 2, [PR #170](https://github.com/Thang4869/TriAD-Backend/pull/170) | **0** | **9** | 49 | **26** |
 | Cloudinary v2, [PR #172](https://github.com/Thang4869/TriAD-Backend/pull/172) | **0** | **8** | 49 | **25** |
+| **main after OpenTelemetry [#173](https://github.com/Thang4869/TriAD-Backend/pull/173)** | **0** | **0** | **0** | **16** |
 
 These are npm advisories in the checked-in lockfile, not independent penetration-test results, and not counts of exploitable routes. Review the production JSON report for actual paths and affected versions.
 
@@ -21,17 +22,11 @@ These are npm advisories in the checked-in lockfile, not independent penetration
 - `compression@1.8.2`, `sharp@0.35.5`, `nodemailer@10.0.16`: targeted batch and native MIME test ([#170](https://github.com/Thang4869/TriAD-Backend/pull/170)).
 - `scripts/assert-production-audit.cjs` blocks any critical advisory in the production audit; remaining high/moderate findings must be triaged and cannot be called PASS-security.
 
-## In review: Cloudinary SDK migration
+## Migrated SDKs — follow-up gates
 
-[Draft PR #172](https://github.com/Thang4869/TriAD-Backend/pull/172) updates `cloudinary` **1.41.3 → 2.11.0** via an npm-generated `package.json` and `package-lock.json`. Versions below 2.7.0 are affected by [GHSA-g4mf-96x5-5m2c](https://github.com/advisories/GHSA-g4mf-96x5-5m2c). `CloudinaryImageStorage` keeps its `IImageStorage` port while rejecting incomplete upload callback responses.
-
-**CI evidence:** clean `npm ci`, typecheck, lint, unit/integration, upload_stream regressions, build, image runtime smoke, FE↔BE E2E and production npm audit **PASS** on PR #172; latest observed high delta **9 → 8**. Live Cloudinary credentials/network streaming must be checked separately in staging. The one-time lockfile-generation workflow is **not included in the final PR tree**.
-
-## Remaining B10: coordinated OpenTelemetry migration
-
-`@opentelemetry/auto-instrumentations-node`, `@opentelemetry/sdk-node` and related SDK/exporter/resources/instrumentation packages must be assessed **as a compatible set**. Their old 0.x / 1.x versions predate API/SDK 2.x; a blind single-package upgrade can break tracing initialization. Preserve disabled/enabled tracing startup tests, OTLP exporter setup, spans, graceful `shutdownTracing()`, and Docker smoke.
-
-Security reference: [CVE-2026-44902](https://advisories.gitlab.com/npm/%40opentelemetry/auto-instrumentations-node/CVE-2026-44902/) (Prometheus-exporter crash; affected before 0.75.0). Actual exploitability depends on exporter configuration; the current project exports OTLP HTTP and uses application Prometheus metrics separately, but npm audit must still be evaluated.
+- **Cloudinary 2.11.0** ([#172](https://github.com/Thang4869/TriAD-Backend/pull/172)): `IImageStorage` preserved, regression tests and Docker/FE↔BE CI passed. Live image upload with real staging credentials still needs proof.
+- **OpenTelemetry SDK 2.x** ([#173](https://github.com/Thang4869/TriAD-Backend/pull/173)): coordinated SDK/exporter/resources/auto-instrumentations upgrade, `resourceFromAttributes()`, tracing enabled/disabled startup test. Need live OTLP collector span proof and review of transitive lockfile changes.
+- **Full dependency graph:** 16 high / 5 moderate in development/all-dependency audit. Do not call them remediated. Triage package path/reachability, CI/build execution exposure and mitigations before risk acceptance. Do not use `npm audit fix --force`.
 
 ## Reproducible evidence
 

@@ -1,88 +1,43 @@
-# TriAD Backend — Audit & đánh giá hiện trạng
+# TriAD Backend — Audit hiện trạng
 
-**Cập nhật:** 15/10/2026 · **Nguồn kiểm chứng:** `main` sau [PR #171](https://github.com/Thang4869/TriAD-Backend/pull/171), [CI của repository](https://github.com/Thang4869/TriAD-Backend/actions) và [Dependency Security Audit](DEPENDENCY_SECURITY_AUDIT.md). **Phạm vi điểm:** Backend; frontend chỉ được đánh giá ở mức tích hợp FE↔BE E2E.
+**Đánh giá:** 15/10/2026 · **Code đối chiếu:** [main](https://github.com/Thang4869/TriAD-Backend), sau [PR #173](https://github.com/Thang4869/TriAD-Backend/pull/173).
+**Độc lập:** điểm ước lượng kỹ thuật để theo dõi, **không** phải chứng nhận Tech Lead, SLA, bảo mật hoặc KPI được kiểm toán.
 
-> Các điểm dưới đây là **ước lượng chuyên môn**, không phải benchmark độc lập, chứng nhận Tech Lead hay cam kết production SLA. Không đưa điểm AI vào CV như một KPI.
+## Điểm tham khảo
 
-## 1. Điểm hiện tại — đánh giá lại theo bằng chứng mới
-
-| Hạng mục | Điểm / 10 | Bằng chứng và hạn chế quan trọng |
+| Mảng | /10 | Bằng chứng / tồn đọng |
 | --- | ---: | --- |
-| **OOP / SOLID / DDD** | **9.2** | Aggregate/VO, DI, typed transitions, UoW, domain events; payment/Saga chưa có runtime provider thật. |
-| **Clean Architecture** | **9.3** | Modular monolith, ports/adapters, modular composition root, dependency-cruiser CI gate. |
-| **Clean Code / Maintainability** | **8.7** | Error taxonomy, structured boundaries tốt; naming, cast, TypeScript/ESLint tooling và API drift vẫn cần cleanup. |
-| **Testing / CI** | **9.4** | Unit/integration/contract, architecture, build, production image runtime smoke, full FE↔BE E2E đều xanh ở PR #164; chưa có mutation/load gate. |
-| **Reliability / concurrency** | **9.0** | Serializable checkout, idempotency, outbox retry/lease/tracker, order projection; A1 đã chuyển sang outbox nhưng đã có automated SIGKILL/DB lease recovery (PR #169); vẫn thiếu live Redis/SMTP drill. |
-| **Security** | **7.8** | JWT/CSRF/rate limit/OAuth/upload; sau [#170](https://github.com/Thang4869/TriAD-Backend/pull/170), audit production **0 critical / 9 high**. Cloudinary v2 đang kiểm thử [#172](https://github.com/Thang4869/TriAD-Backend/pull/172); staging proxy/Redis/SMTP evidence chưa đủ. |
-| **Production readiness** | **7.8** | Docker multi-stage + production image smoke PASS; thiếu deployed smoke, backup/restore RTO/RPO, SLO và dependency cleanup. |
-| **Observability / Ops** | **8.5** | OTEL, Prometheus, Winston, alert/runbook foundation; còn dashboard SLO, log tracing correlation và admin audit trail. |
-| **Tổng thể Backend (tham khảo)** | **~8.7** | Trung bình 8 mảng làm tròn; điểm tham khảo, chưa chứng nhận production readiness. |
+| OOP, SOLID, DDD | 9.2 | Aggregates, typed transitions, UoW, Domain Events; payment provider/Saga thật chưa có |
+| Clean Architecture | 9.3 | Modular monolith, DI/ports/adapters, dependency-cruiser CI |
+| Clean Code | 8.7 | Error taxonomy và code boundaries; type assertions, API drift và lint modernization còn tồn đọng |
+| Testing & CI | 9.4 | Unit/integration, contract, build, Docker runtime, FE↔BE E2E PASS; mutation/load baseline chưa đủ |
+| Reliability/concurrency | 9.0 | Serializable checkout, idempotency, Outbox SIGKILL/dead-letter tests; staging SMTP và load race vẫn mở |
+| Security | 8.5 | Production npm audit **0 critical / 0 high / 0 moderate** trên main; full graph 16 high/5 moderate; proxy/SMTP/Cloudinary staging chưa chứng minh |
+| Production readiness | 7.8 | Docker smoke + shutdown; deployed backup restore/RTO/RPO, real staging drill và rollback chưa chứng minh |
+| Observability & Ops | 8.5 | OpenTelemetry SDK 2.x, Prometheus/alert runbook; end-to-end collector and SLO evidence chưa đủ |
+| **Tổng thể tham khảo** | **~8.8** | Trung bình các mảng trên, làm tròn 1 chữ số |
 
-**So với bản đánh giá lịch sử (~9.2/10):** việc chấm nghiêm hơn là **đổi chuẩn đánh giá nghiêm hơn về security và evidence production**, không có nghĩa code OOP/architecture bị thoái hóa. Sau B7/A1, các cơ chế protection/recovery tốt hơn, nhưng một `npm audit` report-only **không** sửa lỗ hổng đã phát hiện. Điểm phải tăng theo evidence mới, không theo số checkbox đóng.
+**Định vị:** portfolio backend mức nâng cao, có nhiều bằng chứng thiết kế và kỹ thuật vận hành. **Không được kết luận production-ready hoàn toàn** vì còn các validation gắn môi trường và bài đo thời gian phục hồi chưa được thực hiện.
 
-**Định vị:** đủ mạnh làm **portfolio backend nâng cao** với bằng chứng về thiết kế và CI. Có nhiều thực hành gắn với trách nhiệm Tech Lead (trade-off, architecture boundaries, reliability); **chưa thể chứng nhận “Tech Lead 10/10”** hoặc tự gọi hệ thống production-ready tuyệt đối khi thiếu deployed/recovery evidence.
+## Evidence quan trọng (đã merge)
 
-**Đã merge [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166):** trên nhánh `commit-14102026`, package manifests
-và **npm-generated** lockfile đã nâng `proxy-addr@2.0.8`,
-`multer@2.4.0`/`@types/multer@2.3.0`, `bcrypt@6.0.0`/
-`@types/bcrypt@6.0.0`. Đã xác nhận **Lint, Unit/Integration, Build, Docker runtime smoke, FE↔BE E2E,
-critical audit gate PASS**. Security vẫn phải thận trọng vì 12 high production
-chưa được triage hoặc fix; deployment evidence và risk acceptance còn thiếu.
-
-**CI audit của nhánh nâng dependency (14/10/2026):** production
-**0 critical / 12 high / 49 moderate**; toàn bộ
-**0 critical / 29 high / 53 moderate**. Unit & Integration, Lint & Type Check
-và image runtime smoke / FE↔BE E2E đã PASS tại PR #166.
-Dù critical về **0**, B10 còn **PARTIAL** vì 12 high production chưa triage.
-
-## 2. Những gì đã được xác minh
-
-| Evidence | Trạng thái | Tham chiếu |
+| Mục | Kết quả | PR |
 | --- | --- | --- |
-| Orders G5/G6, read-after-write fallback, OpenAPI aliases | **PASS CI, merged** | [#158](https://github.com/Thang4869/TriAD-Backend/pull/158), [#161](https://github.com/Thang4869/TriAD-Backend/pull/161) |
-| B7 rate-limit identity/IP, Redis fail-closed | **PASS CI, merged**; thiếu staging proof | [#162](https://github.com/Thang4869/TriAD-Backend/pull/162) |
-| B10 audit report & multipart regression | **PASS CI, merged**; vulnerabilities còn tồn tại | [#163](https://github.com/Thang4869/TriAD-Backend/pull/163) |
-| A1 registration verification qua transactional outbox | **PASS CI, merged**; relay kill/replay/SMTP drill chưa đủ | [#164](https://github.com/Thang4869/TriAD-Backend/pull/164) |
-| Image runtime smoke và FE↔BE checkout journey | **PASS CI** | [#160](https://github.com/Thang4869/TriAD-Backend/pull/160), [#164](https://github.com/Thang4869/TriAD-Backend/pull/164) |
+| Checkout Serializable/stock/order transitions | PASS CI | [#158](https://github.com/Thang4869/TriAD-Backend/pull/158), [#161](https://github.com/Thang4869/TriAD-Backend/pull/161) |
+| Rate limit Redis fail-closed | PASS CI, staging proof mở | [#162](https://github.com/Thang4869/TriAD-Backend/pull/162) |
+| Durable UserRegistered + SIGKILL relay/dead-letter replay | PASS CI, real SMTP drill mở | [#164](https://github.com/Thang4869/TriAD-Backend/pull/164), [#169](https://github.com/Thang4869/TriAD-Backend/pull/169) |
+| Security batch: proxy-addr/Multer/bcrypt/Nodemailer/Sharp | PASS CI | [#166](https://github.com/Thang4869/TriAD-Backend/pull/166), [#170](https://github.com/Thang4869/TriAD-Backend/pull/170) |
+| Cloudinary SDK 2.x + OpenTelemetry SDK 2.x | PASS code CI, staging API/exporter smoke còn mở | [#172](https://github.com/Thang4869/TriAD-Backend/pull/172), [#173](https://github.com/Thang4869/TriAD-Backend/pull/173) |
+| **npm audit main lockfile** | **Production 0 critical, 0 high, 0 moderate**; full graph 16 high/5 moderate | [Main CI](https://github.com/Thang4869/TriAD-Backend/actions) |
 
-**B10 — audit baseline từ CI 13/10/2026** (không thay cho lần quét mới sau khi upgrade):
+## Đang thực hiện
 
-| Mức độ | Production | Full lockfile |
-| --- | ---: | ---: |
-| Critical | 2 | 2 |
-| High | 14 | 31 |
-| Moderate | 49 | 53 |
-| **Tổng** | **65** | **86** |
+[Draft PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) trên **một nhánh ngày** \`commit-15102026\`:
+- **T2:** test PostgreSQL lost-response checkout retry và product price changed before stock lock.
+- **I9:** CI riêng pg_dump, pg_restore vào database khác, verify order/idempotency/outbox snapshot boundary, rebuild product/order-history projections; **không** được diễn giải thời gian CI thành production RTO/RPO.
 
-Rủi ro ưu tiên: `proxy-addr` IP spoofing/Express `req.ip` ([GHSA-jqcg-44mw-7w3h](https://github.com/jshttp/proxy-addr/security/advisories/GHSA-jqcg-44mw-7w3h)), `tar` qua dependency của `bcrypt`, và legacy `multer` multipart DoS ([upstream advisories](https://github.com/expressjs/multer/security/advisories)). Các dependency Multer/bcrypt legacy đã được nâng trong [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166). Không tự đánh đồng số advisories với số đường khai thác có thể chạm tới trong runtime.
+**Thứ tự release gates còn mở:** staging Redis/BullMQ/SMTP TTL và dead letter (A1/T6), production-like PostgreSQL restore + RTO/RPO (I9), proxy/CSRF (B7/B6), FE canonical /api/orders contract (H2/T3), concurrency/projection lag metrics (T2), mutation/k6/SLO (T4/T7/J2), admin audit (J3) và license/security documentation (K3).
 
-## 3. Những gate còn thiếu — theo thứ tự quan trọng
+**Quyết định cần duyệt:** dependency high risk acceptance, email TTL/resend, proxy topology/CSRF, API deprecation date, payment/Saga provider scope. Tiêu chí đóng từng mục và các liên kết nằm trong [Improvement Checklist](TriAD-Backend-Improvement-Checklist.md), [Dependency Security](DEPENDENCY_SECURITY_AUDIT.md), [Event Durability](EVENT_DURABILITY.md) và [Operations](OPERATIONS.md).
 
-| Gate | Mã | Cần thấy bằng chứng nào để đóng? |
-| --- | --- | --- |
-| **Security release gate** | **B10** | `package-lock.json` mới và npm audit production, targeted dependency upgrades, upload/auth regression, Docker smoke. Không có critical/high chưa triage hoặc chưa được chấp nhận có thời hạn. |
-| **Outbox crash/recovery** | **A1 / T6** | Relay crash/restart, Redis/BullMQ outage, retry/dead-letter + resend; không mất durable intent, không overclaim exactly-once SMTP. |
-| **Distributed checkout consistency** | **T2 / A8** | Lost-response retry, concurrent price update, projection lag p95/p99 và API eventual-consistency contract. |
-| **Operational recovery** | **I9 / I6** | PostgreSQL restore + outbox replay + rebuild read model; RTO/RPO đo được, SIGTERM/readiness drain. |
-| **Staging security** | **B7 / B6** | Proxy trust/IP spoof test, Redis fail-closed recovery, CSRF threat review, OAuth/refresh/logout smoke trên domain. |
-| **API / FE compatibility** | **H2 / T3 / H7** | FE dùng canonical order endpoints, request/response schemas kiểm thử, không còn unsafe cast quan trọng. |
-| **Production observability** | **J1 / J2 / J3** | trace/span in logs, SLO dashboard/alerts, admin audit records. |
-| **Portfolio proof** | **T4 / T7 / K3–K5** | Mutation report, k6 results, license/SECURITY/CONTRIBUTING, demo hoặc protected OpenAPI. |
-
-**Ngoài blocker:** payment/refund provider, Saga orchestration F1, thêm DI/ports/Strategy (D3/D5/H10/G10) chỉ khi use case thực sự xuất hiện. Không tạo pattern cho đẹp checklist.
-
-## 4. Kết luận và mục tiêu mốc tiếp theo
-
-**Ưu tiên triển khai ngay:** A1/T6 recovery evidence cho verification email; tiếp tục B10 (12 high production), sau đó I9 backup/restore và T2 concurrent checkout. Tối ưu đánh giá lúc này bằng **giảm rủi ro runtime**, không thêm lớp OOP tượng trưng.
-
-**Mục tiêu thực tế để cải thiện điểm:** ưu tiên kéo Security lên mức có đủ evidence, thiết lập quality gate dependency phù hợp và chứng minh khôi phục sau sự cố; rồi mới đầu tư perf/mutation/portfolio. Không hứa đạt đúng 10/10 chỉ nhờ hoàn thành danh sách.
-
-**Review bắt buộc trước merge/release:** B10 dependency/risk acceptance; A1 TTL/SMTP + dead-letter policy; B6 CSRF, B7 trusted proxy; H2 backward-compatibility; production RTO/RPO. Quyết định/owner/acceptance chi tiết trong [Improvement Checklist](TriAD-Backend-Improvement-Checklist.md#các-quyết-định-cần-duyệt).
-
-## 5. Liên kết kiểm chứng và tham khảo
-
-- Source/CI: [TriAD Backend](https://github.com/Thang4869/TriAD-Backend) · [TriAD Frontend](https://github.com/Thang4869/TriAD-12) · [Actions](https://github.com/Thang4869/TriAD-Backend/actions) · [PRs](https://github.com/Thang4869/TriAD-Backend/pulls) · [Issues](https://github.com/Thang4869/TriAD-Backend/issues).
-- Source docs: [Architecture](../README.md) · [Operations](OPERATIONS.md) · [Event durability](EVENT_DURABILITY.md) · [Dependency audit](DEPENDENCY_SECURITY_AUDIT.md) · [Threat model](THREAT_MODEL.md).
-- External standard/advisories: [OWASP ASVS](https://github.com/OWASP/ASVS) · [proxy-addr security advisory](https://github.com/jshttp/proxy-addr/security/advisories/GHSA-jqcg-44mw-7w3h) · [Multer security advisories](https://github.com/expressjs/multer/security/advisories).
-
-> **Bản Audit ghi nhận điểm và bằng chứng.** Chi tiết next actions, status và các quyết định phê duyệt nằm ở **Improvement Checklist**; tránh duy trì hai backlog trùng nội dung.
+Không tăng điểm chỉ vì bổ sung checklist. Điểm chỉ thay đổi khi có code, CI và evidence production/staging tương xứng.

@@ -61,6 +61,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
       - run: npm ci
+      - name: Test automatic PR label classification
+        run: node --test tests/scripts/pr-labels.test.cjs
       - run: npm run architecture:check
       - run: npm run lint
       - run: npm run typecheck

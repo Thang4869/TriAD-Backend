@@ -1,0 +1,64 @@
+name: B10 OpenTelemetry SDK2 lockfile (temporary)
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  otel-npm-lock:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'commit-15102026-5' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Generate coordinated OpenTelemetry package graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --save-exact --package-lock-only --ignore-scripts --no-audit \
+            "@opentelemetry/api@1.9.1" \
+            "@opentelemetry/auto-instrumentations-node@0.81.0" \
+            "@opentelemetry/exporter-trace-otlp-http@0.223.0" \
+            "@opentelemetry/instrumentation-express@0.71.0" \
+            "@opentelemetry/resources@2.11.0" \
+            "@opentelemetry/sdk-node@0.223.0" \
+            "@opentelemetry/semantic-conventions@1.43.0"
+          node - <<'NODE'
+          const pkg = require("./package.json");
+          const lock = require("./package-lock.json");
+          const expected = {
+            "@opentelemetry/api": "1.9.1",
+            "@opentelemetry/auto-instrumentations-node": "0.81.0",
+            "@opentelemetry/exporter-trace-otlp-http": "0.223.0",
+            "@opentelemetry/instrumentation-express": "0.71.0",
+            "@opentelemetry/resources": "2.11.0",
+            "@opentelemetry/sdk-node": "0.223.0",
+            "@opentelemetry/semantic-conventions": "1.43.0",
+          };
+          for (const [name, version] of Object.entries(expected)) {
+            if (pkg.dependencies[name] !== version || lock.packages["node_modules/" + name]?.version !== version) {
+              throw new Error("OpenTelemetry package not pinned: " + name);
+            }
+          }
+          NODE
+          git diff --check
+          if test -n "$(git diff --name-only -- . ':!package.json' ':!package-lock.json')"; then
+            echo "Unexpected changes outside npm manifests"
+            exit 1
+          fi
+      - name: Commit npm-generated OpenTelemetry manifest and lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- package.json package-lock.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix(deps): align OpenTelemetry SDK 2.x and auto-instrumentations (B10)"
+          git push origin "HEAD:refs/heads/commit-15102026-5"

@@ -36,7 +36,10 @@ export class CloudinaryImageStorage implements IImageStorage {
       const stream = cloudinary.uploader.upload_stream(
         { folder, resource_type: "image" },
         (error, result) => {
-          if (error || !result) return reject(error);
+          if (error) return reject(error);
+          if (!result?.secure_url || !result.public_id) {
+            return reject(new Error("Cloudinary upload returned an invalid result"));
+          }
           resolve({ url: result.secure_url, publicId: result.public_id });
         },
       );

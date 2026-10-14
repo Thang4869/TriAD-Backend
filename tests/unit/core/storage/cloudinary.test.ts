@@ -56,4 +56,28 @@ describe("CloudinaryImageStorage", () => {
       "upload failed",
     );
   });
+  it("rejects when the SDK invokes callback without an upload result", async () => {
+    (cloudinary.uploader.upload_stream as any).mockImplementationOnce(
+      (_options: any, callback: any) => {
+        queueMicrotask(() => callback(undefined, undefined));
+        return { end: vi.fn(), on: vi.fn() };
+      },
+    );
+    await expect(storage.upload(Buffer.from("test"), "folder")).rejects.toThrow(
+      "Cloudinary upload returned an invalid result",
+    );
+  });
+
+  it("rejects SDK responses with missing public ID or secure URL", async () => {
+    (cloudinary.uploader.upload_stream as any).mockImplementationOnce(
+      (_options: any, callback: any) => {
+        queueMicrotask(() => callback(undefined, { public_id: "some-id" }));
+        return { end: vi.fn(), on: vi.fn() };
+      },
+    );
+    await expect(storage.upload(Buffer.from("test"), "folder")).rejects.toThrow(
+      "Cloudinary upload returned an invalid result",
+    );
+  });
+
 });

@@ -17,7 +17,7 @@
 
 | Ưu tiên | Mã | Việc cần làm / điều kiện đóng | Trạng thái |
 | --- | --- | --- | --- |
-| **P0** | **B10** | [PR #170](https://github.com/Thang4869/TriAD-Backend/pull/170) merged: **0 critical / 9 high / 49 moderate** production. [PR #172](https://github.com/Thang4869/TriAD-Backend/pull/172) nâng Cloudinary 2.11.0 (chờ CI/audit), kế tiếp OpenTelemetry đồng bộ. | **PARTIAL — 9 high on main; Cloudinary pending** |
+| **P0** | **B10** | [PR #170](https://github.com/Thang4869/TriAD-Backend/pull/170) merged: **0 critical / 9 high / 49 moderate** production. [PR #172](https://github.com/Thang4869/TriAD-Backend/pull/172) nâng Cloudinary 2.11.0 (CI PASS: 8 high, 0 critical), kế tiếp OpenTelemetry đồng bộ. | **PARTIAL — 9 high on main; PR #172 8 high CI PASS** |
 | **P0** | **A1 / T6** | [PR #167](https://github.com/Thang4869/TriAD-Backend/pull/167) đã merge; [PR #169](https://github.com/Thang4869/TriAD-Backend/pull/169) đã merge, bổ sung **SIGKILL relay thực + replay dead-letter thủ công** với PostgreSQL/tracker thật, full CI PASS. Còn staging drill Redis/BullMQ/SMTP thật, 15 phút TTL và dead-letter alerting trước khi CLOSED. | **PARTIAL — process kill test PASS; staging pending** |
 | **P1** | **T2 / T6 / A8** | Lost-response checkout retry, concurrent price change và relay/process crash; đo projection lag thực tế, công bố contract consistency cho order list/detail. | PARTIAL |
 | **P1** | **I9 / I6** | Backup → restore PostgreSQL, replay outbox, rebuild projection; ghi RTO/RPO; readiness-draining + SIGTERM drill. | OPEN |

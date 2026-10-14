@@ -11,7 +11,7 @@
 | Initial audit, [PR #163](https://github.com/Thang4869/TriAD-Backend/pull/163) | 2 | 14 | 49 | 31 |
 | B10 batch 1, [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166) | **0** | 12 | 49 | 29 |
 | B10 batch 2, [PR #170](https://github.com/Thang4869/TriAD-Backend/pull/170) | **0** | **9** | 49 | **26** |
-| Cloudinary v2, [PR #172](https://github.com/Thang4869/TriAD-Backend/pull/172) | **Pending fresh audit** | **Pending** | **Pending** | **Pending** |
+| Cloudinary v2, [PR #172](https://github.com/Thang4869/TriAD-Backend/pull/172) | **0** | **8** | 49 | **25** |
 
 These are npm advisories in the checked-in lockfile, not independent penetration-test results, and not counts of exploitable routes. Review the production JSON report for actual paths and affected versions.
 
@@ -25,7 +25,7 @@ These are npm advisories in the checked-in lockfile, not independent penetration
 
 [Draft PR #172](https://github.com/Thang4869/TriAD-Backend/pull/172) updates `cloudinary` **1.41.3 → 2.11.0** via an npm-generated `package.json` and `package-lock.json`. Versions below 2.7.0 are affected by [GHSA-g4mf-96x5-5m2c](https://github.com/advisories/GHSA-g4mf-96x5-5m2c). `CloudinaryImageStorage` keeps its `IImageStorage` port while rejecting incomplete upload callback responses.
 
-**Before approval:** clean `npm ci`, typecheck, lint, unit/integration, upload_stream regressions, image/runtime smoke, FE↔BE E2E and fresh production `npm audit` high delta. Live Cloudinary credentials/network streaming must be checked separately in staging. The one-time lockfile-generation workflow is **not included in the final PR tree**.
+**CI evidence:** clean `npm ci`, typecheck, lint, unit/integration, upload_stream regressions, build, image runtime smoke, FE↔BE E2E and production npm audit **PASS** on PR #172; latest observed high delta **9 → 8**. Live Cloudinary credentials/network streaming must be checked separately in staging. The one-time lockfile-generation workflow is **not included in the final PR tree**.
 
 ## Remaining B10: coordinated OpenTelemetry migration
 

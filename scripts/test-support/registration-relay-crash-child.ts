@@ -27,6 +27,15 @@ class ScopedStore extends PrismaOutboxRelayStore {
 async function run() {
   const eventId = process.argv[2];
   if (!eventId) throw new Error("Missing outbox event ID");
+  const row = await prisma.outboxEvent.findUnique({ where: { id: eventId } });
+  if (!row) {
+    const url = new URL(process.env.DATABASE_URL || "postgresql://localhost/missing");
+    throw new Error("Child cannot read registration event in schema " +
+      url.searchParams.get("schema") + " for event " + eventId);
+  }
+  if (row.publishedAt !== null || row.deadLetteredAt !== null) {
+    throw new Error("Registration event is not pending before child claim");
+  }
   const bus = new EventBus();
   bus.subscribe("UserRegistered", "RegistrationVerificationHandler", async () => {
     process.stdout.write("A1_HANDLER_STARTED\n");
@@ -36,5 +45,6 @@ async function run() {
   await new OutboxRelay(new ScopedStore(eventId), new PrismaOutboxHandlerTracker(), bus, {
     owner: "killed-" + process.pid, leaseDurationSeconds: 30, heartbeatIntervalMs: 5000,
   }).pollOnce();
+  throw new Error("Relay returned without reaching registration handler for " + eventId);
 }
 run().catch(async (error) => { console.error(error); process.exitCode = 1; await prisma.$disconnect(); });

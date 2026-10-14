@@ -58,7 +58,7 @@ describe("A1/T6 real process crash (PostgreSQL)", () => {
           if (output.includes("A1_HANDLER_STARTED")) { clearTimeout(timer); accept(); }
         });
         child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
-        child.once("exit", (code) => { clearTimeout(timer); reject(new Error("Child failed: " + code + " " + stderr)); });
+        child.once("exit", (code) => { clearTimeout(timer); reject(new Error("Child failed: " + code + " stdout=" + output + " stderr=" + stderr)); });
       });
       await started;
       const before = await prisma.outboxEvent.findUniqueOrThrow({ where: { id: row.id } });

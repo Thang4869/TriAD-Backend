@@ -18,7 +18,7 @@
 | Ưu tiên | Mã | Việc cần làm / điều kiện đóng | Trạng thái |
 | --- | --- | --- | --- |
 | **P0** | **B10** | [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166) đã merge, CI PASS: **0 critical**, còn **12 high/49 moderate** production. B10 tiếp tục qua các đợt remediation/triage high (OpenTelemetry/Cloudinary/Compression/Nodemailer/Sharp), giữ audit critical gate. | **PARTIAL — 12 high còn mở** |
-| **P0** | **A1 / T6** | Đã sửa mất verification token nếu DB update lỗi; thêm integration PostgreSQL với outbox relay, persisted handler tracker, lease từ worker chết và Redis/BullMQ failure/recovery. **Chờ CI trên nhánh ngày**; vẫn cần kill-process drill thực, SMTP/BullMQ dead-letter recovery + TTL evidence. | **PARTIAL — CI pending / live drill OPEN** |
+| **P0** | **A1 / T6** | [PR #167](https://github.com/Thang4869/TriAD-Backend/pull/167) đã merge; PR #169 bổ sung **SIGKILL relay thực + replay dead-letter thủ công** với PostgreSQL/tracker thật, Unit/Integration CI PASS. Còn staging drill Redis/BullMQ/SMTP thật, 15 phút TTL và dead-letter alerting trước khi CLOSED. | **PARTIAL — process kill test PASS; staging pending** |
 | **P1** | **T2 / T6 / A8** | Lost-response checkout retry, concurrent price change và relay/process crash; đo projection lag thực tế, công bố contract consistency cho order list/detail. | PARTIAL |
 | **P1** | **I9 / I6** | Backup → restore PostgreSQL, replay outbox, rebuild projection; ghi RTO/RPO; readiness-draining + SIGTERM drill. | OPEN |
 | **P1** | **B7** | Staging: `TRUST_PROXY`, spoofed `X-Forwarded-For`, shared NAT, Redis disconnect/reconnect, HTTP 429/503. Đóng chỉ khi có log/evidence cấu hình thật. | PENDING deployment |

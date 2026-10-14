@@ -24,17 +24,18 @@ jobs:
           # Update all root constraints before npm resolves the old peer graph.
           # npm install of individually supplied packages starts from the
           # previous 0.5x tree and may fail ERESOLVE during transition.
-          npm pkg set             "dependencies.@opentelemetry/api=1.9.1"             "dependencies.@opentelemetry/auto-instrumentations-node=0.81.0"             "dependencies.@opentelemetry/exporter-trace-otlp-http=0.223.0"             "dependencies.@opentelemetry/instrumentation-express=0.71.0"             "dependencies.@opentelemetry/resources=2.11.0"             "dependencies.@opentelemetry/sdk-node=0.223.0"             "dependencies.@opentelemetry/semantic-conventions=1.43.0"
+          npm pkg set             "dependencies.@opentelemetry/api=1.9.1" "dependencies.@opentelemetry/core=2.12.0"             "dependencies.@opentelemetry/auto-instrumentations-node=0.81.0"             "dependencies.@opentelemetry/exporter-trace-otlp-http=0.223.0"             "dependencies.@opentelemetry/instrumentation-express=0.71.0"             "dependencies.@opentelemetry/resources=2.12.0"             "dependencies.@opentelemetry/sdk-node=0.223.0"             "dependencies.@opentelemetry/semantic-conventions=1.43.0"
           npm install --package-lock-only --ignore-scripts --no-audit
           node - <<'NODE'
           const pkg = require("./package.json");
           const lock = require("./package-lock.json");
           const expected = {
             "@opentelemetry/api": "1.9.1",
+            "@opentelemetry/core": "2.12.0",
             "@opentelemetry/auto-instrumentations-node": "0.81.0",
             "@opentelemetry/exporter-trace-otlp-http": "0.223.0",
             "@opentelemetry/instrumentation-express": "0.71.0",
-            "@opentelemetry/resources": "2.11.0",
+            "@opentelemetry/resources": "2.12.0",
             "@opentelemetry/sdk-node": "0.223.0",
             "@opentelemetry/semantic-conventions": "1.43.0",
           };

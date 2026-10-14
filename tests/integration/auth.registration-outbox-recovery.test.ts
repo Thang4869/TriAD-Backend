@@ -5,6 +5,8 @@ import { EventBus } from "@shared/domain/event-bus/event-bus";
 import { OutboxRelay } from "@core/outbox/outbox-relay";
 import { PrismaOutboxRelayStore } from "@core/outbox/prisma-outbox-relay.store";
 import { PrismaOutboxHandlerTracker } from "@core/outbox/outbox-handler-tracker";
+import { OutboxMaintenanceService } from "@core/outbox/outbox-maintenance.service";
+import { PrismaOutboxMaintenanceStore } from "@core/outbox/prisma-outbox-maintenance.store";
 import { RegistrationVerificationHandler } from "@modules/auth/event-handlers/registration-verification.handler";
 import { PrismaAuthRepository } from "@modules/auth/infrastructure/repositories/prisma-auth.repository";
 import type { ClaimedOutboxEvent } from "@core/outbox/outbox-relay-store.port";
@@ -232,4 +234,42 @@ describe("registration outbox recovery (real PostgreSQL)", () => {
     );
     expect(new Set(jobs.map((args) => args[1])).size).toBe(1);
   });
+  it("replays a dead-lettered verification event after an explicit operator action", async () => {
+    const { user, event } = await newRegistration();
+    const { emailService, relay } = setup(event.id);
+    vi.mocked(emailService.sendVerificationEmail).mockRejectedValue(new Error("SMTP queue unavailable"));
+    // An event has exhausted nine previous durable attempts.
+    await prisma.outboxEvent.update({
+      where: { id: event.id },
+      data: { attempts: 9 },
+    });
+
+    await relay("final-attempt").pollOnce();
+    expect(await rowState(event.id)).toMatchObject({
+      publishedAt: null, attempts: 10, deadLetteredAt: expect.any(Date),
+    });
+    expect(await trackedStatus(event.id)).toBe("FAILED");
+    await relay("no-automatic-retry").pollOnce();
+    expect((await rowState(event.id)).attempts).toBe(10);
+
+    const service = new OutboxMaintenanceService(new PrismaOutboxMaintenanceStore());
+    const replay = await service.replayDeadLetters([event.id]);
+    expect(replay.replayedIds).toEqual([event.id]);
+    expect(await rowState(event.id)).toMatchObject({
+      attempts: 0, deadLetteredAt: null, lastError: null,
+    });
+
+    vi.mocked(emailService.sendVerificationEmail).mockResolvedValue(undefined);
+    await relay("operator-replay").pollOnce();
+    expect(await rowState(event.id)).toMatchObject({
+      attempts: 0, publishedAt: expect.any(Date), deadLetteredAt: null,
+    });
+    expect(await trackedStatus(event.id)).toBe("SUCCESS");
+    expect(emailService.sendVerificationEmail).toHaveBeenCalledWith(
+      { email: user.email, firstName: user.firstName },
+      expect.stringContaining("/verify-email?token="),
+      "registration-verification-" + user.id,
+    );
+  });
+
 });

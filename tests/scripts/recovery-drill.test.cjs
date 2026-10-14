@@ -35,6 +35,17 @@ test("refuses a production database or accidental wrong phase", () => {
     /Refusing recovery drill/,
   );
 });
+test("refuses non-CI host or credentials even with an approved DB name", () => {
+  assert.throws(
+    () => protectedCheck("postgresql://test:test@production.example.com:5432/triad_recovery_source", "seed"),
+    /Refusing recovery drill/,
+  );
+  assert.throws(
+    () => protectedCheck("postgresql://admin:password@127.0.0.1:5432/triad_recovery_target", "verify"),
+    /Refusing recovery drill/,
+  );
+});
+
 test("refuses the drill unless NODE_ENV=test and explicitly enabled", () => {
   assert.throws(() => protectedCheck(
     "postgresql://test:test@host/triad_recovery_source", "seed", "production", "true",

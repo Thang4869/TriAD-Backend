@@ -12,7 +12,18 @@ function assertSafeDatabase(url, mode) {
     throw new Error("Recovery drill requires NODE_ENV=test and RECOVERY_DRILL_ENABLED=true");
   }
   if (!url) throw new Error("DATABASE_URL is required");
-  const database = new URL(url).pathname.slice(1);
+  const parsed = new URL(url);
+  // Fail closed even when a production host reuses the disposable DB name.
+  if (
+    parsed.hostname !== "127.0.0.1" ||
+    parsed.port !== "5432" ||
+    parsed.username !== "test" ||
+    parsed.password !== "test" ||
+    parsed.search !== ""
+  ) {
+    throw new Error("Refusing recovery drill outside the isolated local CI PostgreSQL service");
+  }
+  const database = parsed.pathname.slice(1);
   const expected = mode === "seed" || mode === "post-backup"
     ? "triad_recovery_source" : "triad_recovery_target";
   if (database !== expected) {

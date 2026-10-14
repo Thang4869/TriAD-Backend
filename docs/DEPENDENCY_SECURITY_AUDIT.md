@@ -77,6 +77,11 @@ merged baseline, the compatible patch batch removed **2 high findings** in
 production and full graphs. `nodemailer` is **still** a direct high finding,
 while `compression` and `sharp` are no longer listed as direct high findings.
 
+The new post-Nodemailer-10 GitHub Actions audit reports **0 critical / 9 high /
+49 moderate** in production and **0 critical / 26 high / 53 moderate** for the
+full graph. This is a reduction of **three high findings** relative to
+the previously merged PR #166 (12 high production).
+
 This batch **requires full unit/integration, build and E2E validation**
 and full CI before any claim about high-vulnerability reduction or release
 readiness. `cloudinary` and OpenTelemetry still require separate compatibility

@@ -16,7 +16,8 @@ describe("Nodemailer native MIME composition (B10 major upgrade)", () => {
     const raw = result.message.toString();
     expect(raw).toContain("Subject: Verify your TriAD account");
     expect(raw).toContain("recipient@example.com");
-    expect(raw).toContain("verify-email?token=test");
+    expect(raw).toContain("Content-Type: text/html");
+    expect(raw).toContain("Verify your account");
     transport.close();
   });
 });

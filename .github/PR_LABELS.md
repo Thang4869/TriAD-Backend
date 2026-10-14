@@ -28,6 +28,20 @@ The bot creates a repository label **only when a matching commit first requires 
 - Do not create every supported type label in advance. Type names and their colors live in `scripts/pr-labels.cjs`.
 - The action may label fork PRs via `pull_request_target`, but **never checks out the fork/PR head**. It loads its helper from the trusted repository default branch only and executes no commit-message contents. Permissions are limited to reading PRs and writing issue labels.
 
+## GitHub token permissions
+
+For PR labels, the `pull_request_target` job requests `issues: write`
+**and** `pull-requests: write`. A previous production run failed with
+`403 Resource not accessible by integration` when `pull-requests: read`
+was effective, despite `issues: write` being present. Review the effective
+permissions under **Set up job → GITHUB_TOKEN Permissions** after merging
+the permission fix.
+
+If a 403 persists, the repository/organization Actions policy or the
+event actor may restrict write access; check **Settings → Actions → General**
+and the repository security policy. Do not use a broad `write-all` token,
+untrusted checkout, or `pull_request` privileged execution as a workaround.
+
 ## Tests and maintenance
 
 ```powershell

@@ -32,7 +32,9 @@ jobs:
           # keep a local reference to compare changes, then discard it.
           cp package-lock.json /tmp/triad-package-lock-before-otel.json
           rm package-lock.json
-          npm install --package-lock-only --ignore-scripts --no-audit || {
+          npm install -g npm@11.6.2
+          npm --version
+          npm install --ignore-scripts --no-audit || {
             for report in "$HOME"/.npm/_logs/*-eresolve-report.txt; do
               if test -f "$report"; then cat "$report"; fi
             done

@@ -116,4 +116,43 @@ describe("Checkout recovery and pricing consistency (real PostgreSQL, T2)", () =
     expect(after.stock).toBe(4);
     expect(after.version).toBe(2);
   });
+  it("allows two concurrent retries with one key to persist at most one order and stock change", async () => {
+    const { user, product, cart } = await seededCart();
+    const request = {
+      idempotencyKey: "t2-concurrent-" + randomUUID(),
+      paymentMethod: "COD" as const,
+      address: "Test address",
+      phone: "0123456789",
+    };
+    const service = checkoutService(new PrismaCheckoutRepository());
+    const concurrent = await Promise.allSettled([
+      service.checkout(user.id, request),
+      service.checkout(user.id, request),
+    ]);
+
+    const completed = concurrent.filter(
+      (result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof service.checkout>>> =>
+        result.status === "fulfilled",
+    );
+    // If a request loses the serialization race, its client may retry.
+    // The durable effect must still be exactly one order and one decrement.
+    const recovered = await service.checkout(user.id, request);
+    expect(recovered.idempotent).toBe(true);
+    expect(completed.length).toBeGreaterThanOrEqual(1);
+    for (const result of completed) {
+      expect(result.value.order.id).toBe(recovered.order.id);
+    }
+
+    const [orders, stock, cartItems] = await Promise.all([
+      prisma.order.findMany({ where: { userId: user.id } }),
+      prisma.product.findUniqueOrThrow({ where: { id: product.id } }),
+      prisma.cartItem.count({ where: { cartId: cart.id } }),
+    ]);
+    expect(orders).toHaveLength(1);
+    expect(orders[0].idempotencyKey).toBe(request.idempotencyKey);
+    expect(stock.stock).toBe(4);
+    expect(stock.version).toBe(1);
+    expect(cartItems).toBe(0);
+  }, 30_000);
+
 });

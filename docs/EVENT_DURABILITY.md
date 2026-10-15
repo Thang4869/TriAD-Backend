@@ -2,7 +2,7 @@
 
 **Reviewed:** 2026-10-15  
 **Scope:** Auth and Reviews; production event relay + downstream projections.  
-**Status:** Initial verification email is durable through the merged [PR #164](https://github.com/Thang4869/TriAD-Backend/pull/164), CI PASS. A new A1/T6 batch includes persisted relay recovery regression tests; CI pending. No live kill-process/SMTP evidence or exactly-once delivery claim.
+**Status:** Initial verification email is durable through the merged [PR #164](https://github.com/Thang4869/TriAD-Backend/pull/164), CI PASS. A1/T6 recovery integration tests, including real SIGKILL relay recovery and dead-letter replay, have CI evidence through merged PR #169. Staging Redis/BullMQ/SMTP delivery evidence remains outstanding; no exactly-once delivery claim.
 
 ## Classification matrix
 
@@ -34,7 +34,7 @@
 
 ## A1/T6 post-PR #167 crash and dead-letter evidence
 
-GitHub Actions for draft [PR #169](https://github.com/Thang4869/TriAD-Backend/pull/169)
+GitHub Actions for merged [PR #169](https://github.com/Thang4869/TriAD-Backend/pull/169)
 passed its **Unit & Integration Tests** including the new tests:
 
 - `tests/integration/auth.registration-process-crash.test.ts` starts an actual
@@ -74,4 +74,4 @@ do not label this test complete using mocks alone.
 5. Integration: `tests/integration/auth.repository.test.ts` replays committed `UserRegistered` event after simulated queue error with a stable token/job ID. CI PASS still required.
 6. Run an actual outbox relay restart/kill-process and SMTP/Redis outage scenario before claiming crash recovery or an email delivery SLO.
 
-**Next:** verify the new relay recovery tests on CI, perform actual kill-process + Redis/SMTP outage/queue replay drills, and measure link TTL relative to queue delay. A1/T6 stays PARTIAL until those measurements exist.
+**Next:** perform a staging drill with actual Redis/BullMQ/SMTP failure and queue replay, measure link TTL relative to queue delay, and attach reproducible operator evidence. CI already covers a real process kill with PostgreSQL; A1/T6 remains PARTIAL until the external dependencies are validated.

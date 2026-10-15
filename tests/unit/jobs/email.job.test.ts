@@ -107,4 +107,39 @@ describe("email.job", () => {
       }),
     );
   });
+  it("escapes untrusted HTML in email templates", async () => {
+    await processEmail({
+      data: {
+        to: "test@test.com",
+        subject: "<script>alert(1)</script>",
+        data: { name: '<img src=x onerror="alert(1)">' },
+      },
+    });
+    const transporter = (nodemailer.createTransport as any).mock.results[0]
+      .value;
+    const html = transporter.sendMail.mock.lastCall[0].html as string;
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("<img");
+  });
+
+  it("escapes quotes and markup in verification links", async () => {
+    await processEmail({
+      data: {
+        to: "test@test.com",
+        subject: "Verify",
+        template: "verify-email",
+        data: {
+          verifyUrl: 'https://example.com/verify?token="><img src=x>',
+        },
+      },
+    });
+    const transporter = (nodemailer.createTransport as any).mock.results[0]
+      .value;
+    const html = transporter.sendMail.mock.lastCall[0].html as string;
+    expect(html).toContain("&quot;&gt;&lt;img src=x&gt;");
+    expect(html).not.toContain("<img");
+  });
+
 });

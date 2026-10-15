@@ -1,9 +1,15 @@
-# TriAD Backend (DNEK)
+# TriAD Backend
 
-**Production-oriented E-Commerce Backend**  
-**Clean Architecture · Domain-Driven Design · CQRS · Reliability Engineering**
+**An open-source e-commerce backend engineering case study**
 
-![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)
+*TypeScript · Node.js · PostgreSQL · Redis · Clean Architecture · DDD · Reliability*
+
+TriAD is an independently developed **backend-focused portfolio project**, shared under the **MIT License** for students, developers and contributors to explore how an e-commerce application is modeled, tested and operated beyond the UI. It is a working codebase with documented trade-offs and CI evidence—not a claim that every production deployment condition has been proven.
+
+**Start here:** [Architecture](docs/ARCHITECTURE.md) · [Technical learning path](docs/LEARNING_GUIDE.md) · [CI & test evidence](https://github.com/Thang4869/TriAD-Backend/actions) · [Known limitations](docs/TriAD-Backend-Improvement-Checklist.md) · [MIT License](LICENSE)
+
+![License: MIT](https://img.shields.io/badge/License-MIT-blue)
+![Node.js](https://img.shields.io/badge/Node.js-22-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.3%2B-blue)
 ![Prisma](https://img.shields.io/badge/Prisma-5.22-2D3748)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)
@@ -17,6 +23,20 @@ Backend repository: [Thang4869/TriAD-Backend](https://github.com/Thang4869/TriAD
 Frontend repository: [Thang4869/TriAD-12](https://github.com/Thang4869/TriAD-12)
 
 ---
+
+## Engineering evidence at a glance
+
+| Engineering concern | What the repository implements | Where to verify |
+| --- | --- | --- |
+| Checkout consistency | Serializable PostgreSQL transaction, locked stock pricing and idempotent retry | [Checkout integration tests](tests/integration/checkout.recovery-consistency.test.ts), [ADR-0001](docs/adr/0001-transactional-checkout-outbox.md) |
+| Durable side effects | Transactional Outbox, handler tracker, lease recovery and dead letters | [Outbox recovery tests](tests/integration/auth.registration-process-crash.test.ts), [durability runbook](docs/EVENT_DURABILITY.md) |
+| Read-side consistency | CQRS read models, monotonic source versions and rebuild tools | [Projection ordering tests](tests/integration/projection.ordering.test.ts), [operations](docs/OPERATIONS.md) |
+| Recovery operations | Isolated PostgreSQL backup/restore and read-model rebuild job | [Recovery drill](docs/RECOVERY_DRILL.md), [CI workflow](.github/workflows/ci.yml) |
+| Delivery quality | Typecheck, lint, architecture, contract, coverage, image-runtime and full-stack CI | [GitHub Actions](https://github.com/Thang4869/TriAD-Backend/actions), [checklist](docs/TriAD-Backend-Improvement-Checklist.md) |
+
+**What this project does not claim:** independently certified production readiness, a measured production RTO/RPO or SLO, exactly-once SMTP delivery, or a live payment gateway. The repository tracks these as explicit engineering decisions and open validation gates rather than hiding them.
+
+**For students:** start with a single checkout request, follow the aggregate → transaction → outbox → projection flow, run the corresponding tests, then examine failure and recovery scenarios. The [learning guide](docs/LEARNING_GUIDE.md) provides a reproducible reading order.
 
 ## 1. Architecture Overview
 
@@ -540,7 +560,9 @@ Current limitations are explicit:
 
 **TriAD Backend** is a public portfolio repository built to demonstrate production-oriented backend architecture, reliability patterns, maintainability, and scalable design practices.
 
-No explicit open-source license is currently included. Reuse, modification, or redistribution rights are therefore not granted unless a license is added.
+The source code and documentation authored for this repository are released under the **[MIT License](LICENSE)** — Copyright (c) 2026 Thang4869. You may study, use, modify and redistribute covered material under its terms, including retaining the copyright and permission notice in copies or substantial portions.
+
+This project is an educational engineering reference and portfolio work, **not a certification of production security or availability**. Third-party dependencies, trademarks, logos, datasets and assets (if any) remain subject to their own rights and licenses. Report security issues privately using [SECURITY.md](SECURITY.md); contribute through [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 

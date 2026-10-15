@@ -198,7 +198,7 @@ Coverage and reliability strategy includes:
 
 - **Unit tests** for domain logic, services, value objects, and middleware.
 - **Property-based tests** for invariants such as Money, order state transitions, and stock behavior.
-- **Integration tests** with real PostgreSQL and Redis through Testcontainers.
+- **Integration tests** against real PostgreSQL and Redis with isolated CI test services and dedicated database schemas.
 - **Concurrency tests** around checkout, optimistic conflicts, and Outbox claims.
 - **Outbox recovery tests** covering retries, handler tracking, replay, crash windows, and dead-letter behavior.
 - **Projection ordering/rebuild tests** using persisted source versions.
@@ -220,7 +220,7 @@ Coverage and reliability strategy includes:
 ```bash
 git clone https://github.com/Thang4869/TriAD-Backend.git
 cd TriAD-Backend
-npm install
+npm ci
 ```
 
 Create the local environment file:
@@ -440,6 +440,8 @@ They are **not the current production checkout path**. Production checkout remai
 
 Detailed Mermaid diagrams, architectural decisions, transaction boundaries, and trade-offs are documented in:
 
+- [`docs/adr/0001-transactional-checkout-outbox.md`](docs/adr/0001-transactional-checkout-outbox.md)
+
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
 
@@ -552,7 +554,7 @@ Current limitations are explicit:
 - No real payment/refund provider is production-wired.
 - Prepared Saga orchestration is not the active production checkout path.
 - Cross-domain production CSRF/CORS/OAuth behavior still requires smoke verification on the deployed frontend/backend domains.
-- Full frontend-to-backend CI journey and production-image runtime smoke/recovery evidence remain separate operational backlog items where not yet completed.
+- The full frontend-to-backend CI journey and production-image runtime smoke are implemented and run in GitHub Actions; deployed staging recovery, real external-service connectivity and measured RTO/RPO/SLO remain open.
 
 ---
 

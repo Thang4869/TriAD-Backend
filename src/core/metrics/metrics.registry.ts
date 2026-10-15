@@ -73,10 +73,21 @@ export const sagaCompensations = new client.Counter({
   registers: [metricsRegistry],
 });
 
+// Last successfully handled event age (kept for backward-compatible alerts).
 export const projectionLagSeconds = new client.Gauge({
   name: "triad_backend_projection_lag_seconds",
   help: "Age of the event when a projection handler processed it",
   labelNames: ["projection"],
+  registers: [metricsRegistry],
+});
+
+// Distribution of event age at successful projection update; use buckets for p95/p99.
+// This measures handler-observed age, not continuously sampled read-model staleness.
+export const projectionEventAgeSeconds = new client.Histogram({
+  name: "triad_backend_projection_event_age_seconds",
+  help: "Event age in seconds when a projection successfully updates its read model",
+  labelNames: ["projection"],
+  buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600],
   registers: [metricsRegistry],
 });
 

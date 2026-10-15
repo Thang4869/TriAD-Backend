@@ -36,7 +36,7 @@
 - **T2:** test PostgreSQL lost-response retry, concurrent same-key requests và thay đổi giá trước khi lock stock.
 - **I9:** CI PostgreSQL Backup Restore Drill đã PASS trên commit có script; backup/restore DB cách ly, xác minh idempotency/outbox và rebuild 2 projections. Vẫn thiếu restore/RTO/RPO trên staging triển khai.
 
-**Thứ tự release gates còn mở:** staging Redis/BullMQ/SMTP TTL và dead letter (A1/T6), production-like PostgreSQL restore + RTO/RPO (I9), proxy/CSRF (B7/B6), FE canonical /api/orders contract (H2/T3), concurrency/projection lag metrics (T2), mutation/k6/SLO (T4/T7/J2), admin audit (J3), ADR/demo (K2/K4) và quyết định LICENSE (K3).
+**Thứ tự release gates còn mở:** staging Redis/BullMQ/SMTP TTL và dead letter (A1/T6), production-like PostgreSQL restore + RTO/RPO (I9), proxy/CSRF (B7/B6), FE canonical /api/orders contract (H2/T3), concurrency/projection lag metrics (T2), mutation/k6/SLO (T4/T7/J2), admin audit (J3), ADR/demo (K2/K4) và MIT License đã được phê duyệt (K3); demo và bằng chứng CV vẫn mở.
 
 **Quyết định cần duyệt:** dependency high risk acceptance, email TTL/resend, proxy topology/CSRF, API deprecation date, payment/Saga provider scope. Tiêu chí đóng từng mục và các liên kết nằm trong [Improvement Checklist](TriAD-Backend-Improvement-Checklist.md), [Dependency Security](DEPENDENCY_SECURITY_AUDIT.md), [Event Durability](EVENT_DURABILITY.md) và [Operations](OPERATIONS.md).
 

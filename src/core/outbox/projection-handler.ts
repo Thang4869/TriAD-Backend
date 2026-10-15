@@ -5,7 +5,10 @@ import type {
 import type { UserRegisteredEvent } from "@shared/domain/events/user-events";
 import type { DomainEvent } from "@shared/domain/events/domain-event";
 import { withSpan } from "@core/tracing/span";
-import { projectionLagSeconds } from "@core/metrics/metrics.registry";
+import {
+  projectionLagSeconds,
+  projectionEventAgeSeconds,
+} from "@core/metrics/metrics.registry";
 import type {
   ProjectionStore,
   ProductProjectionEvent,
@@ -62,9 +65,11 @@ export class ProjectionHandler {
   }
 
   private recordLag(projection: string, event: DomainEvent): void {
-    projectionLagSeconds.set(
-      { projection },
-      Math.max(0, (Date.now() - event.occurredAt.getTime()) / 1000),
+    const ageSeconds = Math.max(
+      0,
+      (Date.now() - event.occurredAt.getTime()) / 1000,
     );
+    projectionLagSeconds.set({ projection }, ageSeconds);
+    projectionEventAgeSeconds.observe({ projection }, ageSeconds);
   }
 }

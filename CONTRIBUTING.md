@@ -67,6 +67,8 @@ and merging. Do not merge automatically.
 
 ## License
 
-No license has been selected by the repository owner yet. Public source
-availability alone does **not** grant others an open-source reuse license.
-Please obtain maintainer permission before redistributing code or assets.
+The project is available under the [MIT License](LICENSE); preserve its
+copyright and permission notice when redistributing substantial portions.
+Respect the separate terms governing third-party libraries, trademarks and
+assets. Meaningful contributions should include a focused use case, tests
+and documentation of the trade-offs rather than extra abstractions alone.

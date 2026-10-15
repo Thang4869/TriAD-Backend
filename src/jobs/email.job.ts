@@ -36,7 +36,23 @@ export const processEmail = async (job: { data: EmailJobData }) => {
 
   const name = escapeHtml(data?.name);
   const safeSubject = escapeHtml(subject);
-  const verifyUrl = escapeHtml(data?.verifyUrl);
+  let verifyUrl = "";
+  if (template === "verify-email") {
+    if (typeof data?.verifyUrl !== "string") {
+      throw new Error("Verification URL must be an absolute HTTP(S) URL");
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(data.verifyUrl);
+    } catch {
+      throw new Error("Verification URL must be an absolute HTTP(S) URL");
+    }
+    if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname ||
+        parsed.username || parsed.password) {
+      throw new Error("Verification URL must be an absolute HTTP(S) URL");
+    }
+    verifyUrl = escapeHtml(data.verifyUrl);
+  }
   let html = `<h1>${safeSubject}</h1><p>Hello ${name}</p>`;
   if (template === "welcome") {
     html = `<h1>Welcome to TriAD!</h1><p>Hi ${name}, thanks for joining!</p>`;

@@ -18,23 +18,38 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+const escapeHtml = (value: unknown): string =>
+  String(value ?? "").replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return entities[character];
+  });
+
 export const processEmail = async (job: { data: EmailJobData }) => {
   const { to, subject, template, data } = job.data;
   logger.info(`Sending email to ${to} with subject "${subject}"`);
 
-  let html = `<h1>${subject}</h1><p>Hello ${data?.name || ""}</p>`;
+  const name = escapeHtml(data?.name);
+  const safeSubject = escapeHtml(subject);
+  const verifyUrl = escapeHtml(data?.verifyUrl);
+  let html = `<h1>${safeSubject}</h1><p>Hello ${name}</p>`;
   if (template === "welcome") {
-    html = `<h1>Welcome to TriAD!</h1><p>Hi ${data?.name}, thanks for joining!</p>`;
+    html = `<h1>Welcome to TriAD!</h1><p>Hi ${name}, thanks for joining!</p>`;
   } else if (template === "order-confirmation") {
-    html = `<h1>Order Confirmation</h1><p>Your order #${data?.orderNumber} is confirmed. Total: ${data?.total}</p>`;
+    html = `<h1>Order Confirmation</h1><p>Your order #${escapeHtml(data?.orderNumber)} is confirmed. Total: ${escapeHtml(data?.total)}</p>`;
   } else if (template === "verify-email") {
     html = `
       <h1>Verify your TriAD account</h1>
-      <p>Hi ${data?.name || ""},</p>
+      <p>Hi ${name},</p>
       <p>Please confirm your email address by clicking the link below. This link expires in 15 minutes.</p>
-      <p><a href="${data?.verifyUrl}" target="_blank">Verify my email</a></p>
+      <p><a href="${verifyUrl}" target="_blank">Verify my email</a></p>
       <p>If the button doesn't work, copy and paste this URL into your browser:</p>
-      <p>${data?.verifyUrl}</p>
+      <p>${verifyUrl}</p>
     `;
   }
 

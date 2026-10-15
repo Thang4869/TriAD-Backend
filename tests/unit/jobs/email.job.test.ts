@@ -11,6 +11,13 @@ vi.mock("nodemailer", () => ({
 }));
 
 describe("email.job", () => {
+  it("configures implicit TLS on SMTP port 465", () => {
+    const smtpPort = Number(process.env.SMTP_PORT) || 587;
+    expect(nodemailer.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({ port: smtpPort, secure: smtpPort === 465 }),
+    );
+  });
+
   it("should send email with default template", async () => {
     const job = {
       data: {

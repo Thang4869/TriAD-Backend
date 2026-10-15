@@ -68,6 +68,36 @@ Check reverse-proxy trust configuration, health probes, Redis outage and
 recovery, 429 responses, and normal login/TOTP/refresh flows before declaring
 this security gate fully closed.
 
+## Projection event-age percentiles (T2)
+
+After each **successful** projection update, the handler records:
+
+- `triad_backend_projection_lag_seconds`: a gauge for the most recently
+  processed event. This gauge **cannot** provide historical p95/p99.
+- `triad_backend_projection_event_age_seconds`: a histogram of the age of
+  each successfully handled event (completion time minus `occurredAt`).
+  Its Prometheus buckets support approximate p95/p99 by projection.
+
+For example, calculate p95 over a 15-minute window:
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le, projection) (
+    rate(triad_backend_projection_event_age_seconds_bucket[15m])
+  )
+)
+```
+
+Use `0.99` for p99. This is **successful event processing age**, not a
+measurement of end-user order-list freshness or the total time spent
+waiting in an unprocessed outbox. Failed updates do not contribute
+samples. Replayed successful events may contribute additional samples,
+and an idle period may yield no quantile. Monitor
+`triad_backend_outbox_lag_seconds` and dead-letter backlog alongside
+the histogram. Set a numeric staleness SLO **only after staging load
+and read-after-write measurements**, not from synthetic unit tests.
+
 ## Orders read-after-write behavior
 
 Checkout returns the committed write-side order directly, including an

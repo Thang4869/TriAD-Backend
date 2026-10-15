@@ -85,7 +85,7 @@ export const projectionLagSeconds = new client.Gauge({
 // This measures handler-observed age, not continuously sampled read-model staleness.
 export const projectionEventAgeSeconds = new client.Histogram({
   name: "triad_backend_projection_event_age_seconds",
-  help: "Event age in seconds when a projection successfully updates its read model",
+  help: "Event age on successful handler completion, including idempotent no-op events",
   labelNames: ["projection"],
   buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600],
   registers: [metricsRegistry],

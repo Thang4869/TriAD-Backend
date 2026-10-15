@@ -70,7 +70,7 @@ this security gate fully closed.
 
 ## Projection event-age percentiles (T2)
 
-After each **successful** projection update, the handler records:
+After each **successful handler execution** (including an idempotent stale-event no-op), the handler records:
 
 - `triad_backend_projection_lag_seconds`: a gauge for the most recently
   processed event. This gauge **cannot** provide historical p95/p99.

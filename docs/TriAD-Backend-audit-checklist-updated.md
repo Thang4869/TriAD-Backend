@@ -1,6 +1,6 @@
 # TriAD Backend — Audit hiện trạng
 
-**Đánh giá:** 15/10/2026 · **Code đối chiếu:** [main](https://github.com/Thang4869/TriAD-Backend), sau [PR #173](https://github.com/Thang4869/TriAD-Backend/pull/173).
+**Đánh giá:** 15/10/2026 · **Code đối chiếu:** [main](https://github.com/Thang4869/TriAD-Backend), sau [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174); các thay đổi chưa merge trên `commit-15102026` được ghi riêng.
 **Độc lập:** điểm ước lượng kỹ thuật để theo dõi, **không** phải chứng nhận Tech Lead, SLA, bảo mật hoặc KPI được kiểm toán.
 
 ## Điểm tham khảo
@@ -32,9 +32,9 @@
 
 ## Đang thực hiện
 
-[Draft PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) trên **một nhánh ngày** \`commit-15102026\`:
-- **T2:** test PostgreSQL lost-response retry, concurrent same-key requests và thay đổi giá trước khi lock stock.
-- **I9:** CI PostgreSQL Backup Restore Drill đã PASS trên commit có script; backup/restore DB cách ly, xác minh idempotency/outbox và rebuild 2 projections. Vẫn thiếu restore/RTO/RPO trên staging triển khai.
+[PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) **đã merge**; công việc bổ sung đang nằm trên nhánh ngày `commit-15102026`:
+- **T2:** PR #174 có PostgreSQL lost-response retry, concurrent same-key và price-change tests. Nhánh ngày bổ sung histogram độ tuổi Outbox event, unit tests và PromQL p95/p99; chưa có chỉ số staging.
+- **I9:** CI PostgreSQL Backup Restore Drill đã PASS: backup/restore vào DB cách ly, đối chiếu order/idempotency/outbox và rebuild hai projections. Vẫn thiếu deployed restore/RTO/RPO và SIGTERM readiness drill.
 
 **Thứ tự release gates còn mở:** staging Redis/BullMQ/SMTP TTL và dead letter (A1/T6), production-like PostgreSQL restore + RTO/RPO (I9), proxy/CSRF (B7/B6), FE canonical /api/orders contract (H2/T3), concurrency/projection lag metrics (T2), mutation/k6/SLO (T4/T7/J2), admin audit (J3), ADR/demo (K2/K4) và MIT License đã được phê duyệt (K3); demo và bằng chứng CV vẫn mở.
 

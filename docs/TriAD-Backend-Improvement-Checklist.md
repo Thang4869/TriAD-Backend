@@ -20,7 +20,7 @@
 | **P0** | **B10** | PR [#166](https://github.com/Thang4869/TriAD-Backend/pull/166), [#170](https://github.com/Thang4869/TriAD-Backend/pull/170), [#172](https://github.com/Thang4869/TriAD-Backend/pull/172), [#173](https://github.com/Thang4869/TriAD-Backend/pull/173) **merged**; production audit on `main`: **0 critical / 0 high / 0 moderate**; full graph còn **16 high / 5 moderate**. Duy trì critical gate; triage dev-only, kiểm thử staging Cloudinary/OTLP, đánh giá SBOM. | **PROD AUDIT PASS / STAGING PENDING** |
 | **P0** | **A1 / T6** | [PR #167](https://github.com/Thang4869/TriAD-Backend/pull/167) đã merge; [PR #169](https://github.com/Thang4869/TriAD-Backend/pull/169) đã merge, bổ sung **SIGKILL relay thực + replay dead-letter thủ công** với PostgreSQL/tracker thật, full CI PASS. Còn staging drill Redis/BullMQ/SMTP thật, 15 phút TTL và dead-letter alerting trước khi CLOSED. | **PARTIAL — process kill test PASS; staging pending** |
 | **P1** | **T2 / T6 / A8** | [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) đã merge, gồm lost-response retry, concurrent same-key và price-change tests. Nhánh `commit-15102026` bổ sung **Prometheus histogram độ tuổi event xử lý thành công**, unit tests và PromQL p95/p99; **chưa có số đo staging** hoặc API list-freshness SLO. | **PARTIAL — histogram CI pending; staging evidence OPEN** |
-| **P1** | **I9 / I6** | [Draft #174](https://github.com/Thang4869/TriAD-Backend/pull/174): CI job **PostgreSQL Backup Restore Drill PASS**, kiểm chứng pg_dump → pg_restore vào DB cách ly, order/idempotency/outbox snapshot và rebuild 2 projections. Deployed restore/RTO/RPO + SIGTERM readiness drill vẫn mở. | **CI PROVEN / production drill OPEN** |
+| **P1** | **I9 / I6** | [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) đã merge: CI job **PostgreSQL Backup Restore Drill PASS**, kiểm chứng pg_dump → pg_restore vào DB cách ly, order/idempotency/outbox snapshot và rebuild 2 projections. Deployed restore/RTO/RPO + SIGTERM readiness drill vẫn mở. | **CI PROVEN / production drill OPEN** |
 | **P1** | **B7** | Staging: `TRUST_PROXY`, spoofed `X-Forwarded-For`, shared NAT, Redis disconnect/reconnect, HTTP 429/503. Đóng chỉ khi có log/evidence cấu hình thật. | PENDING deployment |
 | **P1** | **B6** | Review threat model và CSRF hiện tại; quyết định có cần session-bound signed token hay giữ existing approach. Chỉ refactor nếu có lý do bảo mật kiểm chứng. | REVIEW |
 | **P1** | **H2 / T3** | Frontend chuyển khỏi legacy `/api/checkout/orders*` sang canonical `/api/orders*`; mở rộng OpenAPI response/request contract; xóa alias chỉ khi FE E2E và versioning cho phép. | PARTIAL |
@@ -45,7 +45,7 @@
 
 ## Thứ tự triển khai tiếp theo (mỗi stage một commit)
 
-1. **T2 / I9:** kiểm chứng CI PR #174, chạy checkout concurrency/price-change và isolated backup→restore→rebuild; mở rộng staging RTO/RPO.
+1. **T2 / I9:** PR #174 đã merge với checkout concurrency/price-change và isolated backup→restore→rebuild CI; tiếp tục kiểm chứng histogram trên nhánh và staging restore/RTO/RPO.
 2. **A1 / T6:** chạy Redis/BullMQ/SMTP **thật** trên staging, kiểm tra resend/TTL + dead-letter recovery, lưu timestamp và duplicate-job evidence.
 3. **B10 / B7:** production dependency audit 0 critical/high/moderate; triage phần full graph còn lại và xác minh Cloudinary/OTLP, proxy trust/Redis outage ở staging.
 4. **B7/H2/H7/T3:** staging security, FE migration và schema/API boundary cleanup.

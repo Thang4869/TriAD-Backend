@@ -142,4 +142,30 @@ describe("email.job", () => {
     expect(html).not.toContain("<img");
   });
 
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "not-a-url",
+    "https://user:password@example.com/verify",
+  ])("rejects unsafe verification URL %s", async (verifyUrl) => {
+    await expect(
+      processEmail({
+        data: {
+          to: "test@test.com",
+          subject: "Verify",
+          template: "verify-email",
+          data: { verifyUrl },
+        },
+      }),
+    ).rejects.toThrow("Verification URL must be an absolute HTTP(S) URL");
+  });
+
+  it("rejects missing verification URL", async () => {
+    await expect(
+      processEmail({
+        data: { to: "test@test.com", subject: "Verify", template: "verify-email" },
+      }),
+    ).rejects.toThrow("Verification URL must be an absolute HTTP(S) URL");
+  });
+
 });

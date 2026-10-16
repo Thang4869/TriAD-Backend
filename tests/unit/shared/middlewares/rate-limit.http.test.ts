@@ -12,7 +12,8 @@ vi.mock("@core/redis/client", () => ({
 // This verifies HTTP middleware behavior, not Redis connectivity.
 vi.mock("rate-limit-redis", async () => {
   const { DependencyUnavailableError } = await import("@shared/errors/application-error");
-  return { RedisStore: class {
+  return {
+    RedisStore: class {
     async increment() {
       if (state.unavailable) throw new DependencyUnavailableError("Rate limit store unavailable");
       state.hits += 1;
@@ -24,7 +25,8 @@ vi.mock("rate-limit-redis", async () => {
     async resetKey() {
       state.hits = 0;
     }
-  } };
+    },
+  };
 });
 
 import { rateLimiter } from "@shared/middlewares/rate-limit.middleware";
@@ -58,7 +60,11 @@ describe("B7 HTTP rate limiting contract", () => {
     state.unavailable = true;
     const failed = await request(app).get("/api/example");
     expect(failed.status).toBe(503);
-    expect(failed.body).toMatchObject({ success: false });
+    expect(failed.body).toMatchObject({
+      success: false,
+      code: "APPLICATION.DEPENDENCY_UNAVAILABLE",
+      error: "Rate limit store unavailable",
+    });
     state.unavailable = false;
     const recovered = await request(app).get("/api/example");
     expect(recovered.status).toBe(200);

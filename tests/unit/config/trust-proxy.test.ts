@@ -64,4 +64,26 @@ describe("TRUST_PROXY boundary (B10 / B7)", () => {
     expect(response.status).toBe(200);
     expect(response.body.ip).toBe("198.51.100.77");
   });
+  it("ignores spoofed forwarded IPs when the immediate peer is not allowlisted", async () => {
+    const app = express();
+    app.set("trust proxy", parseTrustProxy("192.0.2.0/24"));
+    app.get("/ip", (req, res) => res.json({ ip: req.ip }));
+    const response = await request(app)
+      .get("/ip")
+      .set("X-Forwarded-For", "198.51.100.77");
+    expect(response.status).toBe(200);
+    expect(response.body.ip).not.toBe("198.51.100.77");
+  });
+
+  it("does not let client-provided earlier hops override the nearest trusted hop", async () => {
+    const app = express();
+    app.set("trust proxy", parseTrustProxy("1"));
+    app.get("/ip", (req, res) => res.json({ ip: req.ip }));
+    const response = await request(app)
+      .get("/ip")
+      .set("X-Forwarded-For", "203.0.113.9, 198.51.100.77");
+    expect(response.status).toBe(200);
+    expect(response.body.ip).toBe("198.51.100.77");
+  });
+
 });

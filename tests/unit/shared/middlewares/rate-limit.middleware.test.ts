@@ -369,4 +369,49 @@ describe("rate-limit Redis fail-closed policy", () => {
       vi.useRealTimers();
     }
   });
+  it("recovers after reconnect without bypassing requests during an outage", async () => {
+    const sendCommand = commandBridge();
+    const client = redis as typeof redis & { status: string };
+    const originalStatus = client.status;
+    try {
+      client.status = "reconnecting";
+      const callsBefore = vi.mocked(redis.call).mock.calls.length;
+      await expect(sendCommand("INCR", "recovery-key")).rejects.toBeInstanceOf(
+        DependencyUnavailableError,
+      );
+      expect(redis.call).toHaveBeenCalledTimes(callsBefore);
+
+      client.status = "ready";
+      vi.mocked(redis.call).mockResolvedValueOnce(1);
+      await expect(sendCommand("INCR", "recovery-key")).resolves.toBe(1);
+      expect(redis.call).toHaveBeenCalledWith("INCR", "recovery-key");
+    } finally {
+      client.status = originalStatus;
+    }
+  });
+
+  it("does not allow a delayed pre-reconnect response to change a failed request", async () => {
+    const sendCommand = commandBridge();
+    const client = redis as typeof redis & { status: string };
+    const originalStatus = client.status;
+    try {
+      client.status = "ready";
+      let complete!: (value: unknown) => void;
+      vi.mocked(redis.call).mockImplementationOnce(
+        () => new Promise((resolve) => { complete = resolve; }) as ReturnType<typeof redis.call>,
+      );
+      vi.useFakeTimers();
+      const failed = expect(sendCommand("INCR", "stale-key")).rejects.toBeInstanceOf(
+        DependencyUnavailableError,
+      );
+      await vi.advanceTimersByTimeAsync(1000);
+      await failed;
+      complete(1);
+      await Promise.resolve();
+    } finally {
+      vi.useRealTimers();
+      client.status = originalStatus;
+    }
+  });
+
 });

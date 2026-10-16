@@ -10,10 +10,11 @@ vi.mock("@core/redis/client", () => ({
 
 // Keep express-rate-limit real and replace only the external Redis adapter.
 // This verifies HTTP middleware behavior, not Redis connectivity.
-vi.mock("rate-limit-redis", () => ({
-  RedisStore: class {
+vi.mock("rate-limit-redis", async () => {
+  const { DependencyUnavailableError } = await import("@shared/errors/application-error");
+  return { RedisStore: class {
     async increment() {
-      if (state.unavailable) throw new Error("simulated Redis outage");
+      if (state.unavailable) throw new DependencyUnavailableError("Rate limit store unavailable");
       state.hits += 1;
       return { totalHits: state.hits, resetTime: new Date(Date.now() + 60_000) };
     }
@@ -23,23 +24,17 @@ vi.mock("rate-limit-redis", () => ({
     async resetKey() {
       state.hits = 0;
     }
-  },
-}));
+  } };
+});
 
 import { rateLimiter } from "@shared/middlewares/rate-limit.middleware";
+import { createErrorHandler } from "@shared/middlewares/error-handler.middleware";
 
 function makeApp() {
   const app = express();
   app.use("/api", rateLimiter({ windowMs: 60_000, max: 2 }));
   app.get("/api/example", (_req, res) => res.json({ success: true }));
-  app.use(
-    (err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-      if (err.message === "simulated Redis outage") {
-        return res.status(503).json({ success: false, error: "Service temporarily unavailable" });
-      }
-      return res.status(500).json({ success: false, error: "Internal server error" });
-    },
-  );
+  app.use(createErrorHandler({ classify: () => null }));
   return app;
 }
 

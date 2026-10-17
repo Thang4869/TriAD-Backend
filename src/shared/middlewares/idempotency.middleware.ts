@@ -9,6 +9,21 @@ import {
 } from "@shared/errors/application-error";
 import { logger } from "@core/logger/winston";
 
+// Compare the exact claimed value atomically: a stale handler must never
+// overwrite or delete the replacement owner's claim after lease expiry.
+const COMPLETE_IF_OWNER = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("SET", KEYS[1], ARGV[2], "EX", ARGV[3])
+end
+return 0
+`;
+const DELETE_IF_OWNER = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+end
+return 0
+`;
+
 export const idempotencyMiddleware = (
   keyHeader: string = "Idempotency-Key",
 ) => {
@@ -78,15 +93,18 @@ export const idempotencyMiddleware = (
       res.json = function (body: unknown) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           redis
-            .setex(
+            .eval(
+              COMPLETE_IF_OWNER,
+              1,
               cacheKey,
-              completedTtl,
+              claimValue,
               JSON.stringify({
                 state: "COMPLETED",
                 requestHash,
                 status: res.statusCode,
                 data: body,
               }),
+              String(completedTtl),
             )
             .catch((error) => {
               logger.error("Failed to persist completed idempotency response", {
@@ -95,7 +113,7 @@ export const idempotencyMiddleware = (
               });
             });
         } else {
-          redis.del(cacheKey).catch((error) => {
+          redis.eval(DELETE_IF_OWNER, 1, cacheKey, claimValue).catch((error) => {
             logger.error("Failed to clear idempotency claim", {
               error,
               cacheKey,

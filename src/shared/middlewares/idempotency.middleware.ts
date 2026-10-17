@@ -107,8 +107,8 @@ export const idempotencyMiddleware = (
           });
       }, Math.max(1000, Math.floor((inProgressTtl * 1000) / 3)));
       leaseTimer.unref();
-      res.once("close", () => clearInterval(leaseTimer));
-      res.once("finish", () => clearInterval(leaseTimer));
+      res.once?.("close", () => clearInterval(leaseTimer));
+      res.once?.("finish", () => clearInterval(leaseTimer));
       req.body.idempotencyKey = idempotencyKey;
 
       const originalJson = res.json.bind(res);

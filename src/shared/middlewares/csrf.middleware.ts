@@ -48,6 +48,7 @@ export const csrfProtection = (
   const headerToken = req.headers[CSRF_HEADER_NAME];
 
   if (
+    typeof cookieToken !== "string" ||
     !cookieToken ||
     !headerToken ||
     typeof headerToken !== "string" ||

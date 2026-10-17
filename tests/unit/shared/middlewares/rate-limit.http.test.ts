@@ -14,17 +14,24 @@ vi.mock("rate-limit-redis", async () => {
   const { DependencyUnavailableError } = await import("@shared/errors/application-error");
   return {
     RedisStore: class {
-    async increment() {
-      if (state.unavailable) throw new DependencyUnavailableError("Rate limit store unavailable");
-      state.hits += 1;
-      return { totalHits: state.hits, resetTime: new Date(Date.now() + 60_000) };
-    }
-    async decrement() {
-      state.hits = Math.max(0, state.hits - 1);
-    }
-    async resetKey() {
-      state.hits = 0;
-    }
+      async increment() {
+        if (state.unavailable) {
+          throw new DependencyUnavailableError("Rate limit store unavailable");
+        }
+        state.hits += 1;
+        return {
+          totalHits: state.hits,
+          resetTime: new Date(Date.now() + 60_000),
+        };
+      }
+
+      async decrement() {
+        state.hits = Math.max(0, state.hits - 1);
+      }
+
+      async resetKey() {
+        state.hits = 0;
+      }
     },
   };
 });
@@ -53,6 +60,7 @@ describe("B7 HTTP rate limiting contract", () => {
     const response = await request(app).get("/api/example");
     expect(response.status).toBe(429);
     expect(response.body).toMatchObject({ success: false });
+    expect(response.headers["ratelimit-limit"]).toBe("2");
   });
 
   it("fails closed with 503 during store outage and resumes after recovery", async () => {

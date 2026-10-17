@@ -65,12 +65,10 @@ export const idempotencyMiddleware = (
         return replayOrReject(cached, requestHash, res, next);
       }
 
+      const claimValue = JSON.stringify({ state: "IN_PROGRESS", requestHash, ownerId: crypto.randomUUID() });
       const claimed = await redis.set(
         cacheKey,
-        JSON.stringify({
-          state: "IN_PROGRESS",
-          requestHash,
-        }),
+        claimValue,
         "EX",
         inProgressTtl,
         "NX",

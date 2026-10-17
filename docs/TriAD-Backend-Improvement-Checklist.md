@@ -1,6 +1,6 @@
 # TriAD Backend — Improvement Checklist
 
-**Cập nhật:** 15/10/2026 · **Nguồn:** `main` sau [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) · **Mục đích:** chỉ giữ công việc còn cần làm, các quyết định và tiêu chí nghiệm thu.
+**Cập nhật:** 17/10/2026 · **Nguồn:** `main` sau [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) · **Mục đích:** chỉ giữ công việc còn cần làm, các quyết định và tiêu chí nghiệm thu.
 
 > `PASS CI` là bằng chứng về code/test, **không** đồng nghĩa đã xác minh hoạt động ở production. Điểm đánh giá và rủi ro nằm trong [Audit Checklist](TriAD-Backend-audit-checklist-updated.md).
 
@@ -21,7 +21,7 @@
 | **P0** | **A1 / T6** | [PR #167](https://github.com/Thang4869/TriAD-Backend/pull/167) đã merge; [PR #169](https://github.com/Thang4869/TriAD-Backend/pull/169) đã merge, bổ sung **SIGKILL relay thực + replay dead-letter thủ công** với PostgreSQL/tracker thật, full CI PASS. Còn staging drill Redis/BullMQ/SMTP thật, 15 phút TTL và dead-letter alerting trước khi CLOSED. | **PARTIAL — process kill test PASS; staging pending** |
 | **P1** | **T2 / T6 / A8** | [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) đã merge, gồm lost-response retry, concurrent same-key và price-change tests. Nhánh `commit-15102026` bổ sung **Prometheus histogram độ tuổi event xử lý thành công**, unit tests và PromQL p95/p99; **chưa có số đo staging** hoặc API list-freshness SLO. | **PARTIAL — histogram CI pending; staging evidence OPEN** |
 | **P1** | **I9 / I6** | [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) đã merge: CI job **PostgreSQL Backup Restore Drill PASS**, kiểm chứng pg_dump → pg_restore vào DB cách ly, order/idempotency/outbox snapshot và rebuild 2 projections. Deployed restore/RTO/RPO + SIGTERM readiness drill vẫn mở. | **CI PROVEN / production drill OPEN** |
-| **P1** | **B7** | Staging: `TRUST_PROXY`, spoofed `X-Forwarded-For`, shared NAT, Redis disconnect/reconnect, HTTP 429/503. Đóng chỉ khi có log/evidence cấu hình thật. | PENDING deployment |
+| **P1** | **B7** | Staging: `TRUST_PROXY`, spoofed `X-Forwarded-For`, shared NAT, Redis disconnect/reconnect, HTTP 429/503. Có [staging drill checklist](RATE_LIMIT_STAGING_DRILL.md) để thu thập bằng chứng; đóng chỉ khi có log/evidence cấu hình thật. | PENDING deployment |
 | **P1** | **B6** | Review threat model và CSRF hiện tại; quyết định có cần session-bound signed token hay giữ existing approach. Chỉ refactor nếu có lý do bảo mật kiểm chứng. | REVIEW |
 | **P1** | **H2 / T3** | Frontend chuyển khỏi legacy `/api/checkout/orders*` sang canonical `/api/orders*`; mở rộng OpenAPI response/request contract; xóa alias chỉ khi FE E2E và versioning cho phép. | PARTIAL |
 | **P2** | **H7 / G12 / H11** | Rà unsafe cast/JSON boundary, `console.*`, nâng ESLint/TypeScript rules theo từng commit khi baseline sạch. | PARTIAL |

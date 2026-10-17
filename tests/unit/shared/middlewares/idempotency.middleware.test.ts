@@ -201,7 +201,12 @@ describe("idempotencyMiddleware", () => {
     await middleware(req as Request, res as Response, next);
 
     (res as any).json({ error: "not found" });
-    expect(redis.eval).not.toHaveBeenCalled();
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('redis.call("DEL"'),
+      1,
+      "idempotency:anonymous:unknown:key3",
+      expect.stringContaining('"ownerId":'),
+    );
   });
 
   it("should silently ignore errors when caching the response fails", async () => {
@@ -358,4 +363,43 @@ describe("idempotencyMiddleware", () => {
 
     expect(redis.eval).toHaveBeenCalledTimes(1);
   });
+  it("renews a claim for a long-running request and stops after completion", async () => {
+    vi.useFakeTimers();
+    try {
+      req.headers = { "idempotency-key": "long-running" };
+      vi.mocked(redis.eval).mockResolvedValue(1);
+      await idempotencyMiddleware()(req as Request, res as Response, next);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.stringContaining('redis.call("EXPIRE"'),
+        1,
+        "idempotency:anonymous:unknown:long-running",
+        expect.stringContaining('"ownerId":'),
+        "60",
+      );
+      (res as Response).json({ success: true });
+      const count = vi.mocked(redis.eval).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(vi.mocked(redis.eval).mock.calls.length).toBe(count);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops renewing if another request replaces the owned claim", async () => {
+    vi.useFakeTimers();
+    try {
+      req.headers = { "idempotency-key": "lost-owner" };
+      vi.mocked(redis.eval).mockResolvedValueOnce(0);
+      await idempotencyMiddleware()(req as Request, res as Response, next);
+      await vi.advanceTimersByTimeAsync(20_000);
+      const count = vi.mocked(redis.eval).mock.calls.length;
+      expect(count).toBe(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(vi.mocked(redis.eval).mock.calls.length).toBe(count);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
 });

@@ -54,6 +54,7 @@ export const idempotencyMiddleware = (
         req.baseUrl || (req.originalUrl || req.url || "unknown").split("?")[0];
 
       const cacheKey = `idempotency:${userId}:${route}:${idempotencyKey}`;
+      const keyFingerprint = crypto.createHash("sha256").update(cacheKey).digest("hex").slice(0, 16);
 
       const body = { ...((req.body || {}) as Record<string, unknown>) };
       delete body.idempotencyKey;
@@ -103,7 +104,7 @@ export const idempotencyMiddleware = (
           })
           .catch((error) => {
             clearInterval(leaseTimer);
-            logger.error("Idempotency lease renewal failed", { error });
+            logger.error("Idempotency lease renewal failed", { error, keyFingerprint });
           });
       }, Math.max(1000, Math.floor((inProgressTtl * 1000) / 3)));
       leaseTimer.unref();
@@ -120,7 +121,7 @@ export const idempotencyMiddleware = (
             .eval(
               COMPLETE_IF_OWNER,
               1,
-              cacheKey,
+              keyFingerprint,
               claimValue,
               JSON.stringify({
                 state: "COMPLETED",
@@ -133,14 +134,14 @@ export const idempotencyMiddleware = (
             .catch((error) => {
               logger.error("Failed to persist completed idempotency response", {
                 error,
-                cacheKey,
+                keyFingerprint,
               });
             });
         } else {
           redis.eval(DELETE_IF_OWNER, 1, cacheKey, claimValue).catch((error) => {
             logger.error("Failed to clear idempotency claim", {
               error,
-              cacheKey,
+              keyFingerprint,
             });
           });
         }

@@ -339,6 +339,6 @@ describe("idempotencyMiddleware", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(redis.del).toHaveBeenCalled();
+    expect(redis.del).toHaveBeenCalledTimes(1);
   });
 });

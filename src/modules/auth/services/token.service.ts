@@ -205,7 +205,11 @@ export class TokenService implements AccessTokenVerifierPort {
       config.JWT_PREAUTH_SECRET,
       "5m",
     );
-    await this.tokenStore.set(`auth:2fa:preauth:${claims.jti}`, userId, 300);
+    try {
+      await this.tokenStore.set(`auth:2fa:preauth:${claims.jti}`, userId, 300);
+    } catch (error) {
+      throw this.tokenStoreUnavailable("write", error);
+    }
     return token;
   }
 
@@ -229,9 +233,14 @@ export class TokenService implements AccessTokenVerifierPort {
       );
     }
 
-    const consumed = await this.tokenStore.getAndDelete(
-      `auth:2fa:preauth:${claims.jti}`,
-    );
+    let consumed: string | null;
+    try {
+      consumed = await this.tokenStore.getAndDelete(
+        `auth:2fa:preauth:${claims.jti}`,
+      );
+    } catch (error) {
+      throw this.tokenStoreUnavailable("read", error);
+    }
 
     if (consumed !== claims.sub) {
       throw new AuthenticationError("Pre-authentication token already used");

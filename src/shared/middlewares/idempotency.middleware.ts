@@ -90,11 +90,15 @@ export const idempotencyMiddleware = (
         return next(new ConflictError("Request is already in progress"));
       }
 
+      const leaseTimer = setInterval(() => { void redis.eval(RENEW_IF_OWNER, 1, cacheKey, claimValue, String(inProgressTtl)).catch((error) => logger.error("Idempotency lease renewal failed", { error })); }, Math.max(1000, Math.floor(inProgressTtl * 1000 / 3)));
+      leaseTimer.unref();
+      res.once?.("close", () => clearInterval(leaseTimer));
       req.body.idempotencyKey = idempotencyKey;
 
       const originalJson = res.json.bind(res);
 
       res.json = function (body: unknown) {
+        clearInterval(leaseTimer);
         if (res.statusCode >= 200 && res.statusCode < 300) {
           redis
             .eval(

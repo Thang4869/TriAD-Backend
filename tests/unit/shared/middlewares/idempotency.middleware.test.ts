@@ -183,7 +183,6 @@ describe("idempotencyMiddleware", () => {
         expect.stringContaining('"ownerId":'),
         expect.stringContaining('"state":"COMPLETED"'),
         "86400",
-      "86400",
       );
     } finally {
       if (original === undefined) {
@@ -252,7 +251,6 @@ describe("idempotencyMiddleware", () => {
         expect.stringContaining('"ownerId":'),
         expect.stringContaining('"state":"COMPLETED"'),
         "86400",
-      "86400",
       );
     } finally {
       if (originalTtl === undefined) {

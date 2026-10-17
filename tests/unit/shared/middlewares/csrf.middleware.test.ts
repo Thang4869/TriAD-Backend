@@ -171,4 +171,13 @@ describe("csrfProtection", () => {
 
     expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(AuthorizationError);
   });
+  it("rejects structured csrf cookies without throwing", () => {
+    const next = run({
+      method: "POST",
+      cookies: { refreshToken: "r", [CSRF_COOKIE_NAME]: { value: VALID_TOKEN } },
+      headers: { "x-csrf-token": VALID_TOKEN },
+    });
+    expect(vi.mocked(next).mock.calls[0][0]).toBeInstanceOf(AuthorizationError);
+  });
+
 });

@@ -54,6 +54,7 @@ export const idempotencyMiddleware = (
         req.baseUrl || (req.originalUrl || req.url || "unknown").split("?")[0];
 
       const cacheKey = `idempotency:${userId}:${route}:${idempotencyKey}`;
+      const keyFingerprint = crypto.createHash("sha256").update(cacheKey).digest("hex").slice(0, 16);
 
       const body = { ...((req.body || {}) as Record<string, unknown>) };
       delete body.idempotencyKey;
@@ -72,7 +73,11 @@ export const idempotencyMiddleware = (
         return replayOrReject(cached, requestHash, res, next);
       }
 
-      const claimValue = JSON.stringify({ state: "IN_PROGRESS", requestHash, ownerId: crypto.randomUUID() });
+      const claimValue = JSON.stringify({
+        state: "IN_PROGRESS",
+        requestHash,
+        ownerId: crypto.randomUUID(),
+      });
       const claimed = await redis.set(
         cacheKey,
         claimValue,
@@ -91,7 +96,17 @@ export const idempotencyMiddleware = (
         return next(new ConflictError("Request is already in progress"));
       }
 
-      const leaseTimer = setInterval(() => { void redis.eval(RENEW_IF_OWNER, 1, cacheKey, claimValue, String(inProgressTtl)).then((renewed) => { if (renewed !== 1) clearInterval(leaseTimer); }).catch((error) => { clearInterval(leaseTimer); logger.error("Idempotency lease renewal failed", { error }); }); }, Math.max(1000, Math.floor(inProgressTtl * 1000 / 3)));
+      const leaseTimer = setInterval(() => {
+        void redis
+          .eval(RENEW_IF_OWNER, 1, cacheKey, claimValue, String(inProgressTtl))
+          .then((renewed) => {
+            if (renewed !== 1) clearInterval(leaseTimer);
+          })
+          .catch((error) => {
+            clearInterval(leaseTimer);
+            logger.error("Idempotency lease renewal failed", { error, keyFingerprint });
+          });
+      }, Math.max(1000, Math.floor((inProgressTtl * 1000) / 3)));
       leaseTimer.unref();
       res.once?.("close", () => clearInterval(leaseTimer));
       res.once?.("finish", () => clearInterval(leaseTimer));
@@ -119,14 +134,14 @@ export const idempotencyMiddleware = (
             .catch((error) => {
               logger.error("Failed to persist completed idempotency response", {
                 error,
-                cacheKey,
+                keyFingerprint,
               });
             });
         } else {
           redis.eval(DELETE_IF_OWNER, 1, cacheKey, claimValue).catch((error) => {
             logger.error("Failed to clear idempotency claim", {
               error,
-              cacheKey,
+              keyFingerprint,
             });
           });
         }

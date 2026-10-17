@@ -121,7 +121,7 @@ export const idempotencyMiddleware = (
             .eval(
               COMPLETE_IF_OWNER,
               1,
-              keyFingerprint,
+              cacheKey,
               claimValue,
               JSON.stringify({
                 state: "COMPLETED",

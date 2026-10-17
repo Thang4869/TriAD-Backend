@@ -5,6 +5,7 @@ import redis from "@core/redis/client";
 import {
   UnprocessableError,
   ValidationError,
+  DependencyUnavailableError,
 } from "@shared/errors/application-error";
 import crypto from "crypto";
 
@@ -296,7 +297,7 @@ describe("idempotencyMiddleware", () => {
 
     await idempotencyMiddleware()(req as Request, res as Response, next);
 
-    expect(next).toHaveBeenCalledWith(redisError);
+    expect(next).toHaveBeenCalledWith(expect.any(DependencyUnavailableError));
   });
 
   it("forwards redis.set failure to next(error)", async () => {
@@ -309,7 +310,7 @@ describe("idempotencyMiddleware", () => {
 
     await idempotencyMiddleware()(req as Request, res as Response, next);
 
-    expect(next).toHaveBeenCalledWith(redisError);
+    expect(next).toHaveBeenCalledWith(expect.any(DependencyUnavailableError));
   });
 
   it("forwards the second redis.get failure after a failed NX claim", async () => {
@@ -326,7 +327,7 @@ describe("idempotencyMiddleware", () => {
     await idempotencyMiddleware()(req as Request, res as Response, next);
 
     expect(redis.get).toHaveBeenCalledTimes(2);
-    expect(next).toHaveBeenCalledWith(redisError);
+    expect(next).toHaveBeenCalledWith(expect.any(DependencyUnavailableError));
   });
 
   it("logs redis.setex failure after a successful response", async () => {

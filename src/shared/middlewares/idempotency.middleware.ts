@@ -17,6 +17,12 @@ if redis.call("GET", KEYS[1]) == ARGV[1] then
 end
 return 0
 `;
+const RENEW_IF_OWNER = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("EXPIRE", KEYS[1], ARGV[2])
+end
+return 0
+`;
 const DELETE_IF_OWNER = `
 if redis.call("GET", KEYS[1]) == ARGV[1] then
   return redis.call("DEL", KEYS[1])
@@ -84,11 +90,16 @@ export const idempotencyMiddleware = (
         return next(new ConflictError("Request is already in progress"));
       }
 
+      const leaseTimer = setInterval(() => { void redis.eval(RENEW_IF_OWNER, 1, cacheKey, claimValue, String(inProgressTtl)).then((renewed) => { if (renewed !== 1) clearInterval(leaseTimer); }).catch((error) => { clearInterval(leaseTimer); logger.error("Idempotency lease renewal failed", { error }); }); }, Math.max(1000, Math.floor(inProgressTtl * 1000 / 3)));
+      leaseTimer.unref();
+      res.once?.("close", () => clearInterval(leaseTimer));
+      res.once?.("finish", () => clearInterval(leaseTimer));
       req.body.idempotencyKey = idempotencyKey;
 
       const originalJson = res.json.bind(res);
 
       res.json = function (body: unknown) {
+        clearInterval(leaseTimer);
         if (res.statusCode >= 200 && res.statusCode < 300) {
           redis
             .eval(

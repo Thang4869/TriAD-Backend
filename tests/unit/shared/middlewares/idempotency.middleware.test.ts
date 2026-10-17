@@ -13,6 +13,7 @@ vi.mock("@core/redis/client", () => ({
     get: vi.fn().mockResolvedValue(null),
     set: vi.fn().mockResolvedValue("OK"),
     setex: vi.fn().mockResolvedValue("OK"),
+    eval: vi.fn().mockResolvedValue("OK"),
     del: vi.fn().mockResolvedValue(1),
   },
 }));
@@ -156,9 +157,11 @@ describe("idempotencyMiddleware", () => {
     expect(next).toHaveBeenCalledWith();
 
     (res as any).json({ success: true });
-    expect(redis.setex).toHaveBeenCalledWith(
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('redis.call("GET"'),
+      1,
       "idempotency:anonymous:unknown:key2",
-      expect.any(Number),
+      expect.stringContaining('"ownerId":'),
       expect.stringContaining('"state":"COMPLETED"'),
     );
   });
@@ -172,9 +175,11 @@ describe("idempotencyMiddleware", () => {
       await middleware(req as Request, res as Response, next);
 
       (res as any).json({ success: true });
-      expect(redis.setex).toHaveBeenCalledWith(
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
         "idempotency:anonymous:unknown:key2-env-ttl",
-        86400,
+        expect.stringContaining('"ownerId":'),
         expect.stringContaining('"state":"COMPLETED"'),
       );
     } finally {
@@ -193,33 +198,35 @@ describe("idempotencyMiddleware", () => {
     await middleware(req as Request, res as Response, next);
 
     (res as any).json({ error: "not found" });
-    expect(redis.setex).not.toHaveBeenCalled();
+    expect(redis.eval).not.toHaveBeenCalled();
   });
 
   it("should silently ignore errors when caching the response fails", async () => {
     req.headers = { "idempotency-key": "key4" };
-    vi.mocked(redis.setex).mockRejectedValueOnce(new Error("redis down"));
+    vi.mocked(redis.eval).mockRejectedValueOnce(new Error("redis down"));
     const middleware = idempotencyMiddleware();
     await middleware(req as Request, res as Response, next);
 
     expect(() => (res as any).json({ success: true })).not.toThrow();
     await Promise.resolve();
     await Promise.resolve();
-    expect(redis.setex).toHaveBeenCalled();
+    expect(redis.eval).toHaveBeenCalled();
   });
 
   it("should cache a response when the cache write resolves", async () => {
     req.headers = { "idempotency-key": "key4-success" };
-    vi.mocked(redis.setex).mockResolvedValueOnce("OK");
+    vi.mocked(redis.eval).mockResolvedValueOnce("OK");
     const middleware = idempotencyMiddleware();
     await middleware(req as Request, res as Response, next);
 
     (res as any).json({ success: true });
     await Promise.resolve();
 
-    expect(redis.setex).toHaveBeenCalledWith(
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.any(String),
+      1,
       "idempotency:anonymous:unknown:key4-success",
-      86400,
+      expect.stringContaining('"ownerId":'),
       expect.stringContaining('"state":"COMPLETED"'),
     );
   });
@@ -234,9 +241,11 @@ describe("idempotencyMiddleware", () => {
 
       (res as any).json({ success: true });
 
-      expect(redis.setex).toHaveBeenCalledWith(
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
         "idempotency:anonymous:unknown:key-default-ttl",
-        86400,
+        expect.stringContaining('"ownerId":'),
         expect.stringContaining('"state":"COMPLETED"'),
       );
     } finally {
@@ -257,9 +266,11 @@ describe("idempotencyMiddleware", () => {
     await middleware(req as Request, res as Response, next);
 
     (res as any).json({ success: true });
-    expect(redis.setex).toHaveBeenCalledWith(
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.any(String),
+      1,
       "idempotency:anonymous:unknown:key5",
-      86400,
+      expect.stringContaining('"ownerId":'),
       expect.stringContaining('"state":"COMPLETED"'),
     );
 
@@ -311,7 +322,7 @@ describe("idempotencyMiddleware", () => {
     req.headers = { "idempotency-key": "setex-log-fail" };
 
     const redisError = new Error("redis setex failed");
-    vi.mocked(redis.setex).mockRejectedValueOnce(redisError);
+    vi.mocked(redis.eval).mockRejectedValueOnce(redisError);
 
     const middleware = idempotencyMiddleware();
     await middleware(req as Request, res as Response, next);
@@ -321,7 +332,7 @@ describe("idempotencyMiddleware", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(redis.setex).toHaveBeenCalled();
+    expect(redis.eval).toHaveBeenCalled();
   });
 
   it("logs redis.del failure after a non-2xx response", async () => {
@@ -329,7 +340,7 @@ describe("idempotencyMiddleware", () => {
     (res as any).statusCode = 500;
 
     const redisError = new Error("redis del failed");
-    vi.mocked(redis.del).mockRejectedValueOnce(redisError);
+    vi.mocked(redis.eval).mockRejectedValueOnce(redisError);
 
     const middleware = idempotencyMiddleware();
     await middleware(req as Request, res as Response, next);
@@ -339,6 +350,6 @@ describe("idempotencyMiddleware", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(redis.del).toHaveBeenCalledTimes(1);
+    expect(redis.eval).toHaveBeenCalledTimes(1);
   });
 });

@@ -6,6 +6,7 @@ import {
   ValidationError,
   ConflictError,
   UnprocessableError,
+  DependencyUnavailableError,
 } from "@shared/errors/application-error";
 import { logger } from "@core/logger/winston";
 
@@ -135,7 +136,8 @@ export const idempotencyMiddleware = (
 
       next();
     } catch (error) {
-      next(error);
+      logger.error("Idempotency Redis state unavailable", { error });
+      next(new DependencyUnavailableError("Idempotency temporarily unavailable"));
     }
   };
 };

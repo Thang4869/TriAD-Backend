@@ -532,6 +532,29 @@ describe("TokenService access-token claims and revocation", () => {
     expect(store.getAndDelete).not.toHaveBeenCalled();
   });
 
+
+  it("fails closed when Redis cannot save the 2FA preauth nonce", async () => {
+    const store = createTokenStore();
+    store.set.mockRejectedValueOnce(new Error("redis offline"));
+    await expect(
+      new TokenService(createRepo(), store).issueTwoFactorPreAuthToken("user-1"),
+    ).rejects.toThrow(DependencyUnavailableError);
+  });
+
+  it("fails closed when Redis cannot consume a 2FA preauth nonce", async () => {
+    vi.mocked(verifyToken).mockReturnValue({
+      ...validAccessClaims(),
+      tokenType: "preauth",
+      aud: "triad:preauth",
+      purpose: "2fa",
+    });
+    const store = createTokenStore();
+    store.getAndDelete.mockRejectedValueOnce(new Error("redis offline"));
+    await expect(
+      new TokenService(createRepo(), store).consumeTwoFactorPreAuthToken("PREAUTH"),
+    ).rejects.toThrow(DependencyUnavailableError);
+  });
+
   it("uses only a hash of jti as revocation key, never the raw token", async () => {
     vi.mocked(verifyToken).mockReturnValue(validAccessClaims());
     const store = createTokenStore();

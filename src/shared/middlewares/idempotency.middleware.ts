@@ -95,13 +95,12 @@ export const idempotencyMiddleware = (
               });
             });
         } else {
-          (redis.del(cacheKey),
-            redis.del(cacheKey).catch((error) => {
-              logger.error("Failed to clear idempotency claim", {
-                error,
-                cacheKey,
-              });
-            }));
+          redis.del(cacheKey).catch((error) => {
+            logger.error("Failed to clear idempotency claim", {
+              error,
+              cacheKey,
+            });
+          });
         }
 
         return originalJson(body);

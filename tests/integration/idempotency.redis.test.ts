@@ -164,9 +164,8 @@ describe("idempotencyMiddleware with real Redis", () => {
     await redis.set(cacheKey, replacement, "EX", 60);
 
     successful.response.json({ orderId: "stale-order" });
-    await vi.waitFor(async () => {
-      expect(await redis.get(cacheKey)).toBe(replacement);
-    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await redis.get(cacheKey)).toBe(replacement);
 
     const failed = createResponse(500);
     await idempotencyMiddleware()(
@@ -180,9 +179,8 @@ describe("idempotencyMiddleware with real Redis", () => {
     expect(failedClaim).not.toBeNull();
     await redis.set(failedKey, replacement, "EX", 60);
     failed.response.json({ error: "late failure" });
-    await vi.waitFor(async () => {
-      expect(await redis.get(failedKey)).toBe(replacement);
-    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await redis.get(failedKey)).toBe(replacement);
   });
 
 });

@@ -163,6 +163,7 @@ describe("idempotencyMiddleware", () => {
       "idempotency:anonymous:unknown:key2",
       expect.stringContaining('"ownerId":'),
       expect.stringContaining('"state":"COMPLETED"'),
+      "86400",
     );
   });
 
@@ -181,6 +182,8 @@ describe("idempotencyMiddleware", () => {
         "idempotency:anonymous:unknown:key2-env-ttl",
         expect.stringContaining('"ownerId":'),
         expect.stringContaining('"state":"COMPLETED"'),
+        "86400",
+      "86400",
       );
     } finally {
       if (original === undefined) {
@@ -228,6 +231,7 @@ describe("idempotencyMiddleware", () => {
       "idempotency:anonymous:unknown:key4-success",
       expect.stringContaining('"ownerId":'),
       expect.stringContaining('"state":"COMPLETED"'),
+      "86400",
     );
   });
 
@@ -247,6 +251,8 @@ describe("idempotencyMiddleware", () => {
         "idempotency:anonymous:unknown:key-default-ttl",
         expect.stringContaining('"ownerId":'),
         expect.stringContaining('"state":"COMPLETED"'),
+        "86400",
+      "86400",
       );
     } finally {
       if (originalTtl === undefined) {
@@ -272,6 +278,7 @@ describe("idempotencyMiddleware", () => {
       "idempotency:anonymous:unknown:key5",
       expect.stringContaining('"ownerId":'),
       expect.stringContaining('"state":"COMPLETED"'),
+      "86400",
     );
 
     process.env.IDEMPOTENCY_TTL = originalTtl;

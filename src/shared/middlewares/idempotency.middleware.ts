@@ -17,6 +17,12 @@ if redis.call("GET", KEYS[1]) == ARGV[1] then
 end
 return 0
 `;
+const RENEW_IF_OWNER = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("EXPIRE", KEYS[1], ARGV[2])
+end
+return 0
+`;
 const DELETE_IF_OWNER = `
 if redis.call("GET", KEYS[1]) == ARGV[1] then
   return redis.call("DEL", KEYS[1])

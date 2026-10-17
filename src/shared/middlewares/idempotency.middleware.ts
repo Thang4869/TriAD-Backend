@@ -72,7 +72,11 @@ export const idempotencyMiddleware = (
         return replayOrReject(cached, requestHash, res, next);
       }
 
-      const claimValue = JSON.stringify({ state: "IN_PROGRESS", requestHash, ownerId: crypto.randomUUID() });
+      const claimValue = JSON.stringify({
+        state: "IN_PROGRESS",
+        requestHash,
+        ownerId: crypto.randomUUID(),
+      });
       const claimed = await redis.set(
         cacheKey,
         claimValue,
@@ -91,10 +95,20 @@ export const idempotencyMiddleware = (
         return next(new ConflictError("Request is already in progress"));
       }
 
-      const leaseTimer = setInterval(() => { void redis.eval(RENEW_IF_OWNER, 1, cacheKey, claimValue, String(inProgressTtl)).then((renewed) => { if (renewed !== 1) clearInterval(leaseTimer); }).catch((error) => { clearInterval(leaseTimer); logger.error("Idempotency lease renewal failed", { error }); }); }, Math.max(1000, Math.floor(inProgressTtl * 1000 / 3)));
+      const leaseTimer = setInterval(() => {
+        void redis
+          .eval(RENEW_IF_OWNER, 1, cacheKey, claimValue, String(inProgressTtl))
+          .then((renewed) => {
+            if (renewed !== 1) clearInterval(leaseTimer);
+          })
+          .catch((error) => {
+            clearInterval(leaseTimer);
+            logger.error("Idempotency lease renewal failed", { error });
+          });
+      }, Math.max(1000, Math.floor((inProgressTtl * 1000) / 3)));
       leaseTimer.unref();
-      res.once?.("close", () => clearInterval(leaseTimer));
-      res.once?.("finish", () => clearInterval(leaseTimer));
+      res.once("close", () => clearInterval(leaseTimer));
+      res.once("finish", () => clearInterval(leaseTimer));
       req.body.idempotencyKey = idempotencyKey;
 
       const originalJson = res.json.bind(res);

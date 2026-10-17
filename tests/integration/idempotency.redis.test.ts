@@ -141,6 +141,48 @@ describe("idempotencyMiddleware with real Redis", () => {
     expect(secondNext).toHaveBeenCalledWith(expect.any(UnprocessableError));
     expect(secondRes.json).not.toHaveBeenCalled();
   });
+  it("does not overwrite or delete a replacement claim from a stale response", async () => {
+    const idempotencyKey = `redis-idem-fence-${Date.now()}`;
+    const userId = "redis-idempotency-user";
+    const route = "/api/checkout";
+    const cacheKey = `idempotency:${userId}:${route}:${idempotencyKey}`;
+    createdKeys.add(cacheKey);
+
+    const req = createRequest(idempotencyKey, { amount: 100 }, userId, route);
+    const successful = createResponse(201);
+    await idempotencyMiddleware()(req as Request, successful.response, vi.fn());
+
+    const oldValue = await redis.get(cacheKey);
+    expect(oldValue).not.toBeNull();
+
+    // Simulate lease expiry followed by a new owner's successful NX claim.
+    const replacement = JSON.stringify({
+      state: "IN_PROGRESS",
+      requestHash: JSON.parse(oldValue!).requestHash,
+      ownerId: "replacement-owner",
+    });
+    await redis.set(cacheKey, replacement, "EX", 60);
+
+    successful.response.json({ orderId: "stale-order" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await redis.get(cacheKey)).toBe(replacement);
+
+    const failed = createResponse(500);
+    await idempotencyMiddleware()(
+      createRequest(`${idempotencyKey}-failure`, { amount: 100 }, userId, route) as Request,
+      failed.response,
+      vi.fn(),
+    );
+    const failedKey = `idempotency:${userId}:${route}:${idempotencyKey}-failure`;
+    createdKeys.add(failedKey);
+    const failedClaim = await redis.get(failedKey);
+    expect(failedClaim).not.toBeNull();
+    await redis.set(failedKey, replacement, "EX", 60);
+    failed.response.json({ error: "late failure" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await redis.get(failedKey)).toBe(replacement);
+  });
+
 });
 
 function createRequest(

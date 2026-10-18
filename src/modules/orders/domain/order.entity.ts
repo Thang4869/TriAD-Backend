@@ -175,7 +175,7 @@ export class Order extends AggregateRoot {
     unitPrice: Money,
   ): void {
     this.assertMutable();
-    if (!Number.isInteger(quantity) || quantity <= 0) {
+    if (!Number.isSafeInteger(quantity) || quantity <= 0) {
       throw new InvalidOrderItemError("Quantity must be positive");
     }
     const existing = this._items.find((item) => item.productId === productId);
@@ -187,6 +187,10 @@ export class Order extends AggregateRoot {
       }
 
       const idx = this._items.indexOf(existing);
+
+      if (!Number.isSafeInteger(existing.quantity + quantity)) {
+        throw new InvalidOrderItemError("Merged quantity exceeds safe integer range");
+      }
 
       this._items[idx] = new OrderItem(
         existing.productId,
@@ -234,6 +238,9 @@ export class Order extends AggregateRoot {
     if (this._items.length === 0) {
       throw new EmptyOrderError();
     }
+    // Validate all derived money before committing the placed state.
+    const subtotal = this.subtotal.getValue();
+    const total = this.total.getValue();
     this._hasBeenPlaced = true;
     this.raise(
       new OrderPlacedEvent(
@@ -243,10 +250,10 @@ export class Order extends AggregateRoot {
         this.customerName,
         this.customerEmail,
         this.paymentStatus,
-        this.subtotal.getValue(),
+        subtotal,
         this.tax.getValue(),
         this.shippingFee.getValue(),
-        this.total.getValue(),
+        total,
         this._items.map((item) => ({
           productId: item.productId,
           productName: item.productName,

@@ -1,6 +1,6 @@
 # TriAD Backend — Improvement Checklist
 
-**Cập nhật:** 18/10/2026 · **Nguồn:** `main` sau [PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192); checklist và rate-limit fix/test ở [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193) đã qua CI, đang chờ merge · **Mục đích:** phân biệt bằng chứng CI, gate staging còn mở và thứ tự công việc.
+**Cập nhật:** 18/10/2026 · **Nguồn:** `main` sau [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193) · **Mục đích:** phân biệt bằng chứng CI, gate staging còn mở và thứ tự công việc.
 
 > `PASS CI` là bằng chứng về code/test, **không** đồng nghĩa đã xác minh hoạt động ở production. Điểm đánh giá và rủi ro nằm trong [Audit Checklist](TriAD-Backend-audit-checklist-updated.md).
 
@@ -15,7 +15,7 @@
 
 ## Tiến độ refactor theo đợt (18/10/2026)
 
-- **Đợt 1 — Security/Reliability (PARTIAL):** B7 HTTP 429/503 tests, idempotency owner fencing và heartbeat, 2FA Redis fail-closed, malformed CSRF cookie validation. Đã bổ sung [idempotency recovery acceptance](IDEMPOTENCY_RECOVERY.md) và [rate limit staging drill](RATE_LIMIT_STAGING_DRILL.md). Chưa đóng #84/#90/#140 vì CI HEAD, Redis/proxy staging, process-crash recovery và cross-origin evidence chưa được nghiệm thu.
+- **Đợt 1 — Security/Reliability (PARTIAL):** B7 HTTP 429/503 tests, idempotency owner fencing và heartbeat, 2FA Redis fail-closed, malformed CSRF cookie validation. Đã bổ sung [idempotency recovery acceptance](IDEMPOTENCY_RECOVERY.md) và [rate limit staging drill](RATE_LIMIT_STAGING_DRILL.md). Chưa đóng #84/#90/#140 vì Redis/proxy staging, process-crash recovery và cross-origin evidence chưa được nghiệm thu.
 - **Đợt 2 — Architecture/API (IN PROGRESS):** Sửa việc giữ instance scoped cũ khi `register()` hoặc `override()` thay factory trong cùng container; bổ sung regression tests. FE migration sang `/api/orders`, OpenAPI contracts, read-after-write consistency và request-scope usage vẫn đang mở.
 - **Quy tắc merge:** không suy diễn production PASS từ unit tests; đối chiếu CI tại SHA cuối của PR trước khi merge.
 
@@ -37,7 +37,7 @@ Các mức ưu tiên phản ánh rủi ro release và bằng chứng còn thiế
 | 10 | **P2 — auditability** | [#147](https://github.com/Thang4869/TriAD-Backend/issues/147) · J3 | Lưu admin actor/target/action/outcome với redaction; thêm authorization, retention và audit-log tests. | Chưa hoàn tất end-to-end. |
 | 11 | **P2 — release/demo** | [#149](https://github.com/Thang4869/TriAD-Backend/issues/149), [#150](https://github.com/Thang4869/TriAD-Backend/issues/150) · I8/K4 | Chuẩn hóa tag/changelog/deploy rollback; hoàn thiện demo được bảo vệ và chỉ dùng CV metrics có nguồn kiểm chứng. | Còn mở; không chặn release nếu vận hành nội bộ không yêu cầu demo. |
 
-**Thứ tự bắt đầu:** hoàn tất test Redis thật và CI (#140 code gate), đồng thời chuẩn bị staging runbooks/ownership cho #143 → #140 → #84. Sau đó xử lý B10/CSRF và API compatibility; k6/mutation/audit trail theo sau. Những bước cần endpoint, secret hoặc dữ liệu staging phải được đánh dấu **BLOCKED ON ENVIRONMENT**, không giả lập đã xong.
+**Thứ tự tiếp theo:** #140 code gate đã PASS CI qua [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193); chuẩn bị staging runbooks/ownership cho #143 → #140 → #84. Sau đó xử lý B10/CSRF và API compatibility; k6/mutation/audit trail theo sau. Những bước cần endpoint, secret hoặc dữ liệu staging phải được đánh dấu **BLOCKED ON ENVIRONMENT**, không giả lập đã xong.
 
 **Backlog có điều kiện, không phải blocker:** D3/D5/H10 (thêm DI/port/split chỉ khi cần), F1/G3/G10 (payment/Saga/Strategy khi có provider use case thật), G2/G11/G13–G16 (domain cleanup theo invariant), H4/H5/H8/H12/H13 (naming/dependency hygiene), T1/T8 (test helpers/API tests), J4 (error docs/versioning). Không tăng số lượng pattern/interface để theo đuổi “10/10”.
 

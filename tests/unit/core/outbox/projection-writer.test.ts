@@ -1,6 +1,9 @@
 import { Prisma } from "@prisma/client";
-import { describe, expect, it } from "vitest";
-import { writeProductCatalogProjection } from "@core/outbox/projection-writer";
+import { describe, expect, it, vi } from "vitest";
+import {
+  writeProductCatalogProjection,
+  writeOrderHistoryProjection,
+} from "@core/outbox/projection-writer";
 
 function productData(sourceVersion: number, name: string) {
   return {
@@ -145,4 +148,40 @@ describe("projection writer ordering", () => {
       ),
     ).rejects.toBe(uniqueConflict);
   });
+});
+
+
+describe("projection source version validation", () => {
+  const invalidVersions = [-1, 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1];
+
+  it.each(invalidVersions)(
+    "rejects invalid product source version %s before database write",
+    async (version) => {
+      const updateMany = vi.fn();
+      const create = vi.fn();
+      const db = { productCatalogProjection: { updateMany, create, findUnique: vi.fn() } };
+      await expect(
+        writeProductCatalogProjection(db as never, productData(version, "invalid")),
+      ).rejects.toThrow("Projection source version must be a non-negative safe integer");
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(invalidVersions)(
+    "rejects invalid order source version %s before database write",
+    async (version) => {
+      const updateMany = vi.fn();
+      const create = vi.fn();
+      const db = { orderHistoryProjection: { updateMany, create, findUnique: vi.fn() } };
+      await expect(writeOrderHistoryProjection(db as never, {
+        orderId: "order-1",
+        sourceVersion: version,
+      } as Prisma.OrderHistoryProjectionUncheckedCreateInput)).rejects.toThrow(
+        "Projection source version must be a non-negative safe integer",
+      );
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
 });

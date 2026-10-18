@@ -5,14 +5,24 @@ import {
 } from "@shared/constants/pagination.constant";
 import { NotificationType } from "@shared/constants/notification-type.enum";
 import type { INotificationsRepository } from "./application/ports/notifications.repository.port";
+import type { NotificationRecord } from "./application/ports/notification-models";
+
+export interface NotificationsPage {
+  notifications: NotificationRecord[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 
 export interface INotificationsService {
   getNotifications(
     userId: string,
     page?: number,
     limit?: number,
-  ): Promise<unknown>;
-  markAsRead(notificationId: string, userId: string): Promise<unknown>;
+  ): Promise<NotificationsPage>;
+  markAsRead(notificationId: string, userId: string): Promise<NotificationRecord>;
   markAllAsRead(userId: string): Promise<{ count: number }>;
   createNotification(
     userId: string,
@@ -20,7 +30,7 @@ export interface INotificationsService {
     message: string,
     type?: NotificationType,
     idempotencyKey?: string,
-  ): Promise<unknown>;
+  ): Promise<NotificationRecord>;
 }
 
 export class NotificationsService implements INotificationsService {

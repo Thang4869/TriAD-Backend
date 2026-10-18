@@ -1,6 +1,6 @@
 # TriAD Backend — Improvement Checklist
 
-**Cập nhật:** 17/10/2026 · **Nguồn:** `main` sau [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) · **Mục đích:** chỉ giữ công việc còn cần làm, các quyết định và tiêu chí nghiệm thu.
+**Cập nhật:** 18/10/2026 · **Nguồn:** `main` sau [PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192); thay đổi checklist và kiểm thử Redis thật đang chờ CI trong nhánh `commit-18102026` · **Mục đích:** phân biệt bằng chứng CI, gate staging còn mở và thứ tự công việc.
 
 > `PASS CI` là bằng chứng về code/test, **không** đồng nghĩa đã xác minh hoạt động ở production. Điểm đánh giá và rủi ro nằm trong [Audit Checklist](TriAD-Backend-audit-checklist-updated.md).
 
@@ -19,22 +19,25 @@
 - **Đợt 2 — Architecture/API (IN PROGRESS):** Sửa việc giữ instance scoped cũ khi `register()` hoặc `override()` thay factory trong cùng container; bổ sung regression tests. FE migration sang `/api/orders`, OpenAPI contracts, read-after-write consistency và request-scope usage vẫn đang mở.
 - **Quy tắc merge:** không suy diễn production PASS từ unit tests; đối chiếu CI tại SHA cuối của PR trước khi merge.
 
-## Backlog ưu tiên (chỉ các gap có tác động)
+## Backlog ưu tiên — việc còn phải hoàn thành theo thứ tự
 
-| Ưu tiên | Mã | Việc cần làm / điều kiện đóng | Trạng thái |
-| --- | --- | --- | --- |
-| **P0** | **B10** | PR [#166](https://github.com/Thang4869/TriAD-Backend/pull/166), [#170](https://github.com/Thang4869/TriAD-Backend/pull/170), [#172](https://github.com/Thang4869/TriAD-Backend/pull/172), [#173](https://github.com/Thang4869/TriAD-Backend/pull/173) **merged**; production audit on `main`: **0 critical / 0 high / 0 moderate**; full graph còn **16 high / 5 moderate**. Duy trì critical gate; triage dev-only, kiểm thử staging Cloudinary/OTLP, đánh giá SBOM. | **PROD AUDIT PASS / STAGING PENDING** |
-| **P0** | **A1 / T6** | [PR #167](https://github.com/Thang4869/TriAD-Backend/pull/167) đã merge; [PR #169](https://github.com/Thang4869/TriAD-Backend/pull/169) đã merge, bổ sung **SIGKILL relay thực + replay dead-letter thủ công** với PostgreSQL/tracker thật, full CI PASS. Còn staging drill Redis/BullMQ/SMTP thật, 15 phút TTL và dead-letter alerting trước khi CLOSED. | **PARTIAL — process kill test PASS; staging pending** |
-| **P1** | **T2 / T6 / A8** | [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) đã merge, gồm lost-response retry, concurrent same-key và price-change tests. Nhánh `commit-15102026` bổ sung **Prometheus histogram độ tuổi event xử lý thành công**, unit tests và PromQL p95/p99; **chưa có số đo staging** hoặc API list-freshness SLO. | **PARTIAL — histogram CI pending; staging evidence OPEN** |
-| **P1** | **I9 / I6** | [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) đã merge: CI job **PostgreSQL Backup Restore Drill PASS**, kiểm chứng pg_dump → pg_restore vào DB cách ly, order/idempotency/outbox snapshot và rebuild 2 projections. Deployed restore/RTO/RPO + SIGTERM readiness drill vẫn mở. | **CI PROVEN / production drill OPEN** |
-| **P1** | **B7** | Staging: `TRUST_PROXY`, spoofed `X-Forwarded-For`, shared NAT, Redis disconnect/reconnect, HTTP 429/503. Có [staging drill checklist](RATE_LIMIT_STAGING_DRILL.md) để thu thập bằng chứng; đóng chỉ khi có log/evidence cấu hình thật. | PENDING deployment |
-| **P1** | **B6** | Review threat model và CSRF hiện tại; quyết định có cần session-bound signed token hay giữ existing approach. Chỉ refactor nếu có lý do bảo mật kiểm chứng. | REVIEW |
-| **P1** | **H2 / T3** | Frontend chuyển khỏi legacy `/api/checkout/orders*` sang canonical `/api/orders*`; mở rộng OpenAPI response/request contract; xóa alias chỉ khi FE E2E và versioning cho phép. | PARTIAL |
-| **P2** | **H7 / G12 / H11** | Rà unsafe cast/JSON boundary, `console.*`, nâng ESLint/TypeScript rules theo từng commit khi baseline sạch. | PARTIAL |
-| **P2** | **J1 / J2 / J3** | Trace/span ID trong logs; SLO + dashboard/alert runbook; audit trail admin với actor/target/outcome. | PARTIAL |
-| **P2** | **T7 / T4** | k6 checkout/load evidence (p95/p99/errors) và mutation-test report cho domain/core. | OPEN |
-| **P2** | **I2 / I4 / I8 / I10** | Pin/scanning/SBOM, deployment resource/migration strategy, release tags/changelog và env/secret injection review. | PARTIAL |
-| **P3** | **K2 / K3 / K4 / K5** | Đã merge ADR-0001, SECURITY.md và CONTRIBUTING.md qua [#174](https://github.com/Thang4869/TriAD-Backend/pull/174). **MIT License được chủ repo phê duyệt** và đã thêm [LICENSE](../LICENSE), [learning guide](LEARNING_GUIDE.md), README có evidence map. Demo, API demo bảo vệ và CV metrics có nguồn vẫn OPEN. | **PARTIAL — MIT done; demo/evidence OPEN** |
+Các mức ưu tiên phản ánh rủi ro release và bằng chứng còn thiếu. **P0** là gate cần đóng trước production; **P1** là rủi ro chất lượng/bảo mật cần xử lý trước khi mở rộng rollout; **P2** là nâng độ tin cậy và khả năng vận hành sau khi các gate P0 đã có chủ sở hữu, kế hoạch và bằng chứng. Không đóng issue chỉ dựa trên test giả lập hoặc tài liệu.
+
+| Thứ tự | Ưu tiên | Issue | Việc cần hoàn tất / bằng chứng để đóng | Trạng thái hiện tại |
+| ---: | --- | --- | --- | --- |
+| 1 | **P0 — release gate** | [#143](https://github.com/Thang4869/TriAD-Backend/issues/143) · I9/I6 | Chạy backup/restore trên staging hoặc môi trường production-like sạch; khôi phục PostgreSQL, replay outbox/rebuild projections, chạy SIGTERM readiness drill; ghi RTO/RPO thực đo và quyết định Redis persistence/eviction. Lưu log, timestamp, kết quả đối chiếu và runbook rollback. | CI backup/restore cách ly PASS; **deployed restore và RTO/RPO chưa có**. |
+| 2 | **P0 — security release gate** | [#140](https://github.com/Thang4869/TriAD-Backend/issues/140) · B7 | Xác nhận topology `TRUST_PROXY`, spoofed `X-Forwarded-For`, shared NAT, policy health/readiness và Redis disconnect/reconnect qua proxy staging; lưu cấu hình/log chứng minh 429/503. | HTTP behavior có unit test; **kiểm thử Redis thật mới được thêm vào PR này, chờ CI; staging/proxy evidence còn thiếu**. Dùng [rate-limit drill](RATE_LIMIT_STAGING_DRILL.md). |
+| 3 | **P0 — checkout recovery** | [#84](https://github.com/Thang4869/TriAD-Backend/issues/84) | Thực hiện retry sau timeout/mất response và process crash trên staging; xác nhận lease/owner fencing, replay cùng idempotency key không tạo order/trừ stock lần hai; lưu Redis state và order/stock đối chiếu. | CI chứng minh các nhánh idempotency hiện có; **process-crash và staging recovery chưa được nghiệm thu**. Dùng [idempotency recovery](IDEMPOTENCY_RECOVERY.md). |
+| 4 | **P1 — dependency/configuration** | [#141](https://github.com/Thang4869/TriAD-Backend/issues/141) · B10 | Duy trì production audit gate 0 critical/high; phân loại 16 high/5 moderate của full graph, lập ngoại lệ có thời hạn nếu cần; kiểm tra SBOM và xác minh Cloudinary/OTLP với config staging thật. | Production audit trên main 0 critical/high/moderate; full graph và staging smoke còn mở. |
+| 5 | **P1 — CSRF/auth boundary** | [#90](https://github.com/Thang4869/TriAD-Backend/issues/90) · B6 | Chốt threat model CSRF/proxy trust bằng test cross-origin với browser/cookie settings thực tế; ghi quyết định signed token hay giữ thiết kế hiện tại và bằng chứng reject/accept. | Baseline CI có; cross-origin staging/browser evidence và quyết định threat model còn mở. |
+| 6 | **P1 — architecture** | [#146](https://github.com/Thang4869/TriAD-Backend/issues/146) | Hoàn tất DI container modularization chỉ nơi còn giảm coupling thực; giữ dependency-cruiser architecture gate và thêm regression test cho registration/override/scoped instance. | Một regression đã được sửa; xác minh issue acceptance criteria còn lại trước khi đóng. |
+| 7 | **P1 — API contract** | [#148](https://github.com/Thang4869/TriAD-Backend/issues/148) · H2/T3 | Chuyển FE sang `/api/orders*`; thêm OpenAPI request/response contract cho luồng chính; chỉ bỏ checkout aliases sau FE E2E, deprecation window và compatibility review. | Migration/contracts còn một phần; chưa gỡ alias. |
+| 8 | **P1 — performance evidence** | [#144](https://github.com/Thang4869/TriAD-Backend/issues/144) · T7 | Chạy k6 trên staging với checkout contention; công bố p95/p99, error rate, throughput và resource saturation cùng ngưỡng chấp nhận. | Chưa có baseline load production-like. |
+| 9 | **P2 — test strength** | [#145](https://github.com/Thang4869/TriAD-Backend/issues/145) · T4 | Tạo mutation-test baseline cho domain/core; đặt ngưỡng theo module trọng yếu và xử lý mutation sống có ý nghĩa. | Chưa có báo cáo mutation. |
+| 10 | **P2 — auditability** | [#147](https://github.com/Thang4869/TriAD-Backend/issues/147) · J3 | Lưu admin actor/target/action/outcome với redaction; thêm authorization, retention và audit-log tests. | Chưa hoàn tất end-to-end. |
+| 11 | **P2 — release/demo** | [#149](https://github.com/Thang4869/TriAD-Backend/issues/149), [#150](https://github.com/Thang4869/TriAD-Backend/issues/150) · I8/K4 | Chuẩn hóa tag/changelog/deploy rollback; hoàn thiện demo được bảo vệ và chỉ dùng CV metrics có nguồn kiểm chứng. | Còn mở; không chặn release nếu vận hành nội bộ không yêu cầu demo. |
+
+**Thứ tự bắt đầu:** hoàn tất test Redis thật và CI (#140 code gate), đồng thời chuẩn bị staging runbooks/ownership cho #143 → #140 → #84. Sau đó xử lý B10/CSRF và API compatibility; k6/mutation/audit trail theo sau. Những bước cần endpoint, secret hoặc dữ liệu staging phải được đánh dấu **BLOCKED ON ENVIRONMENT**, không giả lập đã xong.
 
 **Backlog có điều kiện, không phải blocker:** D3/D5/H10 (thêm DI/port/split chỉ khi cần), F1/G3/G10 (payment/Saga/Strategy khi có provider use case thật), G2/G11/G13–G16 (domain cleanup theo invariant), H4/H5/H8/H12/H13 (naming/dependency hygiene), T1/T8 (test helpers/API tests), J4 (error docs/versioning). Không tăng số lượng pattern/interface để theo đuổi “10/10”.
 
@@ -49,13 +52,15 @@
 | **R5 — Payment scope** | COD/transaction-based hiện tại hay tích hợp gateway thật; chỉ production-wire Saga nếu có settlement/refund semantics. | Trước triển khai payment thật |
 | **R6 — License / distribution** | Chủ repository chọn **MIT License**, copyright 2026 Thang4869; được chia sẻ code cho sinh viên/cộng đồng theo điều kiện MIT; kiểm tra riêng quyền của assets bên thứ ba. | **APPROVED 15/10/2026** |
 
-## Thứ tự triển khai tiếp theo (mỗi stage một commit)
+## Thứ tự triển khai sau checklist này
 
-1. **T2 / I9:** PR #174 đã merge với checkout concurrency/price-change và isolated backup→restore→rebuild CI; tiếp tục kiểm chứng histogram trên nhánh và staging restore/RTO/RPO.
-2. **A1 / T6:** chạy Redis/BullMQ/SMTP **thật** trên staging, kiểm tra resend/TTL + dead-letter recovery, lưu timestamp và duplicate-job evidence.
-3. **B10 / B7:** production dependency audit 0 critical/high/moderate; triage phần full graph còn lại và xác minh Cloudinary/OTLP, proxy trust/Redis outage ở staging.
-4. **B7/H2/H7/T3:** staging security, FE migration và schema/API boundary cleanup.
-5. **J3/T7/T4/K3:** admin audit trail, load/mutation artifacts và portfolio evidence.
+1. **Đóng code gate #140:** chạy integration test với Redis Testcontainers thật trong CI; xác nhận HTTP 429, 503 khi client Redis mất kết nối và hồi phục sau reconnect. Chỉ ghi PASS sau khi workflow của PR xanh.
+2. **Chuẩn bị và chạy #143:** staging restore drill, replay/rebuild, SIGTERM, đo RTO/RPO; cập nhật [recovery drill](RECOVERY_DRILL.md) và [operations runbook](OPERATIONS.md) bằng kết quả thật.
+3. **Chạy #140 staging:** proxy trust, IP spoofing/NAT, health policy và Redis outage/recovery; lưu log/cấu hình trong [rate-limit drill](RATE_LIMIT_STAGING_DRILL.md).
+4. **Chạy #84 staging:** mất response/process crash, retry cùng key, fencing và đối chiếu order/stock; lưu bằng chứng trong [idempotency recovery](IDEMPOTENCY_RECOVERY.md).
+5. **Rà #141/#90:** dependency exceptions/SBOM/config smoke và CSRF cross-origin; ghi quyết định bảo mật, chủ sở hữu và hạn xử lý.
+6. **Đóng API/architecture gates #146/#148:** DI acceptance criteria, OpenAPI contracts, FE canonical route E2E và deprecation plan.
+7. **Bổ sung quality evidence #144/#145/#147:** k6, mutation score và admin audit trail; sau đó hoàn thiện release/demo #149/#150.
 
 **Definition of Done:** typecheck, lint, architecture, unit/integration, contract, build, Docker runtime smoke và FE↔BE E2E PASS; thay đổi security có audit + lockfile; thay đổi durability có recovery test; thay đổi API có backward-compatibility review. Chỉ đánh dấu **CLOSED** khi cả acceptance criteria và evidence phù hợp đã hoàn thành.
 

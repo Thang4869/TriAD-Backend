@@ -1,6 +1,6 @@
 # I9 — PostgreSQL backup, restore and read-model rebuild
 
-**Status:** CI proof being implemented in [Draft PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174). Does not prove deployed RTO/RPO.
+**Status (2026-10-18):** The isolated PostgreSQL drill is merged and passed on `main` in [CI run #39116584480](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480) ([restore-drill job](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480/job/117643501456)). This proves the CI fixture only; deployed recovery evidence for issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143), including RTO/RPO, remains **OPEN**.
 
 ## Disposable CI drill
 
@@ -18,3 +18,11 @@ The recorded seconds describe a small **CI fixture**, not production RTO, RPO, f
 ## Production-like acceptance (still OPEN)
 
 In a *separate* staging environment, document backup schedule, retention, encryption/key recovery, restore operator and off-host storage. Restore to a new environment, apply/reconcile migrations, rebuild projections and replay eligible outbox items safely. Verify queue consumer restart, read-only/draining cutover and sample authenticated API requests. Measure recovery **from incident declared to service healthy** (RTO) and actual time gap between last committed write and durable recovered record (RPO) with timestamps, not benchmark inference. Record rollback procedures and explicitly approve RTO/RPO targets before calling I9 CLOSED.
+
+### Required evidence record
+
+| Drill date (UTC) | Deployment SHA | Backup/snapshot reference (redacted) | RTO | RPO | Projection/outbox checks | Result and artifact link |
+| --- | --- | --- | --- | --- | --- | --- |
+| Pending staging execution | — | — | — | — | — | No deployed result claimed |
+
+Capture timestamps for incident declaration, restore completion, projection readiness and first successful authenticated health/API checks. Calculate RTO from incident declaration to service healthy. Calculate RPO from the last committed write before the incident to the latest durable write present after recovery. Keep credentials, customer data and raw secrets out of the evidence artifact.

@@ -1,6 +1,6 @@
 # TriAD Backend — Audit hiện trạng
 
-**Đánh giá:** 15/10/2026 · **Code đối chiếu:** [main](https://github.com/Thang4869/TriAD-Backend), sau [PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174); các thay đổi chưa merge trên `commit-15102026` được ghi riêng.
+**Cập nhật:** 18/10/2026 · **Code base:** [main](https://github.com/Thang4869/TriAD-Backend), sau [PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192); thay đổi rate-limit ở [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193) đã qua CI, đang chờ merge. Điểm giữ nguyên baseline tham khảo 15/10.
 **Độc lập:** điểm ước lượng kỹ thuật để theo dõi, **không** phải chứng nhận Tech Lead, SLA, bảo mật hoặc KPI được kiểm toán.
 
 ## Điểm tham khảo
@@ -24,20 +24,29 @@
 | Mục | Kết quả | PR |
 | --- | --- | --- |
 | Checkout Serializable/stock/order transitions | PASS CI | [#158](https://github.com/Thang4869/TriAD-Backend/pull/158), [#161](https://github.com/Thang4869/TriAD-Backend/pull/161) |
-| Rate limit Redis fail-closed | PASS CI, staging proof mở | [#162](https://github.com/Thang4869/TriAD-Backend/pull/162) |
+| Rate limit Redis fail-closed | Unit HTTP contract + real-Redis 429/outage/recovery/first-script-load tests PASS CI; staging proof mở | [#162](https://github.com/Thang4869/TriAD-Backend/pull/162) · [#193](https://github.com/Thang4869/TriAD-Backend/pull/193) · [#140](https://github.com/Thang4869/TriAD-Backend/issues/140) |
 | Durable UserRegistered + SIGKILL relay/dead-letter replay | PASS CI, real SMTP drill mở | [#164](https://github.com/Thang4869/TriAD-Backend/pull/164), [#169](https://github.com/Thang4869/TriAD-Backend/pull/169) |
 | Security batch: proxy-addr/Multer/bcrypt/Nodemailer/Sharp | PASS CI | [#166](https://github.com/Thang4869/TriAD-Backend/pull/166), [#170](https://github.com/Thang4869/TriAD-Backend/pull/170) |
 | Cloudinary SDK 2.x + OpenTelemetry SDK 2.x | PASS code CI, staging API/exporter smoke còn mở | [#172](https://github.com/Thang4869/TriAD-Backend/pull/172), [#173](https://github.com/Thang4869/TriAD-Backend/pull/173) |
 | **npm audit main lockfile** | **Production 0 critical, 0 high, 0 moderate**; full graph 16 high/5 moderate | [Main CI](https://github.com/Thang4869/TriAD-Backend/actions) |
 
-## Đang thực hiện
+## Trạng thái hiện tại và gate còn mở
 
-[PR #174](https://github.com/Thang4869/TriAD-Backend/pull/174) **đã merge**; công việc bổ sung đang nằm trên nhánh ngày `commit-15102026`:
-- **T2:** PR #174 có PostgreSQL lost-response retry, concurrent same-key và price-change tests. Nhánh ngày bổ sung histogram độ tuổi Outbox event, unit tests và PromQL p95/p99; chưa có chỉ số staging.
-- **I9:** CI PostgreSQL Backup Restore Drill đã PASS: backup/restore vào DB cách ly, đối chiếu order/idempotency/outbox và rebuild hai projections. Vẫn thiếu deployed restore/RTO/RPO và SIGTERM readiness drill.
+[PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192) đã merge runbooks recovery/idempotency/rate-limit. [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193) có CI xanh cho test Redis thật (429 budget, 503 khi disconnect, reconnect thành công, và first Lua SCRIPT LOAD outage) cùng fix chuẩn hóa lỗi script-load; PR đang chờ merge. Tài liệu và CI không chứng minh staging/prod đã đạt.
 
-**Thứ tự release gates còn mở:** staging Redis/BullMQ/SMTP TTL và dead letter (A1/T6), production-like PostgreSQL restore + RTO/RPO (I9), proxy/CSRF (B7/B6), FE canonical /api/orders contract (H2/T3), concurrency/projection lag metrics (T2), mutation/k6/SLO (T4/T7/J2), admin audit (J3), ADR/demo (K2/K4) và MIT License đã được phê duyệt (K3); demo và bằng chứng CV vẫn mở.
+Staging proxy/outage vẫn là gate riêng của [#140](https://github.com/Thang4869/TriAD-Backend/issues/140).
+
+**Thứ tự gate còn mở:**
+
+1. [#143 — Restore và RTO/RPO](https://github.com/Thang4869/TriAD-Backend/issues/143): deployed PostgreSQL restore, outbox replay/projection rebuild, SIGTERM/readiness, Redis persistence/eviction.
+2. [#140 — Rate limit trên proxy staging](https://github.com/Thang4869/TriAD-Backend/issues/140): trust proxy, XFF spoofing, NAT, Redis disconnect/reconnect, 429/503.
+3. [#84 — Checkout idempotency recovery](https://github.com/Thang4869/TriAD-Backend/issues/84): mất response/process crash, retry và đối chiếu order/stock không nhân đôi.
+4. [#141 — Dependency/configuration](https://github.com/Thang4869/TriAD-Backend/issues/141) và [#90 — CSRF](https://github.com/Thang4869/TriAD-Backend/issues/90): SBOM/full graph exceptions, staging integrations và cross-origin evidence.
+5. [#146/#148 — Architecture/API](https://github.com/Thang4869/TriAD-Backend/issues/146): hoàn thành DI acceptance criteria, OpenAPI contracts và FE canonical route E2E.
+6. [#144/#145/#147 — Quality/operations](https://github.com/Thang4869/TriAD-Backend/issues/144): load test, mutation baseline và admin audit trail; [#149/#150](https://github.com/Thang4869/TriAD-Backend/issues/149) theo sau.
+
+Các hạng mục cần staging credentials/endpoint được ghi **BLOCKED ON ENVIRONMENT** cho đến khi có kết quả thực. Không thay đổi điểm tham khảo 8.8 chỉ từ việc sửa checklist hoặc thêm CI test; điểm chỉ đổi khi có thêm bằng chứng triển khai và vận hành.
 
 **Quyết định cần duyệt:** dependency high risk acceptance, email TTL/resend, proxy topology/CSRF, API deprecation date, payment/Saga provider scope. Tiêu chí đóng từng mục và các liên kết nằm trong [Improvement Checklist](TriAD-Backend-Improvement-Checklist.md), [Dependency Security](DEPENDENCY_SECURITY_AUDIT.md), [Event Durability](EVENT_DURABILITY.md) và [Operations](OPERATIONS.md).
 
-Không tăng điểm chỉ vì bổ sung checklist. Điểm chỉ thay đổi khi có code, CI và evidence production/staging tương xứng.
+Không tăng điểm chỉ vì checklist hoặc CI xanh; production/staging evidence tương xứng vẫn cần thiết.

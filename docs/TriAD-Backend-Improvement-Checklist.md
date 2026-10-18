@@ -1,6 +1,6 @@
 # TriAD Backend — Improvement Checklist
 
-**Cập nhật:** 18/10/2026 · **Nguồn:** `main` sau [PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192); thay đổi checklist và kiểm thử Redis thật đang chờ CI trong nhánh `commit-18102026` · **Mục đích:** phân biệt bằng chứng CI, gate staging còn mở và thứ tự công việc.
+**Cập nhật:** 18/10/2026 · **Nguồn:** `main` sau [PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192); checklist và rate-limit fix/test ở [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193) đã qua CI, đang chờ merge · **Mục đích:** phân biệt bằng chứng CI, gate staging còn mở và thứ tự công việc.
 
 > `PASS CI` là bằng chứng về code/test, **không** đồng nghĩa đã xác minh hoạt động ở production. Điểm đánh giá và rủi ro nằm trong [Audit Checklist](TriAD-Backend-audit-checklist-updated.md).
 
@@ -26,7 +26,7 @@ Các mức ưu tiên phản ánh rủi ro release và bằng chứng còn thiế
 | Thứ tự | Ưu tiên | Issue | Việc cần hoàn tất / bằng chứng để đóng | Trạng thái hiện tại |
 | ---: | --- | --- | --- | --- |
 | 1 | **P0 — release gate** | [#143](https://github.com/Thang4869/TriAD-Backend/issues/143) · I9/I6 | Chạy backup/restore trên staging hoặc môi trường production-like sạch; khôi phục PostgreSQL, replay outbox/rebuild projections, chạy SIGTERM readiness drill; ghi RTO/RPO thực đo và quyết định Redis persistence/eviction. Lưu log, timestamp, kết quả đối chiếu và runbook rollback. | CI backup/restore cách ly PASS; **deployed restore và RTO/RPO chưa có**. |
-| 2 | **P0 — security release gate** | [#140](https://github.com/Thang4869/TriAD-Backend/issues/140) · B7 | Xác nhận topology `TRUST_PROXY`, spoofed `X-Forwarded-For`, shared NAT, policy health/readiness và Redis disconnect/reconnect qua proxy staging; lưu cấu hình/log chứng minh 429/503. | HTTP behavior có unit test; **kiểm thử Redis thật mới được thêm vào PR này, chờ CI; staging/proxy evidence còn thiếu**. Dùng [rate-limit drill](RATE_LIMIT_STAGING_DRILL.md). |
+| 2 | **P0 — security release gate** | [#140](https://github.com/Thang4869/TriAD-Backend/issues/140) · B7 | Xác nhận topology `TRUST_PROXY`, spoofed `X-Forwarded-For`, shared NAT, policy health/readiness và Redis disconnect/reconnect qua proxy staging; lưu cấu hình/log chứng minh 429/503. | Unit HTTP contract và real-Redis integration (**429, outage 503/reconnect, first SCRIPT LOAD outage**) **PASS CI trong [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193)**; staging/proxy evidence còn thiếu. Dùng [rate-limit drill](RATE_LIMIT_STAGING_DRILL.md). |
 | 3 | **P0 — checkout recovery** | [#84](https://github.com/Thang4869/TriAD-Backend/issues/84) | Thực hiện retry sau timeout/mất response và process crash trên staging; xác nhận lease/owner fencing, replay cùng idempotency key không tạo order/trừ stock lần hai; lưu Redis state và order/stock đối chiếu. | CI chứng minh các nhánh idempotency hiện có; **process-crash và staging recovery chưa được nghiệm thu**. Dùng [idempotency recovery](IDEMPOTENCY_RECOVERY.md). |
 | 4 | **P1 — dependency/configuration** | [#141](https://github.com/Thang4869/TriAD-Backend/issues/141) · B10 | Duy trì production audit gate 0 critical/high; phân loại 16 high/5 moderate của full graph, lập ngoại lệ có thời hạn nếu cần; kiểm tra SBOM và xác minh Cloudinary/OTLP với config staging thật. | Production audit trên main 0 critical/high/moderate; full graph và staging smoke còn mở. |
 | 5 | **P1 — CSRF/auth boundary** | [#90](https://github.com/Thang4869/TriAD-Backend/issues/90) · B6 | Chốt threat model CSRF/proxy trust bằng test cross-origin với browser/cookie settings thực tế; ghi quyết định signed token hay giữ thiết kế hiện tại và bằng chứng reject/accept. | Baseline CI có; cross-origin staging/browser evidence và quyết định threat model còn mở. |
@@ -54,7 +54,7 @@ Các mức ưu tiên phản ánh rủi ro release và bằng chứng còn thiế
 
 ## Thứ tự triển khai sau checklist này
 
-1. **Đóng code gate #140:** chạy integration test với Redis Testcontainers thật trong CI; xác nhận HTTP 429, 503 khi client Redis mất kết nối và hồi phục sau reconnect. Chỉ ghi PASS sau khi workflow của PR xanh.
+1. **#140 code gate đã PASS CI** trong [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193): Redis thật xác nhận HTTP 429, 503 khi mất kết nối và hồi phục sau reconnect, kể cả lỗi lúc nạp script đầu tiên.
 2. **Chuẩn bị và chạy #143:** staging restore drill, replay/rebuild, SIGTERM, đo RTO/RPO; cập nhật [recovery drill](RECOVERY_DRILL.md) và [operations runbook](OPERATIONS.md) bằng kết quả thật.
 3. **Chạy #140 staging:** proxy trust, IP spoofing/NAT, health policy và Redis outage/recovery; lưu log/cấu hình trong [rate-limit drill](RATE_LIMIT_STAGING_DRILL.md).
 4. **Chạy #84 staging:** mất response/process crash, retry cùng key, fencing và đối chiếu order/stock; lưu bằng chứng trong [idempotency recovery](IDEMPOTENCY_RECOVERY.md).

@@ -1,6 +1,6 @@
 # TriAD Backend — Audit hiện trạng
 
-**Cập nhật:** 18/10/2026 · **Code base:** [main](https://github.com/Thang4869/TriAD-Backend), sau [PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192); thay đổi rate-limit ở [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193) đã qua CI, đang chờ merge. Điểm giữ nguyên baseline tham khảo 15/10.
+**Cập nhật:** 18/10/2026 · **Code đối chiếu:** [main](https://github.com/Thang4869/TriAD-Backend), sau [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193). Điểm giữ nguyên baseline tham khảo 15/10.
 **Độc lập:** điểm ước lượng kỹ thuật để theo dõi, **không** phải chứng nhận Tech Lead, SLA, bảo mật hoặc KPI được kiểm toán.
 
 ## Điểm tham khảo
@@ -32,7 +32,7 @@
 
 ## Trạng thái hiện tại và gate còn mở
 
-[PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192) đã merge runbooks recovery/idempotency/rate-limit. [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193) có CI xanh cho test Redis thật (429 budget, 503 khi disconnect, reconnect thành công, và first Lua SCRIPT LOAD outage) cùng fix chuẩn hóa lỗi script-load; PR đang chờ merge. Tài liệu và CI không chứng minh staging/prod đã đạt.
+[PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192) đã merge runbooks recovery/idempotency/rate-limit. [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193) đã merge với CI xanh cho test Redis thật (429 budget, 503 khi disconnect, reconnect thành công, và first Lua SCRIPT LOAD outage) cùng fix chuẩn hóa lỗi script-load. Tài liệu và CI không chứng minh staging/prod đã đạt.
 
 Staging proxy/outage vẫn là gate riêng của [#140](https://github.com/Thang4869/TriAD-Backend/issues/140).
 

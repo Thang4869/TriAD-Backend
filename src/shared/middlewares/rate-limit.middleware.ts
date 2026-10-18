@@ -11,11 +11,20 @@ import { DependencyUnavailableError } from "@shared/errors/application-error";
 const RATE_LIMIT_STORE_TIMEOUT_MS = 1000;
 
 function sendRateLimitCommand(...args: string[]): Promise<RedisReply> {
-  // rate-limit-redis v4 eagerly loads Lua scripts during module initialization.
-  // Allow only this bootstrap command to wait for the Redis connection to become
-  // ready; rejecting it at import time leaves an unhandled setup rejection.
+  // rate-limit-redis loads its Lua script lazily on the first request.
+  // Let that bootstrap command wait for Redis readiness, but normalize
+  // connection failures so the HTTP error handler returns 503.
   if (args[0] === "SCRIPT" && args[1] === "LOAD") {
-    return redis.call(args[0], ...args.slice(1)) as Promise<RedisReply>;
+    return new Promise<RedisReply>((resolve, reject) => {
+      try {
+        Promise.resolve(redis.call(args[0], ...args.slice(1))).then(
+          (reply) => resolve(reply as RedisReply),
+          () => reject(new DependencyUnavailableError("Rate limit store unavailable")),
+        );
+      } catch {
+        reject(new DependencyUnavailableError("Rate limit store unavailable"));
+      }
+    });
   }
 
   if (redis.status !== "ready") {

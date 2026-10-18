@@ -13,6 +13,12 @@
 - **Quality gates:** unit/integration/contract/architecture/build và FE↔BE E2E trong CI; image runtime smoke đã PASS — [PR #160](https://github.com/Thang4869/TriAD-Backend/pull/160), [#164](https://github.com/Thang4869/TriAD-Backend/pull/164).
 - **B10 remediation batches 1–2:** npm-generated lockfile đã vá `proxy-addr`, nâng Multer/bcrypt và bật CI gate chặn production critical; tất cả CI PASS [PR #166](https://github.com/Thang4869/TriAD-Backend/pull/166). **Production audit trên main hiện 0 critical/high/moderate; full graph còn 16 high / 5 moderate**.
 
+## Tiến độ refactor theo đợt (18/10/2026)
+
+- **Đợt 1 — Security/Reliability (PARTIAL):** B7 HTTP 429/503 tests, idempotency owner fencing và heartbeat, 2FA Redis fail-closed, malformed CSRF cookie validation. Đã bổ sung [idempotency recovery acceptance](IDEMPOTENCY_RECOVERY.md) và [rate limit staging drill](RATE_LIMIT_STAGING_DRILL.md). Chưa đóng #84/#90/#140 vì CI HEAD, Redis/proxy staging, process-crash recovery và cross-origin evidence chưa được nghiệm thu.
+- **Đợt 2 — Architecture/API (IN PROGRESS):** Sửa việc giữ instance scoped cũ khi `register()` hoặc `override()` thay factory trong cùng container; bổ sung regression tests. FE migration sang `/api/orders`, OpenAPI contracts, read-after-write consistency và request-scope usage vẫn đang mở.
+- **Quy tắc merge:** không suy diễn production PASS từ unit tests; đối chiếu CI tại SHA cuối của PR trước khi merge.
+
 ## Backlog ưu tiên (chỉ các gap có tác động)
 
 | Ưu tiên | Mã | Việc cần làm / điều kiện đóng | Trạng thái |

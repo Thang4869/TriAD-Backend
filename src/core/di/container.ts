@@ -32,6 +32,7 @@ export class Container {
     factory: Factory<T>,
     lifetime: Lifetime = Lifetime.Singleton,
   ): this {
+    this.scopedInstances.delete(token as Token<unknown>);
     this.registrations.set(token as Token<unknown>, {
       factory: factory as Factory<unknown>,
       lifetime,
@@ -89,6 +90,7 @@ export class Container {
     factory: Factory<T>,
     lifetime: Lifetime = Lifetime.Singleton,
   ): void {
+    this.scopedInstances.delete(token as Token<unknown>);
     this.registrations.set(token as Token<unknown>, {
       factory: factory as Factory<unknown>,
       lifetime,

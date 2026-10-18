@@ -114,6 +114,28 @@ describe("Container - resolve và kế thừa", () => {
   });
 });
 
+describe("Container - scoped registration replacement", () => {
+  it("replaces a cached scoped instance when register is called again", () => {
+    const token = createToken<Service>("ScopedReregister");
+    const scope = new Container();
+    scope.register(token, () => ({ id: 1 }), Lifetime.Scoped);
+    expect(scope.resolve(token).id).toBe(1);
+
+    scope.register(token, () => ({ id: 2 }), Lifetime.Scoped);
+    expect(scope.resolve(token).id).toBe(2);
+  });
+
+  it("replaces a cached scoped instance when override is called", () => {
+    const token = createToken<Service>("ScopedOverride");
+    const scope = new Container();
+    scope.register(token, () => ({ id: 1 }), Lifetime.Scoped);
+    expect(scope.resolve(token).id).toBe(1);
+
+    scope.override(token, () => ({ id: 3 }), Lifetime.Scoped);
+    expect(scope.resolve(token).id).toBe(3);
+  });
+});
+
 describe("Container.override", () => {
   it("thay thế registration đã có — phục vụ mock trong test", () => {
     const token = createToken<string>("Overridable");

@@ -1,6 +1,6 @@
 # TriAD Backend — Audit hiện trạng
 
-**Cập nhật:** 18/10/2026 · **Code đối chiếu:** [main](https://github.com/Thang4869/TriAD-Backend), sau [PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192). Điểm dưới đây giữ nguyên baseline tham khảo 15/10; chưa chấm lại từ thay đổi tài liệu.
+**Cập nhật:** 18/10/2026 · **Code base:** [main](https://github.com/Thang4869/TriAD-Backend), sau [PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192); thay đổi rate-limit ở [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193) đã qua CI, đang chờ merge. Điểm giữ nguyên baseline tham khảo 15/10.
 **Độc lập:** điểm ước lượng kỹ thuật để theo dõi, **không** phải chứng nhận Tech Lead, SLA, bảo mật hoặc KPI được kiểm toán.
 
 ## Điểm tham khảo
@@ -24,7 +24,7 @@
 | Mục | Kết quả | PR |
 | --- | --- | --- |
 | Checkout Serializable/stock/order transitions | PASS CI | [#158](https://github.com/Thang4869/TriAD-Backend/pull/158), [#161](https://github.com/Thang4869/TriAD-Backend/pull/161) |
-| Rate limit Redis fail-closed | Unit HTTP contract PASS; real-Redis integration test đang chờ CI trong PR checklist hiện tại; staging proof mở | [#162](https://github.com/Thang4869/TriAD-Backend/pull/162) · [#140](https://github.com/Thang4869/TriAD-Backend/issues/140) |
+| Rate limit Redis fail-closed | Unit HTTP contract + real-Redis 429/outage/recovery/first-script-load tests PASS CI; staging proof mở | [#162](https://github.com/Thang4869/TriAD-Backend/pull/162) · [#193](https://github.com/Thang4869/TriAD-Backend/pull/193) · [#140](https://github.com/Thang4869/TriAD-Backend/issues/140) |
 | Durable UserRegistered + SIGKILL relay/dead-letter replay | PASS CI, real SMTP drill mở | [#164](https://github.com/Thang4869/TriAD-Backend/pull/164), [#169](https://github.com/Thang4869/TriAD-Backend/pull/169) |
 | Security batch: proxy-addr/Multer/bcrypt/Nodemailer/Sharp | PASS CI | [#166](https://github.com/Thang4869/TriAD-Backend/pull/166), [#170](https://github.com/Thang4869/TriAD-Backend/pull/170) |
 | Cloudinary SDK 2.x + OpenTelemetry SDK 2.x | PASS code CI, staging API/exporter smoke còn mở | [#172](https://github.com/Thang4869/TriAD-Backend/pull/172), [#173](https://github.com/Thang4869/TriAD-Backend/pull/173) |
@@ -32,9 +32,9 @@
 
 ## Trạng thái hiện tại và gate còn mở
 
-[PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192) đã merge: cập nhật recovery, idempotency và rate-limit runbooks/evidence template. Tài liệu giúp thu thập bằng chứng; không tự chứng minh staging hoặc production đã đạt.
+[PR #192](https://github.com/Thang4869/TriAD-Backend/pull/192) đã merge runbooks recovery/idempotency/rate-limit. [PR #193](https://github.com/Thang4869/TriAD-Backend/pull/193) có CI xanh cho test Redis thật (429 budget, 503 khi disconnect, reconnect thành công, và first Lua SCRIPT LOAD outage) cùng fix chuẩn hóa lỗi script-load; PR đang chờ merge. Tài liệu và CI không chứng minh staging/prod đã đạt.
 
-Kiểm thử integration rate-limit với Redis thật đang được bổ sung: dự kiến xác nhận 429 khi vượt ngưỡng, 503 khi Redis client disconnect và 200 sau reconnect. Trạng thái chỉ chuyển sang **CI PASS** sau khi PR chạy xanh; staging proxy/outage vẫn là gate riêng của [#140](https://github.com/Thang4869/TriAD-Backend/issues/140).
+Staging proxy/outage vẫn là gate riêng của [#140](https://github.com/Thang4869/TriAD-Backend/issues/140).
 
 **Thứ tự gate còn mở:**
 
@@ -45,8 +45,8 @@ Kiểm thử integration rate-limit với Redis thật đang được bổ sung:
 5. [#146/#148 — Architecture/API](https://github.com/Thang4869/TriAD-Backend/issues/146): hoàn thành DI acceptance criteria, OpenAPI contracts và FE canonical route E2E.
 6. [#144/#145/#147 — Quality/operations](https://github.com/Thang4869/TriAD-Backend/issues/144): load test, mutation baseline và admin audit trail; [#149/#150](https://github.com/Thang4869/TriAD-Backend/issues/149) theo sau.
 
-Các hạng mục cần staging credentials/endpoint được ghi **BLOCKED ON ENVIRONMENT** cho đến khi có kết quả thực. Không thay đổi điểm tham khảo 8.8 chỉ từ việc sửa checklist hoặc thêm test chưa chạy.
+Các hạng mục cần staging credentials/endpoint được ghi **BLOCKED ON ENVIRONMENT** cho đến khi có kết quả thực. Không thay đổi điểm tham khảo 8.8 chỉ từ việc sửa checklist hoặc thêm CI test; điểm chỉ đổi khi có thêm bằng chứng triển khai và vận hành.
 
 **Quyết định cần duyệt:** dependency high risk acceptance, email TTL/resend, proxy topology/CSRF, API deprecation date, payment/Saga provider scope. Tiêu chí đóng từng mục và các liên kết nằm trong [Improvement Checklist](TriAD-Backend-Improvement-Checklist.md), [Dependency Security](DEPENDENCY_SECURITY_AUDIT.md), [Event Durability](EVENT_DURABILITY.md) và [Operations](OPERATIONS.md).
 
-Không tăng điểm chỉ vì bổ sung checklist. Điểm chỉ thay đổi khi có code, CI và evidence production/staging tương xứng.
+Không tăng điểm chỉ vì checklist hoặc CI xanh; production/staging evidence tương xứng vẫn cần thiết.

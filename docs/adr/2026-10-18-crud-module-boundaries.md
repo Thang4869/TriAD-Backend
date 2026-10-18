@@ -20,7 +20,7 @@ There is currently no demonstrated cross-entity lifecycle or multi-step invarian
 ## Consequences and verification
 
 - Less ceremony and fewer objects with artificial responsibilities; the code remains testable through repository ports.
-- Transactional invariants such as one-review-per-product/user must also be enforced by an appropriate database constraint or atomic operation, not only a pre-insert `exists` check. Verify this independently; this ADR does not claim race-safety without a DB test.
+- Prisma schema already declares `@@unique([userId, productId])` on Review and WishlistItem and a unique notification idempotency key ([schema](../../prisma/schema.prisma)). These constraints guard duplicate records even when service-level prechecks race. Verify the application error mapping and database concurrency behavior separately; this ADR does not claim the end-to-end error response has passed without integration evidence.
 - Promotion to a richer domain model is justified only if moderation state transitions, notification delivery lifecycle, wishlist reservation logic, or auditable business invariants emerge.
 - CI typecheck, service tests and architecture boundary checks provide code-level evidence; production/staging readiness is a separate gate.
 

@@ -66,8 +66,8 @@ export class Product extends AggregateRoot {
   }
 
   reduceStock(quantity: number): void {
-    if (quantity <= 0)
-      throw new InvalidStockQuantityError("Quantity must be positive");
+    if (!Number.isSafeInteger(quantity) || quantity <= 0)
+      throw new InvalidStockQuantityError("Quantity must be a positive safe integer");
     if (this._stock < quantity)
       throw new InsufficientStockError(this._stock, quantity);
     this._stock -= quantity;
@@ -77,8 +77,11 @@ export class Product extends AggregateRoot {
   }
 
   increaseStock(quantity: number): void {
-    if (quantity <= 0)
-      throw new InvalidStockQuantityError("Quantity must be positive");
+    if (!Number.isSafeInteger(quantity) || quantity <= 0)
+      throw new InvalidStockQuantityError("Quantity must be a positive safe integer");
+    if (!Number.isSafeInteger(this._stock + quantity)) {
+      throw new InvalidStockQuantityError("Resulting stock must be a safe integer");
+    }
     this._stock += quantity;
     this.raise(new ProductRestockedEvent(this.id, quantity, this._stock));
   }
@@ -107,6 +110,9 @@ export class Product extends AggregateRoot {
     isActive: boolean;
     version?: number;
   }): Product {
+    if (!Number.isSafeInteger(data.stock) || data.stock < 0) {
+      throw new InvalidStockQuantityError("Stock must be a non-negative safe integer");
+    }
     const product = new Product(
       data.id,
       data.name,

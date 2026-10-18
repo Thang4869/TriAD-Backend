@@ -218,3 +218,26 @@ describe("Product - tích luỹ event", () => {
     expect(product.version).toBe(7);
   });
 });
+
+
+describe("Product stock quantity invariants", () => {
+  it.each([0.5, 1.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid stock reduction %s without mutation or events",
+    (quantity) => {
+      const product = newProduct({ stock: 10 });
+      expect(() => product.reduceStock(quantity)).toThrow(InvalidStockQuantityError);
+      expect(product.stock).toBe(10);
+      expect(product.domainEvents).toHaveLength(0);
+    },
+  );
+
+  it.each([0.5, 1.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid restock %s without mutation or events",
+    (quantity) => {
+      const product = newProduct({ stock: 10 });
+      expect(() => product.increaseStock(quantity)).toThrow(InvalidStockQuantityError);
+      expect(product.stock).toBe(10);
+      expect(product.domainEvents).toHaveLength(0);
+    },
+  );
+});

@@ -30,7 +30,7 @@ export class CartController {
     if (quantity === undefined || quantity < 0)
       throw new ValidationError("quantity is required and must be >= 0");
     const result = await this.service.updateItem(userId, productId, quantity);
-    sendSuccess(res, result ?? null);
+    sendSuccess(res, result);
   });
 
   removeItem = asyncHandler(async (req: Request, res: Response) => {

@@ -173,7 +173,7 @@ describe("CartService", () => {
 
       expect(repository.deleteCartItem).toHaveBeenCalledWith("ci1");
       expect(repository.updateCartItemQuantity).not.toHaveBeenCalled();
-      expect(result).toBeUndefined();
+      expect(result).toBeNull();
     });
 
     it("ném ValidationError khi quantity mới vượt tồn kho", async () => {

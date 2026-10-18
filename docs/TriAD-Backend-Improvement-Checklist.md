@@ -79,3 +79,11 @@ Tài liệu chuẩn hóa: [Production Readiness Gates](PRODUCTION_READINESS_GATE
 **Thứ tự hiện hành:** G0 truth sync → G1 hygiene → G2 Clean Code → G3 domain invariants → G4 reliability → G5 staging recovery/auth → G6 k6/mutation → G7 telemetry/audit → G8 demo → G9 CV. Có thể triển khai độc lập song song nhưng không xác nhận gate sau hoàn tất nếu gate trước chưa PASS. Điểm thiếu theo DOCX gồm bảng invariant, type/DTO cleanup baseline, k6/mutation reporting, Jaeger correlation, INTERVIEW_QA và reviewer evidence.
 
 **P0 môi trường chưa nghiệm thu:** [#143](https://github.com/Thang4869/TriAD-Backend/issues/143) measured restore/RTO-RPO; [#140](https://github.com/Thang4869/TriAD-Backend/issues/140) staging proxy/Redis; [#84](https://github.com/Thang4869/TriAD-Backend/issues/84) process-kill checkout retry. Không đóng các issue này chỉ bằng test fixture.
+
+## Cập nhật bằng chứng code — 18/10/2026
+
+- [#197](https://github.com/Thang4869/TriAD-Backend/pull/197) — Product/Cart stock/quantity validation, safe-integer checks, overflow tests; domain map và CHANGELOG.
+- [#198](https://github.com/Thang4869/TriAD-Backend/pull/198) — Order không bị đặt dở khi tính tổng lỗi; CartService bảo vệ đầu vào; `updateItem` trả `CartItemWithProduct | null`; FE↔BE E2E và image smoke PASS.
+- [#199](https://github.com/Thang4869/TriAD-Backend/pull/199) — Reviews/Wishlist/Notifications dùng concrete DTO, có ADR cho các module CRUD; CI PASS.
+
+Các mục này là **subtasks đã hoàn thành**, không phải gate G2/G3 PASS hoàn toàn. P0 staging recovery [#143](https://github.com/Thang4869/TriAD-Backend/issues/143), rate limit [#140](https://github.com/Thang4869/TriAD-Backend/issues/140) và checkout retry [#84](https://github.com/Thang4869/TriAD-Backend/issues/84) vẫn BLOCKED ON ENVIRONMENT. Không tăng điểm hoặc đóng issue chỉ từ ba PR trên.

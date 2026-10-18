@@ -28,3 +28,11 @@
 5. Resume at [#143 restore](https://github.com/Thang4869/TriAD-Backend/issues/143) → [#140 proxy](https://github.com/Thang4869/TriAD-Backend/issues/140) → [#84 retry](https://github.com/Thang4869/TriAD-Backend/issues/84), then dependency/CSRF, API/DI, load/mutation/audit, demo/CV.
 
 Further evidence and detailed backlog: [Improvement Checklist](TriAD-Backend-Improvement-Checklist.md), [Audit](TriAD-Backend-audit-checklist-updated.md), [Operations](OPERATIONS.md). Final project acceptance requires all gates PASS, green CI, an accessible staging demo, k6/mutation/recovery reports, and docs/CV matching real code; it does not establish a human job title such as “Tech Lead.”
+
+## Evidence delta — 2026-10-18
+
+- [PR #197](https://github.com/Thang4869/TriAD-Backend/pull/197) merged: Product/Cart safe-integer quantity and overflow validation, domain invariant tests, initial domain map and CHANGELOG. CI/quality-gates PASS.
+- [PR #198](https://github.com/Thang4869/TriAD-Backend/pull/198) merged: Order placement failure atomicity, CartService quantity validation and explicit null response contract. CI, FE↔BE E2E and image runtime smoke PASS.
+- [PR #199](https://github.com/Thang4869/TriAD-Backend/pull/199) merged: typed service DTOs for Reviews/Wishlist/Notifications, [CRUD boundary ADR](adr/2026-10-18-crud-module-boundaries.md), updated [domain invariants](DOMAIN_INVARIANTS.md). CI PASS.
+
+**Gate updates:** G2 has partial verified progress (typed service contracts and cart return type); G3 has partial verified progress (invariants and CRUD ADR). Neither gate is fully accepted without remaining code audit and independent review. G4/G5/G8 environment-based evidence remains open.

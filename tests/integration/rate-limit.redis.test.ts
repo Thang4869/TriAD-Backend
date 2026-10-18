@@ -8,10 +8,7 @@ import { createErrorHandler } from "@shared/middlewares/error-handler.middleware
 
 function makeApp(prefix: string) {
   const app = express();
-  app.use(
-    "/api",
-    rateLimiter({ windowMs: 60_000, max: 2, prefix }),
-  );
+  app.use("/api", rateLimiter({ windowMs: 60_000, max: 2, prefix }));
   app.get("/api/example", (_req, res) => res.json({ success: true }));
   app.use(createErrorHandler({ classify: () => null }));
   return app;
@@ -33,8 +30,9 @@ describe("B7 rate limiting with real Redis", () => {
     expect(limited.headers["ratelimit-limit"]).toBe("2");
   });
 
-  it("fails closed while the Redis client is disconnected and recovers after reconnect", async () => {
+  it("fails closed during an established Redis outage and recovers after reconnect", async () => {
     const app = makeApp(`ratelimit:recovery:${Date.now()}:`);
+    expect((await request(app).get("/api/example")).status).toBe(200);
 
     redis.disconnect();
     try {
@@ -53,5 +51,26 @@ describe("B7 rate limiting with real Redis", () => {
     await redis.ping();
     const recovered = await request(app).get("/api/example");
     expect(recovered.status).toBe(200);
+  });
+
+  it("returns 503 when Redis is unavailable during the first script load, then retries after recovery", async () => {
+    const app = makeApp(`ratelimit:first-load:${Date.now()}:`);
+
+    redis.disconnect();
+    try {
+      const unavailable = await request(app).get("/api/example");
+      expect(unavailable.status).toBe(503);
+      expect(unavailable.body).toMatchObject({
+        success: false,
+        code: "APPLICATION.DEPENDENCY_UNAVAILABLE",
+      });
+    } finally {
+      if (redis.status === "end") {
+        await redis.connect();
+      }
+    }
+
+    await redis.ping();
+    expect((await request(app).get("/api/example")).status).toBe(200);
   });
 });

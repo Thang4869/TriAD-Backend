@@ -7,6 +7,16 @@
 3. Confirm PostgreSQL and Redis connectivity before restarting workers.
 4. Do not manually delete outbox rows; they are production recovery state.
 
+## Failure-drill index and safety boundary
+
+Use the dedicated evidence procedures for recovery, rate-limit availability and checkout idempotency:
+
+- PostgreSQL backup, restore and projection rebuild: [`RECOVERY_DRILL.md`](RECOVERY_DRILL.md).
+- Reverse-proxy trust and Redis rate-limit failure/recovery: [`RATE_LIMIT_STAGING_DRILL.md`](RATE_LIMIT_STAGING_DRILL.md).
+- Idempotency leases, durable checkout recovery and Redis outages: [`IDEMPOTENCY_RECOVERY.md`](IDEMPOTENCY_RECOVERY.md).
+
+These procedures require an isolated staging environment and a documented change window. CI results prove the automated test fixture only; do not use production data or credentials for fault injection, and do not report a staging gate as passed until dated, sanitized evidence is attached.
+
 ## Trusted proxy configuration (B10/B7)
 
 `TRUST_PROXY` is a security boundary for Express `req.ip`, HTTP rate

@@ -19,7 +19,7 @@ export interface ICartService {
     userId: string,
     productId: string,
     quantity: number,
-  ): Promise<CartItemWithProduct | void>;
+  ): Promise<CartItemWithProduct | null>;
   removeItem(userId: string, productId: string): Promise<void>;
   clearCart(userId: string): Promise<{ count: number }>;
 }
@@ -81,7 +81,7 @@ export class CartService implements ICartService {
     userId: string,
     productId: string,
     quantity: number,
-  ): Promise<CartItemWithProduct | void> {
+  ): Promise<CartItemWithProduct | null> {
     if (!Number.isSafeInteger(quantity) || quantity < 0) {
       throw new ValidationError("Quantity must be a non-negative safe integer");
     }
@@ -98,7 +98,7 @@ export class CartService implements ICartService {
 
     if (quantity === 0) {
       await this.repository.deleteCartItem(item.id);
-      return;
+      return null;
     }
 
     const product = await this.repository.findProductStockInfo(productId);

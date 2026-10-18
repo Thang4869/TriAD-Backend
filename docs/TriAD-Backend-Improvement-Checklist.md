@@ -70,3 +70,12 @@ Các mức ưu tiên phản ánh rủi ro release và bằng chứng còn thiế
 - Evidence: [Orders #161](https://github.com/Thang4869/TriAD-Backend/pull/161) · [Rate limit #162](https://github.com/Thang4869/TriAD-Backend/pull/162) · [Audit #163](https://github.com/Thang4869/TriAD-Backend/pull/163) · [Auth outbox #164](https://github.com/Thang4869/TriAD-Backend/pull/164).
 - Security: [proxy-addr GHSA-jqcg-44mw-7w3h](https://github.com/jshttp/proxy-addr/security/advisories/GHSA-jqcg-44mw-7w3h) · [Multer advisories](https://github.com/expressjs/multer/security/advisories) · [OWASP ASVS](https://github.com/OWASP/ASVS).
 - Chi tiết vận hành: [Event durability](EVENT_DURABILITY.md) · [Dependency audit](DEPENDENCY_SECURITY_AUDIT.md) · [Operations](OPERATIONS.md) · [Threat model](THREAT_MODEL.md).
+
+
+## Cổng nghiệm thu theo checklist P0–P9 (18/10/2026)
+
+Tài liệu chuẩn hóa: [Production Readiness Gates](PRODUCTION_READINESS_GATES.md). Mỗi phase chỉ PASS khi tất cả acceptance criteria có commit, CI và log/môi trường tương ứng. Những mục đã có CI PASS không bị tính là chưa làm; staging gate không được coi là PASS do có unit/integration tests.
+
+**Thứ tự hiện hành:** G0 truth sync → G1 hygiene → G2 Clean Code → G3 domain invariants → G4 reliability → G5 staging recovery/auth → G6 k6/mutation → G7 telemetry/audit → G8 demo → G9 CV. Có thể triển khai độc lập song song nhưng không xác nhận gate sau hoàn tất nếu gate trước chưa PASS. Điểm thiếu theo DOCX gồm bảng invariant, type/DTO cleanup baseline, k6/mutation reporting, Jaeger correlation, INTERVIEW_QA và reviewer evidence.
+
+**P0 môi trường chưa nghiệm thu:** [#143](https://github.com/Thang4869/TriAD-Backend/issues/143) measured restore/RTO-RPO; [#140](https://github.com/Thang4869/TriAD-Backend/issues/140) staging proxy/Redis; [#84](https://github.com/Thang4869/TriAD-Backend/issues/84) process-kill checkout retry. Không đóng các issue này chỉ bằng test fixture.

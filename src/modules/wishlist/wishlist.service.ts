@@ -7,10 +7,23 @@ import {
   resolvePagination,
 } from "@shared/constants/pagination.constant";
 import type { IWishlistRepository } from "./application/ports/wishlist.repository.port";
+import type { WishlistItemWithProduct } from "./application/ports/wishlist-models";
+
+export interface WishlistPage {
+  items: WishlistItemWithProduct[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
 
 export interface IWishlistService {
-  getWishlist(userId: string, page?: number, limit?: number): Promise<unknown>;
-  addItem(userId: string, productId: string): Promise<unknown>;
+  getWishlist(
+    userId: string,
+    page?: number,
+    limit?: number,
+  ): Promise<WishlistPage>;
+  addItem(userId: string, productId: string): Promise<WishlistItemWithProduct>;
   removeItem(userId: string, productId: string): Promise<void>;
 }
 

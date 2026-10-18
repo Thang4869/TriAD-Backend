@@ -247,3 +247,40 @@ describe("Cart.hydrate", () => {
     expect(cart.total.getValue()).toBe(0);
   });
 });
+
+describe("Cart integer quantity invariants", () => {
+  const invalid = [0.5, 1.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1];
+
+  it.each(invalid)("rejects addItem invalid quantity %s", (quantity) => {
+    const cart = newCart();
+    expect(() => cart.addItem("p1", "Áo", new Money(1), quantity)).toThrow(InvalidCartQuantityError);
+    expect(cart.items).toHaveLength(0);
+    expect(cart.domainEvents).toHaveLength(0);
+  });
+
+  it.each(invalid)("rejects updateItemQuantity invalid quantity %s", (quantity) => {
+    const cart = newCart();
+    cart.addItem("p1", "Áo", new Money(1), 2);
+    cart.pullEvents();
+    expect(() => cart.updateItemQuantity("p1", quantity)).toThrow(InvalidCartQuantityError);
+    expect(cart.items[0].quantity).toBe(2);
+    expect(cart.domainEvents).toHaveLength(0);
+  });
+
+  it.each(invalid)("rejects persisted invalid quantity %s", (quantity) => {
+    expect(() => Cart.hydrate({
+      id: "cart-1",
+      userId: "user-1",
+      items: [{ productId: "p1", productName: "Áo", price: 1, quantity }],
+    })).toThrow(InvalidCartQuantityError);
+  });
+
+  it("rejects quantity overflow on an existing cart item without events", () => {
+    const cart = newCart();
+    cart.addItem("p1", "Áo", new Money(1), Number.MAX_SAFE_INTEGER);
+    cart.pullEvents();
+    expect(() => cart.addItem("p1", "Áo", new Money(1), 1)).toThrow(InvalidCartQuantityError);
+    expect(cart.items[0].quantity).toBe(Number.MAX_SAFE_INTEGER);
+    expect(cart.domainEvents).toHaveLength(0);
+  });
+});

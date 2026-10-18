@@ -90,5 +90,8 @@ function requireSourceVersion(sourceVersion: number | undefined): number {
   if (sourceVersion === undefined) {
     throw new Error("Versioned projection snapshot is required");
   }
+  if (!Number.isSafeInteger(sourceVersion) || sourceVersion < 0) {
+    throw new Error("Projection source version must be a non-negative safe integer");
+  }
   return sourceVersion;
 }

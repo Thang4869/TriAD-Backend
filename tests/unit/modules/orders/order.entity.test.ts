@@ -480,3 +480,41 @@ describe("Order.hydrate", () => {
     expect(order.subtotal.getValue()).toBe(0);
   });
 });
+
+describe("Order safe quantity and placement invariants", () => {
+  it.each([1.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid line quantity %s without mutation or events",
+    (quantity) => {
+      const order = newOrder();
+      expect(() => order.addItem("p1", "Áo", quantity, new Money(0))).toThrow(InvalidOrderItemError);
+      expect(order.items).toHaveLength(0);
+      expect(order.domainEvents).toHaveLength(0);
+    },
+  );
+
+  it("rejects merged quantity overflow before altering line items", () => {
+    const order = newOrder();
+    order.addItem("p1", "Áo", Number.MAX_SAFE_INTEGER, new Money(0));
+    expect(() => order.addItem("p1", "Áo", 1, new Money(0))).toThrow(InvalidOrderItemError);
+    expect(order.items[0].quantity).toBe(Number.MAX_SAFE_INTEGER);
+    expect(order.domainEvents).toHaveLength(0);
+  });
+
+  it("does not mark order placed when total computation overflows", () => {
+    const order = newOrder();
+    order.addItem("p1", "Áo", 1, new Money(Number.MAX_SAFE_INTEGER));
+    order.applyPricing({
+      tax: new Money(1),
+      shippingFee: new Money(0),
+      discountAmount: new Money(0),
+    });
+
+    expect(() => order.place()).toThrow("Amount must be a safe integer");
+    expect(order.domainEvents).toHaveLength(0);
+    // A failed place must leave the draft mutable for correction.
+    expect(() => order.removeItem("p1")).not.toThrow();
+    order.addItem("p2", "Quần", 1, new Money(100));
+    expect(() => order.place()).not.toThrow();
+    expect(order.domainEvents.map((e) => e.eventName)).toEqual(["OrderPlaced"]);
+  });
+});

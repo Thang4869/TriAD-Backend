@@ -173,7 +173,7 @@ describe("CartService", () => {
 
       expect(repository.deleteCartItem).toHaveBeenCalledWith("ci1");
       expect(repository.updateCartItemQuantity).not.toHaveBeenCalled();
-      expect(result).toBeUndefined();
+      expect(result).toBeNull();
     });
 
     it("ném ValidationError khi quantity mới vượt tồn kho", async () => {
@@ -325,5 +325,30 @@ describe("CartService", () => {
 
       expect(repository.createCartWithItems).toHaveBeenCalledWith("user-1");
     });
+  });
+});
+
+describe("CartService safe integer quantity boundaries", () => {
+  const invalid = [0.5, 1.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1];
+  it.each(invalid)("rejects addItem quantity %s before any DB call", async (quantity) => {
+    const repository = createFakeRepository();
+    await expect(new CartService(repository).addItem("u", "p", quantity)).rejects.toBeInstanceOf(ValidationError);
+    expect(repository.findProductStockInfo).not.toHaveBeenCalled();
+  });
+
+  it.each(invalid)("rejects updateItem quantity %s before any DB call", async (quantity) => {
+    const repository = createFakeRepository();
+    await expect(new CartService(repository).updateItem("u", "p", quantity)).rejects.toBeInstanceOf(ValidationError);
+    expect(repository.findCartWithItems).not.toHaveBeenCalled();
+  });
+
+  it("blocks merged quantity overflow before repository update", async () => {
+    const repository = createFakeRepository({
+      findProductStockInfo: vi.fn().mockResolvedValue({ id: "p", stock: Number.MAX_SAFE_INTEGER }),
+      findCartByUserId: vi.fn().mockResolvedValue({ id: "c", userId: "u" }),
+      findCartItem: vi.fn().mockResolvedValue({ id: "ci", quantity: Number.MAX_SAFE_INTEGER }),
+    });
+    await expect(new CartService(repository).addItem("u", "p", 1)).rejects.toBeInstanceOf(ValidationError);
+    expect(repository.updateCartItemQuantity).not.toHaveBeenCalled();
   });
 });

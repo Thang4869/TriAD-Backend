@@ -17,9 +17,12 @@ export interface WishlistPage {
   totalPages: number;
 }
 
-
 export interface IWishlistService {
-  getWishlist(userId: string, page?: number, limit?: number): Promise<WishlistPage>;
+  getWishlist(
+    userId: string,
+    page?: number,
+    limit?: number,
+  ): Promise<WishlistPage>;
   addItem(userId: string, productId: string): Promise<WishlistItemWithProduct>;
   removeItem(userId: string, productId: string): Promise<void>;
 }

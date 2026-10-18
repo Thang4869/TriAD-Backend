@@ -3,7 +3,10 @@ import {
   ValidationError,
 } from "@shared/errors/application-error";
 import type { IReviewsRepository } from "./application/ports/reviews.repository.port";
-import type { ReviewWithUser, ReviewWithUserAndProduct } from "./application/ports/review-models";
+import type {
+  ReviewWithUser,
+  ReviewWithUserAndProduct,
+} from "./application/ports/review-models";
 
 export interface ReviewsPage<TReview> {
   reviews: TReview[];
@@ -12,7 +15,6 @@ export interface ReviewsPage<TReview> {
   limit: number;
   totalPages: number;
 }
-
 
 export interface IReviewsService {
   getReviewsByProduct(
@@ -31,7 +33,10 @@ export interface IReviewsService {
     userId: string,
     isAdmin?: boolean,
   ): Promise<{ deleted: true }>;
-  adminGetAll(page?: number, limit?: number): Promise<ReviewsPage<ReviewWithUserAndProduct>>;
+  adminGetAll(
+    page?: number,
+    limit?: number,
+  ): Promise<ReviewsPage<ReviewWithUserAndProduct>>;
 }
 
 export class ReviewsService implements IReviewsService {

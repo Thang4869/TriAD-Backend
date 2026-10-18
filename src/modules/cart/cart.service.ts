@@ -40,8 +40,8 @@ export class CartService implements ICartService {
     productId: string,
     quantity: number,
   ): Promise<CartItemWithProduct> {
-    if (quantity <= 0) {
-      throw new ValidationError("Quantity must be greater than 0");
+    if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+      throw new ValidationError("Quantity must be a positive safe integer");
     }
 
     const product = await this.repository.findProductStockInfo(productId);
@@ -60,6 +60,9 @@ export class CartService implements ICartService {
 
     if (existingItem) {
       const newQuantity = existingItem.quantity + quantity;
+      if (!Number.isSafeInteger(newQuantity)) {
+        throw new ValidationError("Cart quantity exceeds safe integer range");
+      }
       if (newQuantity > product.stock) {
         throw new ValidationError(
           `Cannot add more than ${product.stock} items`,
@@ -79,8 +82,8 @@ export class CartService implements ICartService {
     productId: string,
     quantity: number,
   ): Promise<CartItemWithProduct | void> {
-    if (quantity < 0) {
-      throw new ValidationError("Quantity cannot be negative");
+    if (!Number.isSafeInteger(quantity) || quantity < 0) {
+      throw new ValidationError("Quantity must be a non-negative safe integer");
     }
 
     const cart = await this.repository.findCartWithItems(userId);

@@ -50,3 +50,10 @@ Các hạng mục cần staging credentials/endpoint được ghi **BLOCKED ON E
 **Quyết định cần duyệt:** dependency high risk acceptance, email TTL/resend, proxy topology/CSRF, API deprecation date, payment/Saga provider scope. Tiêu chí đóng từng mục và các liên kết nằm trong [Improvement Checklist](TriAD-Backend-Improvement-Checklist.md), [Dependency Security](DEPENDENCY_SECURITY_AUDIT.md), [Event Durability](EVENT_DURABILITY.md) và [Operations](OPERATIONS.md).
 
 Không tăng điểm chỉ vì checklist hoặc CI xanh; production/staging evidence tương xứng vẫn cần thiết.
+
+
+## Gate audit bổ sung theo checklist P0–P9 (18/10/2026)
+
+Xem [Production Readiness Gates](PRODUCTION_READINESS_GATES.md) để kiểm tra từng cổng G0–G9. **Chưa có cổng nào được chứng nhận PASS toàn bộ** theo tiêu chuẩn DOCX: CI và mã nguồn đã xác nhận một số hạng mục, nhưng chưa có đủ review, staging và báo cáo k6/mutation/recovery end-to-end. Điểm tham khảo ~8.8 trong tài liệu này là baseline kỹ thuật không phải gate score và không được dùng làm tuyên bố chứng nhận trên CV.
+
+**Phân loại:** G0/G1/G3/G4/G5/G7 = PARTIAL; G2/G6/G8/G9 = NOT VERIFIED hoặc BLOCKED ON ENVIRONMENT. Các kết quả code/CI đã xác minh vẫn được giữ trong phần evidence, không đặt lại thành TODO. Ưu tiên staging recovery [#143](https://github.com/Thang4869/TriAD-Backend/issues/143), reverse proxy [#140](https://github.com/Thang4869/TriAD-Backend/issues/140) và process-crash retry [#84](https://github.com/Thang4869/TriAD-Backend/issues/84).

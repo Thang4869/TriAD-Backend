@@ -573,3 +573,8 @@ This project is an educational engineering reference and portfolio work, **not a
 > Code is written once, read and maintained many times.
 >
 > Domain purity, explicit boundaries, and operational reliability should be demonstrated by code and evidence, not by labels alone.
+
+
+## Production-readiness acceptance gates
+
+This portfolio documents implementation and CI evidence separately from environmental verification. The [P0–P9 readiness gate matrix](docs/PRODUCTION_READINESS_GATES.md) tracks the remaining independent review, staging restore and RTO/RPO drills, proxy/security verification, load and mutation reports, observability, demo and interview evidence. No end-to-end production acceptance is claimed simply because automated CI passes.

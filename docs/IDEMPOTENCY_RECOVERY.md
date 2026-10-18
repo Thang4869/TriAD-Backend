@@ -1,7 +1,7 @@
 # Idempotency recovery and lease ownership
 
 **Scope:** HTTP idempotency middleware, checkout retry safety and Redis availability.
-**Verification:** Implementation and tests committed; CI and deployed failure drills are not yet verified.
+**Verification (2026-10-18):** Implementation and unit/integration tests are on `main`; the current CI run [#39116584480](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480) reports unit/integration and typecheck jobs passed at the time of review. Deployed failure drills remain **OPEN**; no staging outcome is claimed.
 
 ## Runtime contract
 
@@ -26,5 +26,13 @@ Therefore checkout/order creation must enforce idempotency at the durable transa
 4. Kill the API worker after a durable checkout commit but before HTTP delivery. Retry with the same key and verify the durable checkout transaction does not create a duplicate order.
 5. Disconnect Redis before claim acquisition: requests fail closed with HTTP 503. Recover Redis and verify subsequent requests succeed without a restart.
 6. Confirm captured logs contain no full raw idempotency key, access token or sensitive request body. Record exceptions and an operations runbook.
+
+### Required evidence record for a staging run
+
+| Date (UTC) | Deployment SHA | Scenario | Expected/observed result | Order count before/after retry | Sanitized artifact link |
+| --- | --- | --- | --- | --- | --- |
+| Pending staging execution | — | Redis outage / lost response / stale lease | — | — | No deployed result claimed |
+
+Use synthetic accounts and orders. Record incident and recovery timestamps, HTTP status, Redis availability, and durable order identifiers in redacted form. Never attach raw idempotency keys, access tokens, request bodies or customer data.
 
 **Do not close #84** until durable recovery proof and CI checks are available.

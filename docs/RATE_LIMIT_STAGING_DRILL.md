@@ -15,5 +15,13 @@
 5. **Reconnect:** Restore Redis and show HTTP requests recover without API restart. Confirm failed/in-flight calls are not retroactively accepted.
 6. **Isolation:** Check `/health/live` and `/health/ready` separately; health routes outside `/api` must not depend on the API rate limiter. Record readiness behavior during the outage.
 
+## Evidence record template
+
+| Date (UTC) | Deployment SHA | Proxy / `TRUST_PROXY` | Redis version | Case | Expected / observed status | Recovery time | Sanitized artifact link |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Pending staging execution | — | — | — | — | — | — | No deployed result claimed |
+
+Keep identities, credentials, tokens and raw HMAC-derived keys out of artifacts. Record timestamps and whether readiness, 429 budgets, Redis outage, and recovery behaved as expected.
+
 ## Release gate
-Attach a dated evidence table with request/response samples, sanitized logs, architecture/proxy diagram, observed 429/503 and downtime. Close B7/#140 only after passing the actual deployment drill; unit tests or mocked Redis stores alone are insufficient.
+Attach a completed evidence table with request/response samples, sanitized logs, architecture/proxy diagram, observed 429/503 and downtime. Close B7/#140 only after passing the actual deployment drill; unit tests or mocked Redis stores alone are insufficient.

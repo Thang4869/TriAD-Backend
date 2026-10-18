@@ -15,14 +15,16 @@ export interface NotificationsPage {
   totalPages: number;
 }
 
-
 export interface INotificationsService {
   getNotifications(
     userId: string,
     page?: number,
     limit?: number,
   ): Promise<NotificationsPage>;
-  markAsRead(notificationId: string, userId: string): Promise<NotificationRecord>;
+  markAsRead(
+    notificationId: string,
+    userId: string,
+  ): Promise<NotificationRecord>;
   markAllAsRead(userId: string): Promise<{ count: number }>;
   createNotification(
     userId: string,

@@ -241,3 +241,19 @@ describe("Product stock quantity invariants", () => {
     },
   );
 });
+
+describe("Product stock hydration and overflow", () => {
+  it.each([-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid hydrated stock %s",
+    (stock) => {
+      expect(() => newProduct({ stock })).toThrow(InvalidStockQuantityError);
+    },
+  );
+
+  it("rejects restock overflowing safe integer without mutating stock", () => {
+    const product = newProduct({ stock: Number.MAX_SAFE_INTEGER });
+    expect(() => product.increaseStock(1)).toThrow(InvalidStockQuantityError);
+    expect(product.stock).toBe(Number.MAX_SAFE_INTEGER);
+    expect(product.domainEvents).toHaveLength(0);
+  });
+});

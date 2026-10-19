@@ -15,6 +15,56 @@ The runner uses PostgreSQL **test** credentials only. Both scripts refuse execut
 
 The recorded seconds describe a small **CI fixture**, not production RTO, RPO, full PITR capability or recoverability of Redis/BullMQ. The post-backup row being absent demonstrates a snapshot boundary, not a zero-loss backup strategy.
 
+## Local recovery acceptance — 2026-10-19
+
+**Status: LOCAL PASS / DEPLOYED ACCEPTANCE OPEN**
+
+- Git revision: `3f4ad02`
+- Environment: isolated Docker Desktop recovery containers
+- PostgreSQL backup/restore and source-data consistency: PASS
+- Snapshot boundary: PASS; post-backup outbox event absent
+- Dead-letter outbox replay: PASS (isolated database)
+- Redis AOF persistence across clean restart: PASS
+- Order History Projection rebuild: PASS (1 order)
+- Product Catalog Projection rebuild: PASS (1 product)
+- Recovery HTTP `/health/live`: 200
+- Recovery HTTP `/health/ready`: 200
+- Recovery HTTP `/api/products`: 200; fixture `i9-restore-product` found
+
+### Continuous local recovery timing
+
+| Phase | Duration |
+| --- | ---: |
+| Create database and restore backup | 1.166 seconds |
+| Rebuild order and product projections | 0.933 seconds |
+| API startup and HTTP verification | 7.767 seconds |
+| **Total local recovery** | **9.866 seconds** |
+
+The timer started before database creation and stopped after
+successful HTTP health and product verification.
+
+**Measurement scope:** PostgreSQL and Redis were already running.
+The verified backup and Docker image were already available.
+A recovery-specific HTTP entrypoint was used without starting
+BullMQ workers or Outbox Relay.
+
+This is a local recovery benchmark, **not a production RTO guarantee**.
+
+### Outstanding acceptance requirements
+
+- Define and verify the PostgreSQL backup schedule and retention.
+- Verify off-host storage, encryption and key recovery.
+- Define approved RTO/RPO targets.
+- Measure actual RPO using timestamped committed/recovered writes.
+- Test full background-worker recovery and relevant external integrations.
+- Test authenticated API requests and safe cutover/rollback.
+- Record separate staging/deployment recovery evidence.
+
+**Issue #143 remains OPEN** until the required acceptance criteria
+are satisfied. The snapshot boundary test does not establish actual RPO.
+
+---
+
 ## Production-like acceptance (still OPEN)
 
 In a *separate* staging environment, document backup schedule, retention, encryption/key recovery, restore operator and off-host storage. Restore to a new environment, apply/reconcile migrations, rebuild projections and replay eligible outbox items safely. Verify queue consumer restart, read-only/draining cutover and sample authenticated API requests. Measure recovery **from incident declared to service healthy** (RTO) and actual time gap between last committed write and durable recovered record (RPO) with timestamps, not benchmark inference. Record rollback procedures and explicitly approve RTO/RPO targets before calling I9 CLOSED.

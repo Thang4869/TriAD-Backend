@@ -62,7 +62,7 @@ Catalog, order history and dashboard have dedicated projection tables. Query ada
 
 ### ADR-004: Saga orchestration
 
-Checkout and cancellation use persisted state, per-step timeout/retry policy, an overall deadline and compensating actions. Compensation operations must be idempotent because retries and process recovery are expected behavior.
+Saga state machines and persistence adapters exist for future payment and cancellation orchestration, but **production checkout currently uses a Serializable database transaction with transactional outbox**. The Saga is not invoked by the current production checkout request. Per-step timeout/retry and compensation are design/implementation components that require production adapter wiring and end-to-end failure tests before they can be claimed as an active production path.
 
 ### ADR-005: Hexagonal boundaries
 

@@ -15,7 +15,7 @@ Use the dedicated evidence procedures for recovery, rate-limit availability and 
 - Reverse-proxy trust and Redis rate-limit failure/recovery: [`RATE_LIMIT_STAGING_DRILL.md`](RATE_LIMIT_STAGING_DRILL.md).
 - Idempotency leases, durable checkout recovery and Redis outages: [`IDEMPOTENCY_RECOVERY.md`](IDEMPOTENCY_RECOVERY.md).
 
-These procedures require an isolated staging environment and a documented change window. CI results prove the automated test fixture only; do not use production data or credentials for fault injection, and do not report a staging gate as passed until dated, sanitized evidence is attached.
+Run these procedures **only in an isolated non-production environment** with a documented test window. A local Docker Compose environment is valid for a **local production-like drill** when topology, resources, test commands and sanitized results are recorded. A local PASS does **not** establish deployed/cloud staging acceptance. CI results prove only their automated fixtures. Never use production data or credentials for fault injection; report deployed staging PASS only with dated, sanitized evidence from that deployment.
 
 ## Trusted proxy configuration (B10/B7)
 

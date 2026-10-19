@@ -1,12 +1,11 @@
 # TriAD Backend — Work Checklist
 
-**Cập nhật:** 2026-10-19 · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
+**Cập nhật:** 2026-10-19 (đối chiếu source code, CI và issue acceptance) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
 
 **Trạng thái:** `[ ]` Chưa hoàn thành · `[~]` Đang làm / đã có code nhưng thiếu nghiệm thu · `[B]` Cần môi trường, dữ liệu hoặc quyết định bổ sung. Không tự chuyển sang hoàn thành chỉ vì CI xanh. Trong lúc chờ staging cloud, có thể thực hiện `production-like` trên máy cá nhân (Docker Compose) và ghi chính xác loại môi trường.
 
 ## P0 — Ưu tiên làm trước
 
-- [ ] **[#138 — JWT / token revocation](https://github.com/Thang4869/TriAD-Backend/issues/138):** Đối chiếu `jti`, `iss`, `aud`, token purpose, TTL, phân tách access/refresh/pre-auth; policy Redis fail-open/closed, metrics không log secrets; test wrong-token-class, Redis lỗi và expiry. Kiểm tra phần đã có trước khi sửa thêm; đóng issue chỉ khi đủ acceptance.
 - [~] **[#143 — Backup, restore và recovery](https://github.com/Thang4869/TriAD-Backend/issues/143):** Chạy từ bản clean trên local Docker trước: PostgreSQL backup→restore, outbox replay/dead-letter, projection rebuild, readiness/SIGTERM; đối chiếu dữ liệu, đo và lưu thời gian thực tế RTO/RPO với thông số môi trường. Sau đó làm lại trên staging triển khai nếu cần nghiệm thu cloud. [Runbook](RECOVERY_DRILL.md).
 - [~] **[#140 — Redis + reverse proxy](https://github.com/Thang4869/TriAD-Backend/issues/140):** Dựng proxy local tương đương topology production; thử `TRUST_PROXY`, giả mạo `X-Forwarded-For`, shared NAT, HTTP 429/503, Redis disconnect/reconnect, startup Lua SCRIPT LOAD và health policy; lưu cấu hình, logs và giới hạn môi trường. [Runbook](RATE_LIMIT_STAGING_DRILL.md).
 - [~] **[#84 — Checkout crash/retry](https://github.com/Thang4869/TriAD-Backend/issues/84):** Test mất response, kill process và retry cùng idempotency key; so sánh order/stock/Redis lease-owner fencing; khẳng định không nhân đôi order/trừ stock, lưu kịch bản/lệnh/log thực thi. [Runbook](IDEMPOTENCY_RECOVERY.md).

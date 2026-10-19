@@ -577,4 +577,4 @@ This project is an educational engineering reference and portfolio work, **not a
 
 ## Production-readiness acceptance gates
 
-This portfolio documents implementation and CI evidence separately from environmental verification. The [P0–P9 readiness gate matrix](docs/PRODUCTION_READINESS_GATES.md) tracks the remaining independent review, staging restore and RTO/RPO drills, proxy/security verification, load and mutation reports, observability, demo and interview evidence. No end-to-end production acceptance is claimed simply because automated CI passes.
+This portfolio documents implementation and CI evidence separately from environmental verification. The [Current work checklist](docs/TriAD-Backend-Improvement-Checklist.md) tracks the remaining independent review, staging restore and RTO/RPO drills, proxy/security verification, load and mutation reports, observability, demo and interview evidence. No end-to-end production acceptance is claimed simply because automated CI passes.

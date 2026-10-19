@@ -24,4 +24,4 @@ There is currently no demonstrated cross-entity lifecycle or multi-step invarian
 - Promotion to a richer domain model is justified only if moderation state transitions, notification delivery lifecycle, wishlist reservation logic, or auditable business invariants emerge.
 - CI typecheck, service tests and architecture boundary checks provide code-level evidence; production/staging readiness is a separate gate.
 
-Related evidence: [Domain Invariants](../DOMAIN_INVARIANTS.md), [Production Readiness Gates](../PRODUCTION_READINESS_GATES.md).
+Related evidence: [Domain Invariants](../DOMAIN_INVARIANTS.md), [Current Work Checklist](../TriAD-Backend-Improvement-Checklist.md).

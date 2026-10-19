@@ -21,4 +21,4 @@ The existing Money constructor uses `Math.round(amount)`, not floating-point cen
 
 Do not elevate straightforward reviews, wishlists and notifications into aggregates without transaction boundaries or invariants requiring it. See [CRUD modules ADR](adr/2026-10-18-crud-module-boundaries.md) for this documented decision. Domain rules may be implemented, but G3 remains **PARTIAL** until each invariant has verified test evidence and the CRUD decision is documented.
 
-See [Production Readiness Gates](PRODUCTION_READINESS_GATES.md).
+See [Current Work Checklist](TriAD-Backend-Improvement-Checklist.md).

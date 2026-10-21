@@ -78,6 +78,50 @@ Continue with browser login, refresh, cart and COD checkout, verification-email
 delivery, worker processing, and the dedicated failure drills below. A passing
 HTTP smoke does not establish all of those acceptance criteria.
 
+### Add a catalog for login, cart and COD testing
+
+Do **not** run `npm run seed` or `prisma:reset` on cloud staging. The legacy
+development seed deletes existing records and creates accounts with default
+passwords. Use `scripts/seed-staging-catalog.cjs` instead; it creates three
+clearly marked `[STAGING]` products and their public catalog projections in one
+transaction. It does not create users, send email, or create orders.
+
+1. Review and merge the catalog-seed change. Confirm that the API still uses
+   the isolated PostgreSQL resource from this Blueprint, whose logical database
+   name is `triad_staging`; keep external database access disabled. Both
+   `TRIAD_DEPLOYMENT_ENV=staging` and an actual `current_database()` check gate
+   the seed. These checks supplement the resource/connection review; a database
+   name alone is not proof of production isolation.
+2. On the existing **staging API service**, temporarily set
+   `TRIAD_SEED_STAGING_CATALOG=true`, preserving all other environment variables.
+   Deploy the reviewed main commit. The staging entrypoint runs migrations,
+   then the seed, then the application. A failed seed prevents application
+   startup; its transaction rolls back catalog writes. The normal production
+   Docker command never invokes it.
+3. Check the seed's count-only completion log and that the deploy reaches
+   `live`. Verify `/health/ready`, `/api/products`, product images and the
+   frontend catalog. The three image paths (`/images/21.jpg`, `22.jpg`, `23.jpg`)
+   refer to assets in the paired TriAD frontend, not new uploads.
+4. Set `TRIAD_SEED_STAGING_CATALOG=false` after verification and confirm the
+   resulting deployment is healthy. Unset also means disabled; other values
+   are rejected. Rerunning preserves existing records, edited prices, stock,
+   versions and projections, and can add a missing fixture projection from
+   the persisted product and review data. Reserved identifier conflicts fail
+   rather than overwrite unrelated data. This is not a general projection
+   rebuild or a stock-reset command.
+5. Register a personal staging test account through the UI using a private,
+   unique password, then verify login, cart and a staging COD order. No admin
+   or shared password is provisioned. Record mail delivery and browser results
+   separately; successful seeding does not establish those acceptance criteria.
+
+For script verification, run
+`node --test tests/scripts/staging-catalog.test.cjs`. CI also runs
+`tests/scripts/staging-catalog.postgres.test.cjs` against its disposable local
+Postgres service, checking retries, concurrent runs and transaction rollback.
+That database test requires `STAGING_CATALOG_TEST_SERVER_URL` pointing to a
+loopback `triad_test` server with permission to create a fresh `triad_staging`
+database; it refuses to reuse an existing database. Never point it at Render.
+
 ### Limits of the initial Free stack
 
 This Blueprint is for temporary functional testing. Free web services can

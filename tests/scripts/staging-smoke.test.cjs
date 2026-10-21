@@ -233,7 +233,11 @@ for (const exitCode of [0, 1]) {
         [path.resolve(__dirname, "../../scripts/start-staging.sh")],
         {
           cwd: root,
-          env: { ...process.env, TRIAD_DEPLOYMENT_ENV: "staging" },
+          env: {
+            ...process.env,
+            TRIAD_DEPLOYMENT_ENV: "staging",
+            TRIAD_SEED_STAGING_CATALOG: "false",
+          },
           encoding: "utf8",
           timeout: 5000,
         },

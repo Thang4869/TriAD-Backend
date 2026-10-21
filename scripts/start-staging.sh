@@ -8,5 +8,16 @@ if [ "${TRIAD_DEPLOYMENT_ENV:-}" != "staging" ]; then
   exit 1
 fi
 
+case "${TRIAD_SEED_STAGING_CATALOG:-false}" in
+  true|false) ;;
+  *)
+    echo "Refusing staging startup: TRIAD_SEED_STAGING_CATALOG must be true or false" >&2
+    exit 1
+    ;;
+esac
+
 ./node_modules/.bin/prisma migrate deploy
+if [ "${TRIAD_SEED_STAGING_CATALOG:-false}" = "true" ]; then
+  node scripts/seed-staging-catalog.cjs
+fi
 exec node dist/server.js

@@ -24,6 +24,9 @@ projects:
                 value: production
               - key: TRIAD_DEPLOYMENT_ENV
                 value: staging
+              # Temporarily opt in after reviewing the catalog seed runbook.
+              - key: TRIAD_SEED_STAGING_CATALOG
+                value: "false"
               - key: PORT
                 value: "10000"
               - key: DATABASE_URL

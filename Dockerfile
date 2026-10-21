@@ -41,6 +41,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY scripts/start-staging.sh ./scripts/start-staging.sh
+COPY scripts/seed-staging-catalog.cjs ./scripts/seed-staging-catalog.cjs
 
 RUN mkdir -p /app/logs && chown nodejs:nodejs /app/logs
 

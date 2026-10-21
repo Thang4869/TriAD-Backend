@@ -85,6 +85,8 @@ development seed deletes existing records and creates accounts with default
 passwords. Use `scripts/seed-staging-catalog.cjs` instead; it creates three
 clearly marked `[STAGING]` products and their public catalog projections in one
 transaction. It does not create users, send email, or create orders.
+Fixtures use UUIDs compatible with product routes. Cart add/update validation
+accepts those UUIDs and legacy CUIDs, preserving existing product identifiers.
 
 1. Review and merge the catalog-seed change. Confirm that the API still uses
    the isolated PostgreSQL resource from this Blueprint, whose logical database

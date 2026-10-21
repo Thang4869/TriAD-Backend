@@ -5,7 +5,7 @@
 const DATABASE_NAME = "triad_staging";
 const CATALOG = [
   {
-    id: "staging_catalog_glass_1000ml_v1",
+    id: "5eb6bfc1-940a-4d16-8d86-7dc5f577f101",
     slug: "staging-triad-storage-1000ml",
     name: "[STAGING] TriAD Storage Container 1000ml",
     description:
@@ -16,7 +16,7 @@ const CATALOG = [
     images: ["/images/21.jpg"],
   },
   {
-    id: "staging_catalog_glass_400ml_v1",
+    id: "5eb6bfc1-940a-4d16-8d86-7dc5f577f102",
     slug: "staging-triad-storage-400ml",
     name: "[STAGING] TriAD Storage Container 400ml",
     description:
@@ -27,7 +27,7 @@ const CATALOG = [
     images: ["/images/22.jpg"],
   },
   {
-    id: "staging_catalog_glass_800ml_v1",
+    id: "5eb6bfc1-940a-4d16-8d86-7dc5f577f103",
     slug: "staging-triad-storage-800ml",
     name: "[STAGING] TriAD Storage Container 800ml",
     description:

@@ -15,7 +15,7 @@ const enabled = {
   TRIAD_DEPLOYMENT_ENV: "staging",
   TRIAD_SEED_STAGING_CATALOG: "true",
 };
-const firstId = "staging_catalog_glass_1000ml_v1";
+const firstId = "5eb6bfc1-940a-4d16-8d86-7dc5f577f101";
 const firstSlug = "staging-triad-storage-1000ml";
 
 test(
@@ -38,6 +38,16 @@ test(
       [...url.searchParams.keys()].filter((key) => key !== "schema"),
       [],
     );
+
+    // Validate fixtures through the real HTTP schemas, not a duplicate regex.
+    require("ts-node/register/transpile-only");
+    const {
+      addItemSchema,
+      updateItemSchema,
+    } = require("../../src/modules/cart/dto/cart.dto");
+    const {
+      getProductParamsSchema,
+    } = require("../../src/modules/products/dto/products.dto");
 
     const admin = new Client({
       connectionString: url.toString(),
@@ -115,6 +125,24 @@ test(
           assert.ok(product.name.startsWith("[STAGING]"));
           assert.ok(Number(product.price) > 0);
           assert.ok(product.stock > 0);
+          assert.equal(
+            getProductParamsSchema.safeParse({ params: { id: product.id } })
+              .success,
+            true,
+          );
+          assert.equal(
+            addItemSchema.safeParse({
+              body: { productId: product.id, quantity: 1 },
+            }).success,
+            true,
+          );
+          assert.equal(
+            updateItemSchema.safeParse({
+              params: { productId: product.id },
+              body: { quantity: 0 },
+            }).success,
+            true,
+          );
           assert.equal(projection.stock, product.stock);
           assert.equal(projection.price.toString(), product.price.toString());
           assert.equal(projection.sourceVersion, product.version);

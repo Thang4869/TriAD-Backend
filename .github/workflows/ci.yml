@@ -61,8 +61,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
       - run: npm ci
-      - name: Test automatic PR label classification
-        run: node --test tests/scripts/pr-labels.test.cjs
+      - name: Test PR classification and staging smoke safeguards
+        run: node --test tests/scripts/pr-labels.test.cjs tests/scripts/staging-smoke.test.cjs
       - run: npm run architecture:check
       - run: npm run lint
       - run: npm run typecheck
@@ -340,7 +340,7 @@ jobs:
       IMAGE_TAG: triad-backend:runtime-smoke
       CONTAINER_NAME: triad-production-smoke
       NODE_ENV: production
-      PORT: "3000"
+      PORT: "10000"
       DATABASE_URL: postgresql://smoke:smoke@127.0.0.1:5432/triad_image_smoke
       REDIS_URL: redis://127.0.0.1:6379
       JWT_ACCESS_SECRET: ci-runtime-access-secret-at-least-32-chars
@@ -396,14 +396,15 @@ jobs:
           for attempt in $(seq 1 60); do
             http_code=$(curl --silent --output /tmp/triad-ready.json \
               --write-out '%{http_code}' --max-time 3 \
-              http://127.0.0.1:3000/health/ready || true)
+              http://127.0.0.1:${PORT}/health/ready || true)
 
             if [[ "$http_code" == "200" ]] && jq -e '
               .status == "up" and
               .components.database.status == "up" and
               .components.cache.status == "up" and
               .components.queues.status == "up"
-            ' /tmp/triad-ready.json > /dev/null 2>&1; then
+            ' /tmp/triad-ready.json > /dev/null 2>&1 &&
+              [[ "$(docker inspect --format '{{.State.Health.Status}}' "$CONTAINER_NAME")" == "healthy" ]]; then
               ready=1
               break
             fi
@@ -423,16 +424,16 @@ jobs:
           fi
 
           [[ "$(curl --silent --output /tmp/triad-live.json --write-out '%{http_code}' \
-            --max-time 5 http://127.0.0.1:3000/health/live)" == "200" ]]
+            --max-time 5 http://127.0.0.1:${PORT}/health/live)" == "200" ]]
           jq -e '.status == "up"' /tmp/triad-live.json
 
           [[ "$(curl --silent --output /tmp/triad-products.json --write-out '%{http_code}' \
-            --max-time 5 http://127.0.0.1:3000/api/products)" == "200" ]]
+            --max-time 5 http://127.0.0.1:${PORT}/api/products)" == "200" ]]
           jq -e '.success == true' /tmp/triad-products.json
 
           for path in /metrics /api/docs; do
             status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
-              --max-time 5 "http://127.0.0.1:3000${path}")
+              --max-time 5 "http://127.0.0.1:${PORT}${path}")
             if [[ "$status" != "404" ]]; then
               echo "Unexpected ${path} status: ${status} (expected 404)"
               exit 1

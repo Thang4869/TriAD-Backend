@@ -7,6 +7,93 @@
 3. Confirm PostgreSQL and Redis connectivity before restarting workers.
 4. Do not manually delete outbox rows; they are production recovery state.
 
+## Bring up isolated cloud staging
+
+Use the root [`render.yaml`](../render.yaml) for the first functional staging
+stack: one production Docker API with its existing BullMQ workers and Outbox
+Relay, a private PostgreSQL database and a private Key Value instance. It does
+not enable Google/Facebook login or add a payment gateway. Keep the application
+in `NODE_ENV=production` so cookie security and internal-route protection match
+the deployed behavior under test.
+
+Before applying the Blueprint, confirm the Render workspace, inspect existing
+resources to avoid duplicates, and merge the reviewed configuration. The new
+resources are colocated in Singapore. Do not repoint staging at a production
+database or reuse production credentials. Automatic deployment and automatic
+PR stacks are disabled; deploy an explicit reviewed commit.
+
+### Provision and configure
+
+1. Apply the Blueprint in the confirmed workspace. Check whether the workspace
+   already uses its Free Postgres/Key Value allowance before provisioning.
+2. Enter the actual `FRONTEND_URL`, matching allowed origins in `CORS_ORIGIN`,
+   SMTP host/port/user/password/from address, and Cloudinary credentials in the
+   hosting dashboard. `sync: false` prompts only on initial creation; later
+   changes must be entered on the existing service. Do not use dummy provider
+   values to bypass production configuration checks. Free web services block
+   outbound SMTP ports 25, 465 and 587. Verify that the chosen SMTP provider
+   supports an allowed port (such as 2525), or review a paid web-service plan
+   before accepting verification-email delivery. Port 25 is blocked on every
+   plan; do not substitute it.
+3. Render generates independent JWT secrets and a base64-encoded 32-byte TOTP
+   key, and injects private datastore URLs from Blueprint references. Keep
+   `COOKIE_DOMAIN` unset when frontend and API use unrelated hosting domains.
+4. Verify the frontend hosting connection has access to the intended team and
+   repository before creating a Vite deployment. Use the real backend API URL
+   for `VITE_API_BASE_URL`; validate cookie/CSRF behavior in a real browser.
+   If introducing an API proxy, review its effect on client IP attribution and
+   OAuth callback URLs before enabling it.
+5. Start the API and verify the deploy reaches `live`. The staging-only
+   `scripts/start-staging.sh` runs `prisma migrate deploy`, then uses `exec` to
+   start the HTTP process. It refuses to run without
+   `TRIAD_DEPLOYMENT_ENV=staging`. The default production Docker command keeps
+   its existing explicit-migration policy. Review schema compatibility before
+   each staging deploy; this guard does not identify which database a URL owns.
+
+`TRUST_PROXY` starts at the conservative value `0`. Establish the actual ingress
+topology and run the reverse-proxy drill before changing it or accepting #140.
+Until then, multiple clients can share a proxy IP budget. Do not enable a
+trust-all setting to make a smoke check pass.
+
+### Verify the running deployment
+
+Copy the API origin from the actual Render service, then run from the backend
+checkout (PowerShell):
+
+```powershell
+$env:STAGING_BASE_URL="https://<actual-staging-api-host>"
+npm run smoke:staging
+```
+
+The command issues only GET requests. It requires healthy liveness and
+database/cache/queue readiness, a successful public products response, and HTTP
+404 for unauthenticated `/metrics` and `/api/docs`. It rejects redirects, HTML
+login pages and timed-out requests. The output records the origin, time and
+checked statuses without response bodies or credentials. A cold Free service
+can need a longer first request: set `STAGING_SMOKE_TIMEOUT_MS=90000` for that
+run, then measure normal response times separately.
+
+Record the actual deploy ID/commit, plan, date and sanitized smoke output.
+Continue with browser login, refresh, cart and COD checkout, verification-email
+delivery, worker processing, and the dedicated failure drills below. A passing
+HTTP smoke does not establish all of those acceptance criteria.
+
+### Limits of the initial Free stack
+
+This Blueprint is for temporary functional testing. Free web services can
+sleep after idle time, stopping in-process workers and the relay; Free Postgres
+expires after 30 days and has no managed backups; Free Key Value does not
+persist data across restarts. `noeviction` prevents memory-pressure eviction,
+not restart data loss. This stack therefore does not prove continuous worker
+availability, durable queue recovery or production RTO/RPO. Choose persistent
+datastores and suitable always-running compute before accepting those gates.
+Require the full recovery evidence for #143 before accepting that gate;
+the GitHub issue state alone does not establish acceptance.
+
+References: [Blueprint specification](https://render.com/docs/blueprint-spec),
+[Free-instance limits](https://render.com/docs/free), and
+[Key Value persistence](https://render.com/docs/key-value#data-persistence).
+
 ## Failure-drill index and safety boundary
 
 Use the dedicated evidence procedures for recovery, rate-limit availability and checkout idempotency:
@@ -45,13 +132,13 @@ and `RATE_LIMIT_MAX` (default 100), keyed by Express `req.ip`.
 Health probes are **outside** the `/api` rate-limiter mount; no path-name
 skip exists. The auth routes have additional independent Redis budgets:
 
-| Request group | Window | Budget | Key scope |
-| --- | --- | --- | --- |
-| Register / login / resend verification | 1 hour | 60 | Trusted client IP, combined across routes |
-| Register / login / resend verification | 1 hour | 10 | Trusted client IP + normalized email |
-| Verify TOTP | 15 minutes | 20 | Trusted client IP |
-| Verify TOTP | 15 minutes | 5 | Trusted client IP + pre-auth token |
-| Refresh token | 15 minutes | 30 | Trusted client IP |
+| Request group                          | Window     | Budget | Key scope                                 |
+| -------------------------------------- | ---------- | ------ | ----------------------------------------- |
+| Register / login / resend verification | 1 hour     | 60     | Trusted client IP, combined across routes |
+| Register / login / resend verification | 1 hour     | 10     | Trusted client IP + normalized email      |
+| Verify TOTP                            | 15 minutes | 20     | Trusted client IP                         |
+| Verify TOTP                            | 15 minutes | 5      | Trusted client IP + pre-auth token        |
+| Refresh token                          | 15 minutes | 30     | Trusted client IP                         |
 
 Email and pre-auth token bucket components use domain-separated HMAC-SHA256
 with `JWT_ACCESS_SECRET`; raw identifiers/tokens must not be stored in

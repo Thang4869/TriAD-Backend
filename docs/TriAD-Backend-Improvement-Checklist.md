@@ -1,8 +1,14 @@
 # TriAD Backend — Work Checklist
 
-**Cập nhật:** 2026-10-19 (đối chiếu source code, CI và issue acceptance) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
+**Cập nhật:** 2026-10-21 (đối chiếu backend, frontend và điều kiện triển khai) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
 
 **Trạng thái:** `[ ]` Chưa hoàn thành · `[~]` Đang làm / đã có code nhưng thiếu nghiệm thu · `[B]` Cần môi trường, dữ liệu hoặc quyết định bổ sung. Không tự chuyển sang hoàn thành chỉ vì CI xanh. Trong lúc chờ staging cloud, có thể thực hiện `production-like` trên máy cá nhân (Docker Compose) và ghi chính xác loại môi trường.
+
+## Làm ngay — Dựng staging, không chờ refactor toàn bộ
+
+- [~] **Chuẩn bị triển khai:** Cấu hình `render.yaml`, startup migration riêng cho staging, Docker healthcheck theo `PORT` và `npm run smoke:staging`; review/merge và áp dụng lên đúng workspace. [Quy trình](OPERATIONS.md#bring-up-isolated-cloud-staging).
+- [B] **Điều kiện bên ngoài:** Chọn workspace Render; cấp kết nối frontend hosting quyền vào đúng team/repository; cấu hình SMTP/Cloudinary thật cùng URL frontend/API. Render Free chặn SMTP 25/465/587: xác nhận provider hỗ trợ cổng cho phép hoặc review gói web trả phí trước khi nghiệm thu email. Chưa có deployment smoke/browser evidence thì chưa coi staging hoàn thành.
+- [ ] **Nghiệm thu vòng đầu:** PostgreSQL/Redis/API + workers/relay hoạt động; trình duyệt đăng nhập mật khẩu → cart → COD checkout → refresh/logout. Chốt cookie/CORS/CSRF và topology proxy thực tế; chạy các P0 dưới đây. Gói Free chỉ phù hợp thử chức năng, không chứng minh độ bền queue hoặc khả năng chạy worker liên tục.
 
 ## P0 — Ưu tiên làm trước
 
@@ -14,13 +20,21 @@
 ## P1 — Hoàn thiện code, security và contract
 
 - [ ] **[#141 — Dependency/config](https://github.com/Thang4869/TriAD-Backend/issues/141):** Chạy audit trên lockfile hiện tại, phân loại advisories ở cả prod/dev, xác minh test-only secret không lọt runtime, upload regression, staging Cloudinary/OTLP, lưu quyết định chấp nhận rủi ro có hạn; không dùng số liệu audit cũ như kết quả mới.
-- [~] **[#90 — Browser CSRF / origin](https://github.com/Thang4869/TriAD-Backend/issues/90):** Test cookie/SameSite/Secure, cross-origin requests, Bearer bypass, credentials, OAuth callback, HTTPS/proxy và negative cases trong trình duyệt thực; ghi threat-model decision.
+- [~] **[#90 — Browser CSRF / origin](https://github.com/Thang4869/TriAD-Backend/issues/90):** Test cookie/SameSite/Secure, cross-origin requests, Bearer bypass, credentials, HTTPS/proxy và negative cases trên frontend/API thật; ghi threat-model decision. OAuth nghiệm thu theo các bước riêng bên dưới.
 - [~] **[#146 — DI / composition root](https://github.com/Thang4869/TriAD-Backend/issues/146):** Kiểm tra registration theo module, reuse Auth adapter, request scope có tác dụng hay bỏ, health injection, không service locator; regression tests + architecture/typecheck/lint.
 - [~] **[#148 — OpenAPI/FE route](https://github.com/Thang4869/TriAD-Backend/issues/148):** Thêm schema request/response và negative-case contract cho auth/product/cart/checkout/orders; xác định source of truth Zod; chuyển FE sang canonical `/api/orders` nếu còn alias, xác minh FE↔BE E2E trước deprecation.
 - [ ] **[#139 — Order read-after-write](https://github.com/Thang4869/TriAD-Backend/issues/139):** Quyết định eventual consistency hay read-your-writes; định nghĩa độ trễ cho phép, bounded authoritative fallback (nếu cần), UI pending state và behavior khi projection lỗi; integration test delay ngay sau checkout.
 
+## OAuth — Google trước, Facebook sau; chuẩn bị tài khoản song song
+
+- [B] **Cấu hình nhà cung cấp:** Tạo Google OAuth web client và Meta App, tài khoản thử/quyền cần thiết; khai báo callback đúng URL đã triển khai và lưu credentials riêng trên hosting. Backend đã có strategy/state/callback; chưa có bằng chứng đăng nhập thật với nhà cung cấp.
+- [ ] **Google / frontend:** Thêm nút khởi tạo OAuth, khôi phục user và CSRF sau redirect, trạng thái từ chối/lỗi; hoàn thiện giao diện TOTP và thống nhất yêu cầu 2FA giữa password login và OAuth trước khi bật công khai. Hiện FE chưa có luồng OAuth và chưa hỗ trợ nhập 2FA; OAuth backend đang cấp token trực tiếp.
+- [ ] **Facebook / liên kết tài khoản:** Hoàn thiện UX xác minh email, chứng minh quyền sở hữu khi liên kết tài khoản có sẵn; giữ việc từ chối tự liên kết email chưa được xác minh. Nghiệm thu người dùng mới/cũ, email thiếu/chưa xác minh, state hết hạn/replay, cookie, refresh/logout và 2FA.
+
 ## P2 — Bằng chứng chất lượng, observability và xuất bản
 
+- [B] **PayPal — chuẩn bị bên ngoài:** Tạo REST app sandbox và tài khoản người mua/người bán thử; lưu credentials riêng. Đăng ký webhook khi đã có endpoint HTTPS thực tế.
+- [ ] **PayPal — triển khai sau các P0 checkout:** Hiện chỉ hỗ trợ COD, chưa có PayPal adapter/API. Thiết kế create/capture/refund và trạng thái thanh toán; xác thực chữ ký webhook, idempotency và đối chiếu order/amount/currency; kiểm thử hủy, lỗi/timeout, webhook trùng/đến muộn và không nhân đôi order/trừ stock. Đây là phần cần viết code, không chỉ chờ credentials; chưa tự wire Saga vào runtime khi chưa có bằng chứng end-to-end.
 - [ ] **[#144 — k6 contention](https://github.com/Thang4869/TriAD-Backend/issues/144):** Viết/chạy baseline checkout và hot-product concurrent scenarios; ghi dataset, máy/CPU/RAM, duration, p50/p95/p99, throughput, conflict/retry/error rate; đặt threshold có thể lặp lại.
 - [ ] **[#145 — Mutation testing](https://github.com/Thang4869/TriAD-Backend/issues/145):** Thiết lập mutation runner phù hợp Vitest, giới hạn ban đầu ở Money/Order/Cart/Product và core services; báo cáo surviving mutants, threshold sau baseline và CI artifact.
 - [ ] **[#147 — Admin audit](https://github.com/Thang4869/TriAD-Backend/issues/147):** Xác định admin actions; lưu actor/action/target/outcome/request ID không chứa token/PII dư; test authorization, audit write failure, retention và authorized export.
@@ -32,7 +46,6 @@
 - [ ] **G0 / G1:** Rà README và sơ đồ với checkout COD transaction-based, Saga/payment chưa wire vào production; độc lập review claims, README onboarding trong 5 phút và release security metadata.
 - [ ] **G2 / G3:** Chạy baseline `any`/type assertions; rà Prisma imports/DI boundaries, JSON Zod validation; kiểm tra persistence hydration/order pricing/cart event semantics, money rounding và invariants chưa phủ. Không thêm interface/pattern khi không giải quyết rủi ro thực.
 - [ ] **G4 / G7:** Xác nhận migration với dữ liệu đại diện, outbox→projection trace/log correlation, Grafana dashboard, alert-to-runbook và SLO/burn logic trên môi trường chạy được.
-- [B] **G5 / G8:** HTTPS local + proxy/cookie/OAuth + restore rehearsal; staging có thể là Docker local cho production-like, nhưng yêu cầu public demo và kiểm thử đặc thù cloud phải được chứng minh riêng.
 - [ ] **G9:** Tạo INTERVIEW_QA/tài liệu tái lập từ bằng chứng thật; chỉ công bố số đo khi runbook/report và commit SHA đối chiếu được.
 
 ## Điều kiện đóng mục

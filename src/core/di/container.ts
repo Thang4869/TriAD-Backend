@@ -22,6 +22,7 @@ export class Container {
   private registrations = new Map<Token<unknown>, Registration<unknown>>();
   private scopedInstances = new Map<Token<unknown>, unknown>();
   private readonly parent?: Container;
+  private readonly resolvingTokens = new Set<Token<unknown>>();
 
   constructor(parent?: Container) {
     this.parent = parent;
@@ -51,13 +52,13 @@ export class Container {
 
     switch (registration.lifetime) {
       case Lifetime.Transient:
-        return registration.factory(this) as T;
+        return this.createInstance<T>(token, registration.factory);
 
       case Lifetime.Scoped: {
         if (this.scopedInstances.has(token as Token<unknown>)) {
           return this.scopedInstances.get(token as Token<unknown>) as T;
         }
-        const instance = registration.factory(this) as T;
+        const instance = this.createInstance<T>(token, registration.factory);
         this.scopedInstances.set(token as Token<unknown>, instance);
         return instance;
       }
@@ -65,10 +66,29 @@ export class Container {
       case Lifetime.Singleton:
       default: {
         if (registration.instance === undefined) {
-          registration.instance = registration.factory(this);
+          registration.instance = this.createInstance<T>(
+            token,
+            registration.factory,
+          );
         }
         return registration.instance as T;
       }
+    }
+  }
+
+  private createInstance<T>(token: Token<T>, factory: Factory<unknown>): T {
+    if (this.resolvingTokens.has(token)) {
+      const path = [...this.resolvingTokens, token]
+        .map((entry) => entry.toString())
+        .join(" -> ");
+      throw new Error(`Circular dependency detected: ${path}`);
+    }
+
+    this.resolvingTokens.add(token);
+    try {
+      return factory(this) as T;
+    } finally {
+      this.resolvingTokens.delete(token);
     }
   }
 

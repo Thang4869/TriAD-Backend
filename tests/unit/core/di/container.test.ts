@@ -178,3 +178,88 @@ describe("Container.override", () => {
     expect(container.resolve(token)).toBe("value");
   });
 });
+
+describe("Container - circular dependencies", () => {
+  it.each(Object.values(Lifetime))(
+    "rejects a direct cycle for %s registrations",
+    (lifetime) => {
+      const token = createToken<string>("Self");
+      const container = new Container();
+      const factory = vi.fn((c: Container): string => c.resolve(token));
+      container.register(token, factory, lifetime);
+
+      expect(() => container.resolve(token)).toThrow(
+        "Circular dependency detected: Symbol(Self) -> Symbol(Self)",
+      );
+      expect(factory).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(Object.values(Lifetime))(
+    "rejects an indirect cycle inherited by a child scope for %s registrations",
+    (lifetime) => {
+      const first = createToken<string>("First");
+      const second = createToken<string>("Second");
+      const root = new Container();
+      root.register(first, (c) => c.resolve(second), lifetime);
+      root.register(second, (c) => c.resolve(first), lifetime);
+
+      expect(() => root.createScope().resolve(first)).toThrow(
+        "Circular dependency detected: Symbol(First) -> Symbol(Second) -> Symbol(First)",
+      );
+    },
+  );
+
+  it.each(Object.values(Lifetime))(
+    "allows retry after a factory throws for %s registrations",
+    (lifetime) => {
+      const token = createToken<string>("Retry");
+      const container = new Container();
+      const factory = vi
+        .fn<() => string>()
+        .mockImplementationOnce(() => {
+          throw new Error("temporary factory failure");
+        })
+        .mockReturnValue("recovered");
+      container.register(token, factory, lifetime);
+
+      expect(() => container.resolve(token)).toThrow(
+        "temporary factory failure",
+      );
+      expect(container.resolve(token)).toBe("recovered");
+      expect(factory).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("preserves lifetimes while resolving dependencies", () => {
+    const root = new Container();
+    for (const lifetime of Object.values(Lifetime)) {
+      const token = createToken<object>(lifetime);
+      root.register(token, () => ({}), lifetime);
+      const firstScope = root.createScope();
+      const secondScope = root.createScope();
+      const first = firstScope.resolve(token);
+      const repeated = firstScope.resolve(token);
+      const other = secondScope.resolve(token);
+
+      if (lifetime === Lifetime.Transient) expect(first).not.toBe(repeated);
+      else expect(first).toBe(repeated);
+      if (lifetime === Lifetime.Singleton) expect(first).toBe(other);
+      else expect(first).not.toBe(other);
+    }
+  });
+
+  it("accepts shared dependencies and distinct tokens with the same description", () => {
+    const container = new Container();
+    const shared = createToken<object>("Service");
+    const left = createToken<object>("Service");
+    const right = createToken<object>("Service");
+    const root = createToken<object[]>("Root");
+    container.register(shared, () => ({}), Lifetime.Transient);
+    container.register(left, (c) => c.resolve(shared));
+    container.register(right, (c) => c.resolve(shared));
+    container.register(root, (c) => [c.resolve(left), c.resolve(right)]);
+
+    expect(container.resolve(root)).toHaveLength(2);
+  });
+});

@@ -1,0 +1,87 @@
+# Temporary functional staging. See docs/OPERATIONS.md before applying.
+# Free Postgres expires and Free Key Value is not durable recovery storage.
+previews:
+  generation: off
+
+projects:
+  - name: TriAD Staging
+    environments:
+      - name: staging
+        services:
+          - type: web
+            name: triad-api-staging
+            runtime: docker
+            plan: free
+            region: singapore
+            branch: main
+            autoDeployTrigger: off
+            dockerfilePath: ./Dockerfile
+            dockerContext: .
+            dockerCommand: sh scripts/start-staging.sh
+            healthCheckPath: /health/ready
+            envVars:
+              - key: NODE_ENV
+                value: production
+              - key: TRIAD_DEPLOYMENT_ENV
+                value: staging
+              - key: PORT
+                value: "10000"
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: triad-postgres-staging
+                  property: connectionString
+              - key: REDIS_URL
+                fromService:
+                  type: keyvalue
+                  name: triad-redis-staging
+                  property: connectionString
+              - key: JWT_ACCESS_SECRET
+                generateValue: true
+              - key: JWT_REFRESH_SECRET
+                generateValue: true
+              - key: JWT_PREAUTH_SECRET
+                generateValue: true
+              - key: TOTP_ENCRYPTION_KEY
+                generateValue: true
+              - key: TOTP_ISSUER
+                value: TriAD-Staging
+              - key: FRONTEND_URL
+                sync: false
+              - key: CORS_ORIGIN
+                sync: false
+              # Set from verified ingress topology before rate-limit acceptance.
+              - key: TRUST_PROXY
+                value: "0"
+              - key: SMTP_HOST
+                sync: false
+              - key: SMTP_PORT
+                sync: false
+              - key: SMTP_USER
+                sync: false
+              - key: SMTP_PASS
+                sync: false
+              - key: SMTP_FROM
+                sync: false
+              - key: CLOUDINARY_CLOUD_NAME
+                sync: false
+              - key: CLOUDINARY_API_KEY
+                sync: false
+              - key: CLOUDINARY_API_SECRET
+                sync: false
+              - key: ENABLE_TRACING
+                value: "false"
+
+          - type: keyvalue
+            name: triad-redis-staging
+            plan: free
+            region: singapore
+            maxmemoryPolicy: noeviction
+            ipAllowList: []
+
+        databases:
+          - name: triad-postgres-staging
+            plan: free
+            region: singapore
+            databaseName: triad_staging
+            user: triad_staging
+            ipAllowList: []

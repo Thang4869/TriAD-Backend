@@ -127,8 +127,9 @@ database; it refuses to reuse an existing database. Never point it at Render.
 ### Deployed staging evidence — 2026-10-22
 
 The catalog and browser checks below were observed on the actual cloud staging
-stack. The checkout pricing discrepancy recorded below remains an acceptance
-blocker; a successful CI run does not replace a deployed browser check.
+stack. The initial checkout pricing discrepancy is retained as history; the
+reviewed-quote re-acceptance below records the deployed fix and its limits.
+A successful CI run does not replace a deployed browser check.
 
 | Item                        | Observed result                                                                                                                                                                                                  |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -192,16 +193,45 @@ Authenticated browser evidence from 2026-10-22:
   150,000 VND, tax 15,000, shipping 30,000, discount 0, total 195,000; the cart
   then became empty. The submitted contact data was synthetic and the notes
   explicitly prohibit fulfillment/contact.
-- **Acceptance blocker:** the pre-submit UI had shown only 180,000 VND.
-  Checkout must load the server quote (including tax/shipping/discount) before
-  enabling placement and reject a changed reviewed total transactionally.
-  Re-run this price comparison after the quote API and frontend are reviewed
-  and deployed; the observed order alone is not a checkout PASS.
+- **Initial acceptance blocker (resolved by the re-acceptance below):** the
+  pre-submit UI had shown only 180,000 VND.
+  The required fix was to load the server quote (including tax/shipping/discount)
+  before enabling placement and reject a changed reviewed total transactionally.
+  The deployed price comparison is recorded below; the initial order alone did
+  not establish a checkout PASS.
 
-Still pending: the corrected pre-submit total versus persisted receipt,
-explicit refresh/logout and negative CSRF cases, proxy client-IP/rate-limit
-behavior, Cloudinary upload, and worker/recovery drills. Keep the related
-checklist gates open until those checks have their own dated evidence.
+#### Reviewed-quote and logout re-acceptance — 2026-10-22
+
+The paired changes were merged in [backend PR #212](https://github.com/Thang4869/TriAD-Backend/pull/212)
+and [frontend PR #30](https://github.com/Thang4869/TriAD-12/pull/30).
+The following checks used the existing isolated staging resources, without
+reseeding the catalog or changing hosting plans, secrets or network access.
+
+| Item                | Observed result                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend             | Source [`227c9fb6c87c647c1fe54e8171101ba9015c0c5f`](https://github.com/Thang4869/TriAD-Backend/commit/227c9fb6c87c647c1fe54e8171101ba9015c0c5f); deploy `dep-dbcvsnm7bikc73a2uvn0` reached `live` at 19:16:38 UTC+7                                                                                                                                                       |
+| Frontend            | Source [`f3a3807c5f6f6a5c58906000771122e4f2fae5d3`](https://github.com/Thang4869/TriAD-12/commit/f3a3807c5f6f6a5c58906000771122e4f2fae5d3); deployment `dpl_6Ynk6MrMZzkFQ3UX9eEzUz7N2xeq` was `READY` and served the canonical origin                                                                                                                                     |
+| Current CI          | [Backend CI](https://github.com/Thang4869/TriAD-Backend/actions/runs/39771989596) and [frontend Test & Coverage](https://github.com/Thang4869/TriAD-12/actions/runs/39771940005) passed on those merge commits. The backend fullstack job checked out exactly those two SHAs and passed the checkout journey (one test). These are CI fixtures, not cloud failure drills. |
+| Deployed HTTP smoke | At 19:17:23 UTC+7, `smoke:staging` returned 200 for `/health/live`, `/health/ready`, `/api/products`, and 404 for unauthenticated `/metrics`, `/api/docs`                                                                                                                                                                                                                 |
+| Authenticated cart  | A verified staging account signed in and added one `[STAGING] TriAD Storage Container 1000ml` through the product modal                                                                                                                                                                                                                                                   |
+| Before submission   | Checkout showed placeholders and disabled placement while loading the quote; the loaded quote showed subtotal 150,000 VND, tax 15,000, shipping 30,000, discount 0, total **195,000**                                                                                                                                                                                     |
+| COD receipt         | Synthetic order `ORD-646B265403AE41229EA6D273F44986B9` succeeded with the same breakdown and total **195,000**; the cart became empty and checkout was disabled                                                                                                                                                                                                           |
+| Logout              | The account control changed to `Đăng nhập`; after a full reload and catalog load, the page still showed `Đăng nhập` and an empty cart                                                                                                                                                                                                                                     |
+
+The test order used synthetic contact fields and notes explicitly prohibiting
+fulfillment, shipping and contact. It is a non-production acceptance fixture,
+not a real purchase. The previous 180,000-versus-195,000 discrepancy is resolved
+for this deployed COD path. The browser pass did not alter live prices or inject
+a crash, lost response or Redis failure. Changed-total rejection and transaction
+rollback have automated PostgreSQL integration coverage in PR #212 and the
+passing backend CI; those tests do not establish cloud fault-recovery acceptance.
+
+Still pending: explicit refresh/rotation and token replay after logout,
+negative CSRF cases, proxy client-IP/rate-limit behavior, Cloudinary upload,
+and worker/recovery drills. Keep the related checklist gates open until those
+checks have their own dated evidence. The GitHub state of #143 is currently
+closed, but its documented deployment/RPO/worker acceptance remains incomplete;
+do not infer a production recovery PASS from that state.
 
 ### Limits of the initial Free stack
 

@@ -8,6 +8,7 @@ describe("OpenAPI contract", () => {
     expect(paths).toEqual(
       expect.objectContaining({
         "/api/products": expect.anything(),
+        "/api/auth/refresh": expect.anything(),
         "/api/products/search": expect.anything(),
         "/api/checkout": expect.anything(),
         "/api/checkout/quote": expect.anything(),
@@ -15,6 +16,36 @@ describe("OpenAPI contract", () => {
         "/api/admin/dashboard/stats": expect.anything(),
       }),
     );
+  });
+
+  it("documents cookie refresh without requiring an access Bearer or body token", () => {
+    expect(swaggerSpec).toMatchObject({
+      components: {
+        securitySchemes: {
+          refreshCookie: { type: "apiKey", in: "cookie", name: "refreshToken" },
+        },
+      },
+      paths: {
+        "/api/auth/refresh": {
+          post: {
+            security: [{ refreshCookie: [] }, {}],
+            requestBody: {
+              required: false,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      refreshToken: { type: "string", minLength: 1 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
   });
 
   it("marks checkout read aliases as legacy while retaining canonical order reads", () => {

@@ -333,17 +333,67 @@ The complete local backend unit run passed 1,133 tests in 109 files; typecheck,
 lint, architecture and build also passed. Local production-cookie assertions
 inspect controller response attributes; they are not an actual HTTPS browser
 cookie acceptance result.
-Merge and deploy this reviewed backend correction before the frontend change;
-rerun the frontend fullstack job against the corrected backend `main`, then
-perform the real HTTPS session checks. A CI run against the old backend cannot
-establish the new refresh flow.
+The paired correction has since been merged and deployed, with the new
+verification recorded below. A CI run against the old backend cannot establish
+the new refresh flow.
 
-Before accepting #90, review/deploy the paired changes, verify refresh and
-cookie attributes on actual HTTPS sessions, and resolve the session-binding
-decision in [the CSRF threat model](THREAT_MODEL.md#12-csrf). A passing
+Before accepting #90, complete the HTTPS cookie and cross-origin checks, and
+resolve the session-binding decision in
+[the CSRF threat model](THREAT_MODEL.md#12-csrf). A passing
 synthetic-cookie probe does not close those criteria. Cross-tab CSRF changes,
 background access expiry, and logout during Redis failure also need explicit
 behavior/evidence; the reload fix does not replay failed application writes.
+
+#### Paired auth deployment and re-acceptance — 2026-10-22
+
+[Backend PR #214](https://github.com/Thang4869/TriAD-Backend/pull/214) and
+[frontend PR #31](https://github.com/Thang4869/TriAD-12/pull/31) were merged by
+the repository owner. Render auto-deploy remains disabled; the reviewed backend
+source was deployed manually without changing secrets, migrations, plans or
+database network access.
+
+| Item                            | Verified evidence                                                                                                                                                                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend                         | Source [`f01d4ce6d76bee11f476e73188d27846fdde213f`](https://github.com/Thang4869/TriAD-Backend/commit/f01d4ce6d76bee11f476e73188d27846fdde213f); Render deploy `dep-dbd2v729lscs738ihc20` reached `live` at 22:46:44 UTC+7                                                                  |
+| Frontend                        | Source [`05f9f0d95970859b2f3080613e0598a404ddaea1`](https://github.com/Thang4869/TriAD-12/commit/05f9f0d95970859b2f3080613e0598a404ddaea1); Vercel deployment `dpl_HA8Sp5qu3bfjpEkMxQSCEC6K55Qg` was `READY` on the canonical frontend origin                                               |
+| Backend CI                      | [Run 39805583346](https://github.com/Thang4869/TriAD-Backend/actions/runs/39805583346) passed 1,293 tests in 132 files. Its fullstack job checked out exactly backend `f01d4ce` and frontend `05f9f0d`, and passed all three auth/checkout tests                                            |
+| Frontend retry                  | [PR run 39795464224, attempt 2](https://github.com/Thang4869/TriAD-12/actions/runs/39795464224/attempts/2) passed all three fullstack tests using backend `f01d4ce` and PR merge `5e8c7bf` (tree identical to deployed frontend `05f9f0d`). The successful unit/build/mock job was retained |
+| Deployed smoke                  | At 22:47:38 UTC+7, `smoke:staging` passed all five checks: live/ready/products 200, unauthenticated metrics/docs 404                                                                                                                                                                        |
+| Refresh boundary                | Two cookie-only requests with an invalid synthetic refresh credential and matching synthetic CSRF returned 401, through both Render and the Vercel proxy. The old schema had returned validation 400. No real session token was exported                                                    |
+| HTTPS login and protected write | Password login succeeded through the canonical frontend, followed by adding one staging product to the cart through the normal UI. The API login log recorded HTTP 200 at 22:56:19 UTC+7                                                                                                    |
+
+The frontend merge-triggered run initially checked out backend `1e568ab`
+before PR #214 was merged, so its first fullstack attempt failed with the old
+schema's 400. After its unit/build/mock job completed successfully, only the
+failed fullstack job was rerun. [Run 39805310153, attempt 2](https://github.com/Thang4869/TriAD-12/actions/runs/39805310153/attempts/2)
+**passed** using exactly frontend `05f9f0d` and backend `f01d4ce`, including all
+three fullstack tests. The initial failure is retained as regression evidence.
+
+HTTPS reload recovery was then checked without editing or exporting browser
+cookies. Login completed at 22:56:19 UTC+7; after the configured 15-minute
+access-cookie lifetime had elapsed naturally, a full reload produced
+`GET /api/auth/csrf` 401 at 23:11:42, followed by one
+`POST /api/auth/refresh` 200 and an authenticated `GET /api/cart` 200.
+The UI retained the signed-in account and the staging cart. A normal quantity
+increase from 1 to 2 then succeeded (`PUT /api/cart/items/:id` 200 at 23:12:18),
+confirming that a protected write worked with the recovered session and CSRF.
+These status-only application log observations contain no session token values.
+Token-value rotation is asserted by the disposable CI test, not by reading the
+real user's cookie jar. The reload does not establish automatic recovery for
+writes submitted from a page that remained open past expiry.
+
+The staging cart fixture was removed through the UI (`DELETE` 200 at
+23:13:42 UTC+7), and logout returned 200 at 23:14:26. A subsequent cart read
+returned 401. After a full reload and catalog load, the UI still showed
+`Đăng nhập` and cart count 0. No further order was placed, no existing order
+was changed, and no real session credential was copied into a replay probe.
+A second agent tab did not expose a signed-in state, so the cross-tab case
+remains unverified; this is not evidence of a cross-tab application failure.
+
+The automated replay and negative-CSRF results use disposable loopback
+PostgreSQL/Redis fixtures. They do not establish browser cookie attributes on
+HTTPS, cross-origin browser rejection, or production fault recovery. Keep #90
+open for the remaining deployed-session checks and session-binding decision.
 
 ### Limits of the initial Free stack
 

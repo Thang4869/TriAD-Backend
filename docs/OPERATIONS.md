@@ -124,6 +124,64 @@ That database test requires `STAGING_CATALOG_TEST_SERVER_URL` pointing to a
 loopback `triad_test` server with permission to create a fresh `triad_staging`
 database; it refuses to reuse an existing database. Never point it at Render.
 
+### Deployed staging evidence — 2026-10-22
+
+The catalog and public HTTP/browser checks below were observed on the actual
+cloud staging stack. Authenticated browser checkout and email delivery still
+require separate acceptance; the successful CI run is not their evidence.
+
+| Item                        | Observed result                                                                                                                                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend source              | [`a716071402dc1118da3d19ad8d5d2a8347cf53c9`](https://github.com/Thang4869/TriAD-Backend/commit/a716071402dc1118da3d19ad8d5d2a8347cf53c9), merging [PR #210](https://github.com/Thang4869/TriAD-Backend/pull/210) |
+| Runtime                     | `triad-api-staging`, Render Singapore, Free; `sh scripts/start-staging.sh`; `/health/ready` health check                                                                                                         |
+| Isolation                   | `triad-postgres-staging`, logical database `triad_staging`, available with external IP allowlist `[]`                                                                                                            |
+| Baseline                    | Public catalog returned zero products before enabling the seed                                                                                                                                                   |
+| Seed deploy                 | `dep-dbcq62om7kps73cipgo0`, same backend source, `live` at 12:46:37 UTC+7                                                                                                                                        |
+| Seed result                 | Three products and three catalog projections created in one successful run                                                                                                                                       |
+| Seed disabled               | `TRIAD_SEED_STAGING_CATALOG=false`; deploy `dep-dbcq7ihsrm7s73bliel0` reached `live` at 12:49:51 UTC+7                                                                                                           |
+| Persistence after disabling | At 12:51:10 UTC+7, the API still returned all three fixture UUIDs with stock 12 each                                                                                                                             |
+| Frontend                    | [Products page](https://triad-staging-three.vercel.app/pages/products.html) rendered three `[STAGING]` cards; all three product images loaded                                                                    |
+
+The service environment update merged only the seed flag, preserving the other
+variables. Render initiated both configuration deploys automatically; no
+additional manual deploy was triggered. The disabled flag matches the
+Blueprint default again. The post-disable startup log window contained no
+catalog-seed completion entry.
+
+Sanitized application log (the original timestamp is UTC):
+
+```text
+2026-10-22T05:46:20.972981062Z Staging catalog seed complete: {"productsCreated":3,"projectionsCreated":3}
+```
+
+At 12:51:03 UTC+7, `scripts/smoke-staging.cjs` passed against
+`https://triad-api-staging.onrender.com`:
+
+| GET endpoint    | HTTP status                                                      |
+| --------------- | ---------------------------------------------------------------- |
+| `/health/live`  | 200                                                              |
+| `/health/ready` | 200; database, cache and queues satisfied the readiness contract |
+| `/api/products` | 200                                                              |
+| `/metrics`      | 404                                                              |
+| `/api/docs`     | 404                                                              |
+
+The catalog response also allowed the exact frontend origin
+`https://triad-staging-three.vercel.app` with credentials enabled. This header
+check does not establish authenticated cookie or CSRF behavior.
+
+To reproduce the HTTP check from a checkout of this source (PowerShell):
+
+```powershell
+$env:STAGING_BASE_URL="https://triad-api-staging.onrender.com"
+$env:STAGING_SMOKE_TIMEOUT_MS="50000"
+npm run smoke:staging
+```
+
+Still pending: password login with a personal staging account, authenticated
+cart and COD checkout, refresh/logout, verification-email delivery and proof
+of worker processing. Keep the related checklist acceptance gates open until
+those flows and the dedicated failure drills have their own evidence.
+
 ### Limits of the initial Free stack
 
 This Blueprint is for temporary functional testing. Free web services can

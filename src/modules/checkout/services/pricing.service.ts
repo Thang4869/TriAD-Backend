@@ -25,6 +25,23 @@ export class PricingService {
     discountCode: string | undefined,
     tx: CheckoutTransaction,
   ): Promise<PricingResult> {
+    return this.price(subtotal, discountCode, tx, true);
+  }
+
+  async previewPricing(
+    subtotal: Money,
+    discountCode: string | undefined,
+    tx: CheckoutTransaction,
+  ): Promise<PricingResult> {
+    return this.price(subtotal, discountCode, tx, false);
+  }
+
+  private async price(
+    subtotal: Money,
+    discountCode: string | undefined,
+    tx: CheckoutTransaction,
+    consumeDiscountUsage: boolean,
+  ): Promise<PricingResult> {
     const tax = subtotal.multiply(CHECKOUT_PRICING.TAX_RATE);
 
     const shippingFee = new Money(
@@ -59,15 +76,21 @@ export class PricingService {
         );
       }
 
-      const success = await tx.incrementDiscountUsage(
-        discount.id,
-        discount.maxUses,
-      );
-
-      if (!success) {
-        throw new ConflictError(
-          "Discount code just reached its usage limit. Please retry.",
+      if (consumeDiscountUsage) {
+        const success = await tx.incrementDiscountUsage(
+          discount.id,
+          discount.maxUses,
         );
+        if (!success) {
+          throw new ConflictError(
+            "Discount code just reached its usage limit. Please retry.",
+          );
+        }
+      } else if (
+        discount.maxUses !== null &&
+        discount.usedCount >= discount.maxUses
+      ) {
+        throw new ValidationError("Discount code has reached its usage limit");
       }
 
       const rawAmount =

@@ -31,6 +31,11 @@
  *               phone: { type: string, pattern: '^[0-9]{10,11}$' }
  *               notes: { type: string }
  *               discountCode: { type: string }
+ *               expectedTotal:
+ *                 type: integer
+ *                 minimum: 0
+ *                 maximum: 9007199254740991
+ *                 description: Reviewed quote total in VND; a changed total rejects the transaction before creating an order. Optional for older clients.
  *     responses:
  *       201:
  *         description: Đặt hàng thành công
@@ -55,9 +60,44 @@
  *                         total: { type: number }
  *                     idempotent: { type: boolean, description: "true nếu đây là kết quả trả về từ 1 request trùng key trước đó" }
  *       400:
- *         description: Giỏ hàng trống hoặc dữ liệu không hợp lệ
+ *         description: Giỏ hàng trống, dữ liệu không hợp lệ hoặc tổng tiền đã thay đổi
  *       409:
  *         description: Hết hàng tồn kho khi giữ chỗ (stock reservation) thất bại
+ *
+ * /api/checkout/quote:
+ *   get:
+ *     summary: Quote the authenticated user's current cart before checkout
+ *     description: Includes tax, shipping and validated discount without reserving stock, consuming discount usage or creating an order. Revalidated at checkout; this is not a stock reservation.
+ *     tags: [Checkout]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: discountCode
+ *         schema: { type: string, minLength: 1, maxLength: 64 }
+ *     responses:
+ *       200:
+ *         description: Current price quote; Cache-Control is no-store
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [success, data]
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   required: [subtotal, tax, shippingFee, discountAmount, total]
+ *                   properties:
+ *                     subtotal: { type: integer, minimum: 0 }
+ *                     tax: { type: integer, minimum: 0 }
+ *                     shippingFee: { type: integer, minimum: 0 }
+ *                     discountAmount: { type: integer, minimum: 0 }
+ *                     discountCode: { type: string }
+ *                     total: { type: integer, minimum: 0 }
+ *       400:
+ *         description: Empty cart, unavailable product or invalid discount
+ *       401:
+ *         description: Authentication required
  *
  * /api/checkout/orders:
  *   get:

@@ -10,6 +10,7 @@ describe("OpenAPI contract", () => {
         "/api/products": expect.anything(),
         "/api/products/search": expect.anything(),
         "/api/checkout": expect.anything(),
+        "/api/checkout/quote": expect.anything(),
         "/api/orders": expect.anything(),
         "/api/admin/dashboard/stats": expect.anything(),
       }),
@@ -17,11 +18,12 @@ describe("OpenAPI contract", () => {
   });
 
   it("marks checkout read aliases as legacy while retaining canonical order reads", () => {
-    const paths = (
-      swaggerSpec as {
-        paths?: Record<string, { get?: { deprecated?: boolean } }>;
-      }
-    ).paths ?? {};
+    const paths =
+      (
+        swaggerSpec as {
+          paths?: Record<string, { get?: { deprecated?: boolean } }>;
+        }
+      ).paths ?? {};
 
     expect(paths["/api/checkout/orders"]?.get?.deprecated).toBe(true);
     expect(paths["/api/checkout/orders/{orderId}"]?.get?.deprecated).toBe(true);

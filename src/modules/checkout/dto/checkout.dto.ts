@@ -14,6 +14,18 @@ export const checkoutSchema = z.object({
     phone: z.string().regex(/^[0-9]{10,11}$/, "Phone must be 10-11 digits"),
     notes: z.string().optional(),
     discountCode: z.string().optional(),
+    expectedTotal: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .optional(),
+  }),
+});
+
+export const checkoutQuoteSchema = z.object({
+  query: z.object({
+    discountCode: z.string().trim().min(1).max(64).optional(),
   }),
 });
 

@@ -24,6 +24,7 @@ export interface CheckoutInput {
   phone: string;
   notes?: string;
   discountCode?: string;
+  expectedTotal?: number;
 }
 
 const MAX_RETRIES = 5;
@@ -39,6 +40,37 @@ export class CheckoutService {
     private readonly tracer: TracerPort,
     private readonly metrics: MetricsPort,
   ) {}
+
+  async quote(userId: string, discountCode?: string) {
+    const user = await this.repository.findUserCartForCheckout(userId);
+    if (!user?.cart?.items.length) throw new ValidationError("Cart is empty");
+
+    let subtotal = new Money(0);
+    for (const item of user.cart.items) {
+      if (!item.product.isActive || item.product.stock < item.quantity) {
+        throw new ValidationError(`Product ${item.productId} is unavailable`);
+      }
+      subtotal = subtotal.add(
+        new Money(item.product.price).multiply(item.quantity),
+      );
+    }
+
+    const pricing = await this.unitOfWork.run((tx) =>
+      this.pricingService.previewPricing(subtotal, discountCode, tx),
+    );
+    return {
+      subtotal: subtotal.getValue(),
+      tax: pricing.tax.getValue(),
+      shippingFee: pricing.shippingFee.getValue(),
+      discountAmount: pricing.discountAmount.getValue(),
+      discountCode: pricing.discountCode,
+      total: subtotal
+        .add(pricing.tax)
+        .add(pricing.shippingFee)
+        .subtract(pricing.discountAmount)
+        .getValue(),
+    };
+  }
 
   async checkout(userId: string, input: CheckoutInput) {
     return this.tracer.withSpan(
@@ -129,6 +161,14 @@ export class CheckoutService {
             );
 
             order.applyPricing(pricing);
+            if (
+              input.expectedTotal !== undefined &&
+              order.total.getValue() !== input.expectedTotal
+            ) {
+              throw new ValidationError(
+                "Checkout total changed. Refresh the total and review it before placing the order.",
+              );
+            }
             order.place();
 
             await tx.saveNewOrder(order, input.idempotencyKey);

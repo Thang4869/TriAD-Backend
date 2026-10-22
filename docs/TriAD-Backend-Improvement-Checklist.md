@@ -1,14 +1,13 @@
 # TriAD Backend — Work Checklist
 
-**Cập nhật:** 2026-10-21 (đối chiếu backend, frontend và điều kiện triển khai) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
+**Cập nhật:** 2026-10-22 (đối chiếu code và trình duyệt staging thực tế) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
 
 **Trạng thái:** `[ ]` Chưa hoàn thành · `[~]` Đang làm / đã có code nhưng thiếu nghiệm thu · `[B]` Cần môi trường, dữ liệu hoặc quyết định bổ sung. Không tự chuyển sang hoàn thành chỉ vì CI xanh. Trong lúc chờ staging cloud, có thể thực hiện `production-like` trên máy cá nhân (Docker Compose) và ghi chính xác loại môi trường.
 
 ## Làm ngay — Dựng staging, không chờ refactor toàn bộ
 
-- [~] **Chuẩn bị triển khai:** Cấu hình `render.yaml`, startup migration riêng cho staging, Docker healthcheck theo `PORT` và `npm run smoke:staging`; review/merge và áp dụng lên đúng workspace. [Quy trình](OPERATIONS.md#bring-up-isolated-cloud-staging).
-- [B] **Điều kiện bên ngoài:** Chọn workspace Render; cấp kết nối frontend hosting quyền vào đúng team/repository; cấu hình SMTP/Cloudinary thật cùng URL frontend/API. Render Free chặn SMTP 25/465/587: xác nhận provider hỗ trợ cổng cho phép hoặc review gói web trả phí trước khi nghiệm thu email. Chưa có deployment smoke/browser evidence thì chưa coi staging hoàn thành.
-- [ ] **Nghiệm thu vòng đầu:** PostgreSQL/Redis/API + workers/relay hoạt động; trình duyệt đăng nhập mật khẩu → cart → COD checkout → refresh/logout. Chốt cookie/CORS/CSRF và topology proxy thực tế; chạy các P0 dưới đây. Gói Free chỉ phù hợp thử chức năng, không chứng minh độ bền queue hoặc khả năng chạy worker liên tục.
+- [~] **Sửa và nghiệm thu tổng tiền checkout:** Trình duyệt staging ngày 2026-10-22 đã đăng nhập, thêm/tăng/giảm cart và giữ phiên/cart sau reload; đã tạo một đơn COD thử nhưng UI trước submit báo **180.000 ₫**, receipt BE là **195.000 ₫** do thuế. Review/deploy báo giá từ BE và kiểm tra tổng tiền đã xác nhận trong transaction; nghiệm thu lại trước khi coi COD hoàn thành. [Bằng chứng và giới hạn](OPERATIONS.md#deployed-staging-evidence--2026-10-22).
+- [~] **Nghiệm thu môi trường còn lại:** Kiểm tra refresh/logout, negative CSRF, client IP/rate-limit qua Vercel → Render, upload Cloudinary và worker/relay thực tế; chạy các P0 dưới đây. Gói Free chỉ phù hợp thử chức năng, không chứng minh độ bền queue hoặc khả năng chạy worker liên tục.
 
 ## P0 — Ưu tiên làm trước
 

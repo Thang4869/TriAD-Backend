@@ -6,6 +6,17 @@ import { sendSuccess, sendCreated } from "@shared/utils/api-response";
 export class CheckoutController {
   constructor(private readonly service: CheckoutService) {}
 
+  quote = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req.user as { id: string }).id;
+    const discountCode =
+      typeof req.query.discountCode === "string"
+        ? req.query.discountCode
+        : undefined;
+    const quote = await this.service.quote(userId, discountCode);
+    res.setHeader("Cache-Control", "no-store");
+    sendSuccess(res, quote);
+  });
+
   checkout = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;
     const result = await this.service.checkout(userId, req.body);

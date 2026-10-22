@@ -203,6 +203,115 @@ describe("CheckoutService", () => {
     repository.findOrderWithItems = vi.fn().mockResolvedValue(mockOrder);
   }
 
+  describe("checkout quote", () => {
+    beforeEach(() => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue({
+        ...baseUser,
+        cart: {
+          ...baseUser.cart,
+          items: [
+            {
+              ...baseUser.cart.items[0],
+              quantity: 1,
+              product: {
+                ...baseUser.cart.items[0].product,
+                price: 150000,
+                isActive: true,
+              },
+            },
+          ],
+        },
+      });
+    });
+
+    it("includes tax and shipping in the amount shown before order placement", async () => {
+      await expect(service.quote("user-1")).resolves.toEqual({
+        subtotal: 150000,
+        tax: 15000,
+        shippingFee: 30000,
+        discountAmount: 0,
+        discountCode: undefined,
+        total: 195000,
+      });
+      expect(mockStockService.reserveStock).not.toHaveBeenCalled();
+      expect(transaction.saveNewOrder).not.toHaveBeenCalled();
+      expect(transaction.clearCartItems).not.toHaveBeenCalled();
+    });
+
+    it("repeated discount quotes do not consume usage or stock", async () => {
+      vi.mocked(transaction.findDiscountByCode).mockResolvedValue(discount);
+      for (let i = 0; i < 2; i += 1) {
+        await expect(service.quote("user-1", "SAVE10")).resolves.toMatchObject({
+          discountAmount: 15000,
+          discountCode: "SAVE10",
+          total: 180000,
+        });
+      }
+      expect(transaction.incrementDiscountUsage).not.toHaveBeenCalled();
+      expect(transaction.decrementProductStock).not.toHaveBeenCalled();
+      expect(transaction.saveNewOrder).not.toHaveBeenCalled();
+    });
+
+    it("does not quote an exhausted discount", async () => {
+      vi.mocked(transaction.findDiscountByCode).mockResolvedValue({
+        ...discount,
+        maxUses: 1,
+        usedCount: 1,
+      });
+      await expect(service.quote("user-1", "SAVE10")).rejects.toThrow(
+        /usage limit/,
+      );
+      expect(transaction.incrementDiscountUsage).not.toHaveBeenCalled();
+    });
+
+    it("rejects an empty cart", async () => {
+      vi.mocked(repository.findUserCartForCheckout).mockResolvedValue(null);
+      await expect(service.quote("user-1")).rejects.toThrow("Cart is empty");
+    });
+
+    it.each([
+      { isActive: false, stock: 10 },
+      { isActive: true, stock: 0 },
+    ])("rejects unavailable product %j", async (availability) => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue({
+        ...baseUser,
+        cart: {
+          ...baseUser.cart,
+          items: [
+            {
+              ...baseUser.cart.items[0],
+              product: { ...baseUser.cart.items[0].product, ...availability },
+            },
+          ],
+        },
+      });
+      await expect(service.quote("user-1")).rejects.toThrow(/unavailable/);
+      expect(transaction.saveNewOrder).not.toHaveBeenCalled();
+    });
+  });
+
+  it("rejects a changed total before persisting an order or clearing the cart", async () => {
+    repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+    await expect(
+      service.checkout("user-1", { ...baseInput, expectedTotal: 30200 }),
+    ).rejects.toThrow(/total changed/);
+    expect(transaction.saveNewOrder).not.toHaveBeenCalled();
+    expect(transaction.clearCartItems).not.toHaveBeenCalled();
+  });
+
+  it("accepts the reviewed total and preserves idempotent response replay", async () => {
+    repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+    mockFindOrderSuccess();
+    await expect(
+      service.checkout("user-1", { ...baseInput, expectedTotal: 30220 }),
+    ).resolves.toMatchObject({ idempotent: false });
+    repository.findOrderByIdempotencyKey = vi.fn().mockResolvedValue(mockOrder);
+    await expect(
+      service.checkout("user-1", { ...baseInput, expectedTotal: 30220 }),
+    ).resolves.toMatchObject({ idempotent: true });
+    expect(transaction.saveNewOrder).toHaveBeenCalledTimes(1);
+  });
+
   it("should handle checkout without idempotency key", async () => {
     repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
 

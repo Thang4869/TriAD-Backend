@@ -5,12 +5,15 @@ import { validate } from "@shared/middlewares/validation.middleware";
 import { checkoutController } from "@/container";
 import {
   checkoutSchema,
+  checkoutQuoteSchema,
   getOrdersQuerySchema,
   getOrderParamsSchema,
 } from "./dto/checkout.dto";
 
 const router = Router();
 router.use(authMiddleware);
+
+router.get("/quote", validate(checkoutQuoteSchema), checkoutController.quote);
 
 router.post(
   "/",

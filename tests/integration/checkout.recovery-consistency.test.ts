@@ -51,6 +51,75 @@ function checkoutService(repository: PrismaCheckoutRepository) {
 }
 
 describe("Checkout recovery and pricing consistency (real PostgreSQL, T2)", () => {
+  it("quotes without side effects and rolls stock/discount usage back when the reviewed total changes", async () => {
+    const { user, product, cart } = await seededCart();
+    const discount = await prisma.discount.create({
+      data: {
+        code: "QUOTE-" + randomUUID(),
+        type: "PERCENTAGE",
+        value: 10,
+        maxUses: 2,
+        isActive: true,
+      },
+    });
+    const service = checkoutService(new PrismaCheckoutRepository());
+    const firstQuote = await service.quote(user.id, discount.code);
+    expect(firstQuote.total).toBe(31000);
+    await service.quote(user.id, discount.code);
+    expect(
+      (await prisma.discount.findUniqueOrThrow({ where: { id: discount.id } }))
+        .usedCount,
+    ).toBe(0);
+    expect(
+      (await prisma.product.findUniqueOrThrow({ where: { id: product.id } }))
+        .stock,
+    ).toBe(5);
+
+    await prisma.product.update({
+      where: { id: product.id },
+      data: { price: 1200, version: { increment: 1 } },
+    });
+    const input = {
+      idempotencyKey: "quote-review-" + randomUUID(),
+      paymentMethod: "COD" as const,
+      address: "Synthetic test address",
+      phone: "0000000000",
+      discountCode: discount.code,
+      expectedTotal: firstQuote.total,
+    };
+    await expect(service.checkout(user.id, input)).rejects.toThrow(
+      /total changed/,
+    );
+    const [stock, usage, orders, cartItems] = await Promise.all([
+      prisma.product.findUniqueOrThrow({ where: { id: product.id } }),
+      prisma.discount.findUniqueOrThrow({ where: { id: discount.id } }),
+      prisma.order.count({ where: { userId: user.id } }),
+      prisma.cartItem.count({ where: { cartId: cart.id } }),
+    ]);
+    expect(stock.stock).toBe(5);
+    expect(stock.version).toBe(1);
+    expect(usage.usedCount).toBe(0);
+    expect(orders).toBe(0);
+    expect(cartItems).toBe(1);
+
+    const updatedQuote = await service.quote(user.id, discount.code);
+    const placed = await service.checkout(user.id, {
+      ...input,
+      expectedTotal: updatedQuote.total,
+    });
+    expect(placed.order.total).toBe(updatedQuote.total);
+    expect(
+      (await prisma.product.findUniqueOrThrow({ where: { id: product.id } }))
+        .stock,
+    ).toBe(4);
+    expect(await prisma.order.count({ where: { userId: user.id } })).toBe(1);
+    expect(await prisma.cartItem.count({ where: { cartId: cart.id } })).toBe(0);
+    expect(
+      (await prisma.discount.findUniqueOrThrow({ where: { id: discount.id } }))
+        .usedCount,
+    ).toBe(1);
+  });
+
   it("recovers a committed order after a lost client response without charging stock twice", async () => {
     const { user, product, cart } = await seededCart();
     const service = checkoutService(new PrismaCheckoutRepository());
@@ -131,8 +200,11 @@ describe("Checkout recovery and pricing consistency (real PostgreSQL, T2)", () =
     ]);
 
     const completed = concurrent.filter(
-      (result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof service.checkout>>> =>
-        result.status === "fulfilled",
+      (
+        result,
+      ): result is PromiseFulfilledResult<
+        Awaited<ReturnType<typeof service.checkout>>
+      > => result.status === "fulfilled",
     );
     // If a request loses the serialization race, its client may retry.
     // The durable effect must still be exactly one order and one decrement.
@@ -154,5 +226,4 @@ describe("Checkout recovery and pricing consistency (real PostgreSQL, T2)", () =
     expect(stock.version).toBe(1);
     expect(cartItems).toBe(0);
   }, 30_000);
-
 });

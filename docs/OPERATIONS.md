@@ -126,9 +126,9 @@ database; it refuses to reuse an existing database. Never point it at Render.
 
 ### Deployed staging evidence — 2026-10-22
 
-The catalog and public HTTP/browser checks below were observed on the actual
-cloud staging stack. Authenticated browser checkout and email delivery still
-require separate acceptance; the successful CI run is not their evidence.
+The catalog and browser checks below were observed on the actual cloud staging
+stack. The checkout pricing discrepancy recorded below remains an acceptance
+blocker; a successful CI run does not replace a deployed browser check.
 
 | Item                        | Observed result                                                                                                                                                                                                  |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -177,10 +177,31 @@ $env:STAGING_SMOKE_TIMEOUT_MS="50000"
 npm run smoke:staging
 ```
 
-Still pending: password login with a personal staging account, authenticated
-cart and COD checkout, refresh/logout, verification-email delivery and proof
-of worker processing. Keep the related checklist acceptance gates open until
-those flows and the dedicated failure drills have their own evidence.
+Authenticated browser evidence from 2026-10-22:
+
+- Frontend source `e1fa9249a939fc200d35070de0001fcb26e4c27b` (PR #29),
+  Vercel deployment `dpl_3fXjawnZECQ14p23pHTxKVns1iG4`, canonical origin
+  `https://triad-staging-three.vercel.app`; `VITE_API_BASE_URL=/api` uses the
+  fixed HTTPS Render rewrite. Backend runtime source remains `a716071`.
+- Password login succeeded with a verified staging account. The user reported
+  receiving the verification email. A product was added through the product
+  modal; quantity changed `1 → 2 → 1`. A page reload retained both sign-in
+  and the two-item cart before the final decrease.
+- One synthetic COD order was created:
+  `ORD-3CFBE0F48A5B485997D1930347AD1015`. The confirmation showed subtotal
+  150,000 VND, tax 15,000, shipping 30,000, discount 0, total 195,000; the cart
+  then became empty. The submitted contact data was synthetic and the notes
+  explicitly prohibit fulfillment/contact.
+- **Acceptance blocker:** the pre-submit UI had shown only 180,000 VND.
+  Checkout must load the server quote (including tax/shipping/discount) before
+  enabling placement and reject a changed reviewed total transactionally.
+  Re-run this price comparison after the quote API and frontend are reviewed
+  and deployed; the observed order alone is not a checkout PASS.
+
+Still pending: the corrected pre-submit total versus persisted receipt,
+explicit refresh/logout and negative CSRF cases, proxy client-IP/rate-limit
+behavior, Cloudinary upload, and worker/recovery drills. Keep the related
+checklist gates open until those checks have their own dated evidence.
 
 ### Limits of the initial Free stack
 

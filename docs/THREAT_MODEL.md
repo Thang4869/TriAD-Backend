@@ -669,7 +669,10 @@ PATCH
 DELETE
 ```
 
-The current CSRF protection uses a token associated with the client and verifies the request header against the expected CSRF token.
+The current implementation is an unsigned double-submit cookie: a random
+32-byte value is stored as the readable `csrfToken` cookie and compared to
+`x-csrf-token` using a constant-time equality check. It is not cryptographically
+bound to a user, access JWT, refresh-token family, or server-side session.
 
 Typical flow:
 
@@ -692,6 +695,31 @@ OPTIONS
 should not mutate application state.
 
 Bearer-authenticated API clients may follow different CSRF semantics because authorization headers cannot normally be attached cross-origin by a malicious website without explicit browser permission.
+
+For the deployed Vercel staging arrangement, frontend requests use same-origin
+`/api` rewrites to Render. Keep `COOKIE_DOMAIN` unset (host-only cookies),
+HTTPS/Secure authentication cookies, the explicit CORS allowlist and the custom
+CSRF header. Login/verification/refresh responses deliver CSRF through JSON;
+`GET /api/auth/csrf` requires a valid access session. Frontend PR #31 adds reload
+recovery after access HTTP 401 by reading only a same-origin CSRF cookie, then
+attempting refresh once; it never reads the HttpOnly JWT cookies.
+
+**Open security decision for #90:** cookie/header equality does not prove
+session binding. Cookie injection or untrusted sibling-domain assumptions must
+not be treated as covered by matching-token tests. OWASP recommends a signed,
+session-bound double-submit design; evaluate that hardening and migration before
+declaring this gate production-ready. A host-only setting is useful deployment
+configuration but is not a cryptographic binding. See the
+[OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#signed-double-submit-cookie-recommended).
+
+Global CSRF checks skip safe methods, explicit Bearer authentication, requests
+without authentication cookies, and the public login/register/resend-verification
+writes. Production CORS rejects supplied origins outside the allowlist;
+requests without an Origin header remain allowed and still need authentication
+and the applicable CSRF check. Keep public-login CSRF, browser-origin negatives,
+cookie injection and cross-tab behavior in the acceptance review. The 16
+synthetic-cookie HTTP probes in OPERATIONS verify rejection boundaries, not
+these remaining threat-model conditions.
 
 ---
 

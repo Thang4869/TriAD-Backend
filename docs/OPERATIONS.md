@@ -233,6 +233,118 @@ checks have their own dated evidence. The GitHub state of #143 is currently
 closed, but its documented deployment/RPO/worker acceptance remains incomplete;
 do not infer a production recovery PASS from that state.
 
+#### CSRF HTTP boundary checks — 2026-10-22
+
+Eight synthetic-credential probes passed against each deployed origin (16
+checks total): Render at 21:06 UTC+7 and the Vercel `/api` proxy at 21:07 UTC+7.
+Runtime sources were backend `227c9fb` and frontend `f3a3807`, as recorded above.
+Every probe used `POST /api/cart/items` with `{}`; no real user's authentication
+cookies or credentials were read or used.
+
+| Case                                          | Render | Vercel proxy |
+| --------------------------------------------- | ------ | ------------ |
+| Access-cookie fixture; missing CSRF header    | 403    | 403          |
+| Access-cookie fixture; missing CSRF cookie    | 403    | 403          |
+| Mismatched CSRF cookie/header                 | 403    | 403          |
+| Matching CSRF; invalid access credential      | 401    | 401          |
+| Refresh-cookie fixture; missing CSRF          | 403    | 403          |
+| Invalid Bearer plus cookie fixture; no CSRF   | 401    | 401          |
+| No credentials                                | 401    | 401          |
+| Disallowed origin with matching CSRF fixtures | 403    | 403          |
+
+Allowed-origin responses named `https://triad-staging-three.vercel.app` in
+`Access-Control-Allow-Origin`; the disallowed-origin responses omitted it.
+The matching-token 401 demonstrates that the request reached authentication,
+not that a valid user session was accepted. These are HTTP probes, not browser
+SameSite/third-party-cookie checks or replay of a real user's tokens.
+
+Reproduce from PowerShell with Node 20+ (only synthetic invalid credentials):
+
+```powershell
+Set-Location E:\DNEK
+@'
+(async () => {
+  const origin = "https://triad-staging-three.vercel.app";
+  const access = "accessToken=synthetic-invalid-access";
+  const csrf = "csrfToken=synthetic-csrf-value";
+  const cases = [
+    ["missing-header", { Cookie: `${access}; ${csrf}` }, 403],
+    ["missing-csrf-cookie", { Cookie: access, "x-csrf-token": "synthetic-csrf-value" }, 403],
+    ["mismatched-token", { Cookie: `${access}; ${csrf}`, "x-csrf-token": "synthetic-other-value" }, 403],
+    ["matching-csrf-invalid-auth", { Cookie: `${access}; ${csrf}`, "x-csrf-token": "synthetic-csrf-value" }, 401],
+    ["refresh-cookie-missing-csrf", { Cookie: "refreshToken=synthetic-invalid-refresh" }, 403],
+    ["invalid-bearer-bypass", { Cookie: access, Authorization: "Bearer synthetic-invalid-bearer" }, 401],
+    ["no-credentials", {}, 401],
+    ["disallowed-origin", { Cookie: `${access}; ${csrf}`, "x-csrf-token": "synthetic-csrf-value", Origin: "https://csrf-probe.invalid" }, 403],
+  ];
+  let failures = 0;
+  for (const base of ["https://triad-api-staging.onrender.com", origin]) {
+    for (const [name, extra, expected] of cases) {
+      const response = await fetch(`${base}/api/cart/items`, {
+        method: "POST", redirect: "manual", body: "{}",
+        headers: { "Content-Type": "application/json", Origin: origin, ...extra },
+        signal: AbortSignal.timeout(20000),
+      });
+      await response.arrayBuffer();
+      const allowed = response.headers.get("access-control-allow-origin");
+      const pass = response.status === expected && allowed === (name === "disallowed-origin" ? null : origin);
+      console.log(JSON.stringify({ origin: base, case: name, expected, status: response.status, pass }));
+      if (!pass) failures++;
+    }
+  }
+  if (failures) process.exitCode = 1;
+})().catch((error) => {
+  console.error(JSON.stringify({ error: error.name, code: error.cause?.code || error.code || null }));
+  process.exitCode = 1;
+});
+'@ | node
+```
+
+The probe is intentionally tied to the current unsigned double-submit contract;
+update its matching-token fixture if that design changes. Do not substitute real
+session cookies into this snippet or publish tokens in logs/artifacts.
+The Node reproduction also passed on this test host with Node 24 and
+`NODE_USE_ENV_PROXY=1` for its configured network proxy.
+
+Local verification on the current source passed 121 auth/CSRF/revocation tests
+in six backend unit files. Frontend verification found a separate reload defect:
+`restoreCsrfToken()` discarded CSRF after access HTTP 401 but never called the
+existing refresh method, leaving a cached user with no working access session.
+[Frontend PR #31](https://github.com/Thang4869/TriAD-12/pull/31), head `d7db95d`,
+adds one same-origin refresh attempt and fullstack auth/checkout CI. Local
+frontend coverage passed 870 tests in 56 files, 22 deployment guard checks and
+the production build. Local fullstack execution was unavailable without
+PostgreSQL/Redis; the frontend CI provisions those disposable services.
+
+The [first frontend fullstack run](https://github.com/Thang4869/TriAD-12/actions/runs/39795464224)
+passed checkout and the missing-credentials case but failed valid cookie refresh
+with HTTP 400. It exposed the backend `refreshSchema` requiring a body token
+before the cookie-aware controller could run. Independent deployed probes with
+an invalid refresh-cookie fixture and matching CSRF returned 400
+`APPLICATION.VALIDATION` / `Required` on both origins, consistent with that
+validation boundary; they did not prove refresh-token validity.
+
+The accompanying backend patch makes the body field optional while preserving
+validation when supplied. The controller continues to require either a cookie
+or body credential. Its HTTP tests cover cookie/body/no-body requests, missing
+credentials, CSRF, failed rotation and production cookie attributes using a
+stubbed token service. OpenAPI now documents the cookie/body alternatives.
+The complete local backend unit run passed 1,133 tests in 109 files; typecheck,
+lint, architecture and build also passed. Local production-cookie assertions
+inspect controller response attributes; they are not an actual HTTPS browser
+cookie acceptance result.
+Merge and deploy this reviewed backend correction before the frontend change;
+rerun the frontend fullstack job against the corrected backend `main`, then
+perform the real HTTPS session checks. A CI run against the old backend cannot
+establish the new refresh flow.
+
+Before accepting #90, review/deploy the paired changes, verify refresh and
+cookie attributes on actual HTTPS sessions, and resolve the session-binding
+decision in [the CSRF threat model](THREAT_MODEL.md#12-csrf). A passing
+synthetic-cookie probe does not close those criteria. Cross-tab CSRF changes,
+background access expiry, and logout during Redis failure also need explicit
+behavior/evidence; the reload fix does not replay failed application writes.
+
 ### Limits of the initial Free stack
 
 This Blueprint is for temporary functional testing. Free web services can

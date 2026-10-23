@@ -2,7 +2,9 @@ name: quality-gates
 
 on:
   push:
+    branches: [main, develop]
   pull_request:
+    branches: [main, develop]
 
 # Prevent wasting runner minutes on outdated PR revisions.
 concurrency:

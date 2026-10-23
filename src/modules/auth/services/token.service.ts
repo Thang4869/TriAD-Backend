@@ -64,7 +64,9 @@ function hasAccessClaims(value: unknown): value is AccessTokenClaims {
   return (
     hasBaseClaims(value, "access", config.JWT_ACCESS_AUDIENCE) &&
     typeof value.email === "string" &&
-    typeof value.role === "string"
+    typeof value.role === "string" &&
+    (value.sessionId === undefined ||
+      (typeof value.sessionId === "string" && value.sessionId.length > 0))
   );
 }
 
@@ -114,13 +116,17 @@ export class TokenService implements AccessTokenVerifierPort {
     };
   }
 
-  private signAccessToken(user: Pick<AuthUser, "id" | "email" | "role">) {
+  private signAccessToken(
+    user: Pick<AuthUser, "id" | "email" | "role">,
+    sessionId: string,
+  ) {
     return signToken(
       {
         ...TokenService.claims("access", config.JWT_ACCESS_AUDIENCE),
         sub: user.id,
         email: user.email,
         role: user.role,
+        sessionId,
       },
       TokenService.ACCESS_SECRET,
       TokenService.ACCESS_EXPIRY,
@@ -264,8 +270,8 @@ export class TokenService implements AccessTokenVerifierPort {
       is2FAEnabled: boolean;
     };
   }> {
-    const accessToken = this.signAccessToken(user);
     const finalFamilyId = familyId || crypto.randomUUID();
+    const accessToken = this.signAccessToken(user, finalFamilyId);
     const refreshToken = this.signRefreshToken(user.id, finalFamilyId);
     await this.authRepository.createRefreshToken(
       refreshToken,
@@ -331,7 +337,10 @@ export class TokenService implements AccessTokenVerifierPort {
           );
         }
       }
-      const accessToken = this.signAccessToken(tokenRecord.user);
+      const accessToken = this.signAccessToken(
+        tokenRecord.user,
+        tokenRecord.familyId,
+      );
       const newRefreshToken = this.signRefreshToken(
         tokenRecord.user.id,
         tokenRecord.familyId,

@@ -1,7 +1,11 @@
 import { Request, Response } from "express";
 import { AuthService, TwoFactorRequired, AuthTokens } from "./auth.service";
 import { logger } from "@core/logger/winston";
-import { ValidationError } from "@shared/errors/application-error";
+import {
+  AuthenticationError,
+  ValidationError,
+} from "@shared/errors/application-error";
+import { readCsrfSessionId } from "@shared/utils/csrf-token";
 import config from "@config";
 import { asyncHandler } from "@shared/utils/async-handler";
 import {
@@ -133,8 +137,15 @@ export class AuthController {
     sendMessage(res, "Logged out successfully");
   });
 
-  csrf = asyncHandler(async (_req: Request, res: Response) => {
-    const csrfToken = generateCsrfToken();
+  csrf = asyncHandler(async (req: Request, res: Response) => {
+    const accessToken = req.headers.authorization?.startsWith("Bearer ")
+      ? req.headers.authorization.substring(7) || req.cookies?.accessToken
+      : req.cookies?.accessToken;
+    const sessionId = readCsrfSessionId(accessToken, "access");
+    if (!sessionId)
+      throw new AuthenticationError("Sign in again to renew the session");
+    const csrfToken = generateCsrfToken(sessionId);
+    res.set("Cache-Control", "no-store");
 
     res.cookie(
       CSRF_COOKIE_NAME,
@@ -201,7 +212,11 @@ export class AuthController {
     accessToken: string,
     refreshToken: string,
   ): string {
-    const csrfToken = generateCsrfToken();
+    const sessionId = readCsrfSessionId(accessToken, "access");
+    if (!sessionId)
+      throw new AuthenticationError("Sign in again to renew the session");
+    const csrfToken = generateCsrfToken(sessionId);
+    res.set("Cache-Control", "no-store");
 
     res.cookie("accessToken", accessToken, cookieOptions(15 * 60 * 1000));
     res.cookie(

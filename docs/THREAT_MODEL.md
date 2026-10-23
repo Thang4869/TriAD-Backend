@@ -669,57 +669,62 @@ PATCH
 DELETE
 ```
 
-The current implementation is an unsigned double-submit cookie: a random
-32-byte value is stored as the readable `csrfToken` cookie and compared to
-`x-csrf-token` using a constant-time equality check. It is not cryptographically
-bound to a user, access JWT, refresh-token family, or server-side session.
+Cookie writes use a signed double-submit token bound to the login session.
+Each login creates a random refresh-token family. Access JWTs carry the same
+value as `sessionId`; refresh JWTs carry `familyId`. Rotation preserves this
+binding; a separate login, including by the same user, gets another family.
+The binding never uses a static user ID or email.
 
-Typical flow:
+The opaque 64-hex token contains a 128-bit random nonce and a 128-bit tag from
+HMAC-SHA-256. The MAC input has a versioned domain separator and length-prefixed
+session ID; its key is `JWT_REFRESH_SECRET`. The truncated tag follows
+[RFC 2104 section 5](https://www.rfc-editor.org/rfc/rfc2104#section-5) and retains
+the existing frontend token format. JWTs, session IDs and secrets are not
+included in the readable value. Key rotation invalidates old signatures.
 
-```text
-Cookie:
-csrfToken=<token>
+Both cookie/header equality and the MAC are checked in constant time. Ordinary
+writes bind to the access JWT's session, so replacing only the refresh cookie
+cannot change the authenticated-write binding. Cookie refresh binds to its own
+refresh family, including after the browser expires the access cookie. Decoding
+only selects a candidate binding: authentication and the refresh service still
+verify JWT signature/type/issuer/audience/expiry and revocation. CSRF is never
+an authentication substitute. Explicit nonempty Bearer credentials follow the
+existing exception; an empty `Bearer ` cannot bypass cookie CSRF checks.
 
-Header:
-x-csrf-token: <token>
-```
+**Decision for #90:** use a session-bound MAC rather than unsigned cookie/header
+equality, following the [OWASP signed double-submit guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#signed-double-submit-cookie-recommended).
+Login, refresh and authenticated `GET /api/auth/csrf` issue fresh nonces and set
+`Cache-Control: no-store`. The same-origin frontend reads the latest readable
+CSRF cookie before writes; this supports another tab renewing the value without
+exposing HttpOnly JWT cookies. JSON bootstrap supports explicitly allowed
+separate-origin clients, but third-party-cookie restrictions can still prevent
+that topology. The supported staging arrangement is HTTPS Vercel `/api`
+rewrites to Render, with `COOKIE_DOMAIN` unset, Path `/`, Secure cookies,
+SameSite=None and the explicit CORS origin allowlist.
 
-Read-only HTTP methods such as:
+CSRF is not a one-time authorization credential. A previous signed nonce from
+the same still-valid family is not individually revoked; cookie/header equality,
+current JWT authentication and refresh replay controls still apply. A genuine
+CSRF value copied to another login session must fail. This does not remedy XSS,
+a compromised allowed frontend, stolen JWTs or replacement of authentication
+credentials themselves. Keep DNS/hosting trusted and cookies host-only; do not
+widen `COOKIE_DOMAIN` to an untrusted parent.
 
-```text
-GET
-HEAD
-OPTIONS
-```
+**Public authentication:** login/register/resend-verification/TOTP verification
+cannot require an existing session token. They accept only `application/json`,
+rejecting HTML forms and `text/plain` before cookies can be issued. Production
+CORS validates an exact origin allowlist, so cross-origin JSON browser requests
+must pass preflight. Cross-site/same-site browser metadata without an Origin is
+rejected in production. Originless JSON native clients remain supported;
+CORS/Fetch Metadata do not authenticate such clients. OAuth callback state and
+email verification remain separate flows.
 
-should not mutate application state.
-
-Bearer-authenticated API clients may follow different CSRF semantics because authorization headers cannot normally be attached cross-origin by a malicious website without explicit browser permission.
-
-For the deployed Vercel staging arrangement, frontend requests use same-origin
-`/api` rewrites to Render. Keep `COOKIE_DOMAIN` unset (host-only cookies),
-HTTPS/Secure authentication cookies, the explicit CORS allowlist and the custom
-CSRF header. Login/verification/refresh responses deliver CSRF through JSON;
-`GET /api/auth/csrf` requires a valid access session. Frontend PR #31 adds reload
-recovery after access HTTP 401 by reading only a same-origin CSRF cookie, then
-attempting refresh once; it never reads the HttpOnly JWT cookies.
-
-**Open security decision for #90:** cookie/header equality does not prove
-session binding. Cookie injection or untrusted sibling-domain assumptions must
-not be treated as covered by matching-token tests. OWASP recommends a signed,
-session-bound double-submit design; evaluate that hardening and migration before
-declaring this gate production-ready. A host-only setting is useful deployment
-configuration but is not a cryptographic binding. See the
-[OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#signed-double-submit-cookie-recommended).
-
-Global CSRF checks skip safe methods, explicit Bearer authentication, requests
-without authentication cookies, and the public login/register/resend-verification
-writes. Production CORS rejects supplied origins outside the allowlist;
-requests without an Origin header remain allowed and still need authentication
-and the applicable CSRF check. Keep public-login CSRF, browser-origin negatives,
-cookie injection and cross-tab behavior in the acceptance review. The 16
-synthetic-cookie HTTP probes in OPERATIONS verify rejection boundaries, not
-these remaining threat-model conditions.
+**Migration and evidence:** old access JWTs lack `sessionId` and old CSRF values
+are unsigned. They cannot authorize cookie writes on the new build: sign in
+again after deployment. There is no unsigned grace-period fallback, new hosting
+secret or database migration. The historical 2026-10-22 probe table describes
+the old unsigned build. New deployed HTTPS evidence is still required; see
+[the dated acceptance record](OPERATIONS.md#session-bound-csrf-hardening--2026-10-23).
 
 ---
 

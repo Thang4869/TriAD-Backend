@@ -7,7 +7,11 @@ import { AuthController } from "@modules/auth/auth.controller";
 import type { AuthService } from "@modules/auth/auth.service";
 import { refreshSchema } from "@modules/auth/dto";
 import { validate } from "@shared/middlewares/validation.middleware";
-import { csrfProtection } from "@shared/middlewares/csrf.middleware";
+import {
+  csrfProtection,
+  generateCsrfToken,
+} from "@shared/middlewares/csrf.middleware";
+import { authSessionFixture } from "../../../helpers/auth-session";
 import { createErrorHandler } from "@shared/middlewares/error-handler.middleware";
 import {
   AuthenticationError,
@@ -18,7 +22,9 @@ vi.mock("@core/logger/winston", () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
 }));
 
-const csrf = "a".repeat(64);
+const credentials = authSessionFixture("refresh-session");
+const issuedCredentials = authSessionFixture("issued-session");
+const csrf = generateCsrfToken("refresh-session");
 const originalConfig = {
   isProduction: config.isProduction,
   COOKIE_DOMAIN: config.COOKIE_DOMAIN,
@@ -32,8 +38,7 @@ describe("Refresh HTTP validation and controller boundary", () => {
     Object.assign(config, { isProduction: true, COOKIE_DOMAIN: undefined });
     rotate.mockReset();
     rotate.mockResolvedValue({
-      accessToken: "issued-access-fixture",
-      refreshToken: "issued-refresh-fixture",
+      ...issuedCredentials,
       user: { id: "refresh-user", email: "refresh@example.invalid" },
     });
     const controller = new AuthController({
@@ -55,7 +60,7 @@ describe("Refresh HTTP validation and controller boundary", () => {
     request(app)
       .post("/api/auth/refresh")
       .set("Cookie", [
-        "refreshToken=cookie-refresh-fixture",
+        `refreshToken=${credentials.refreshToken}`,
         `csrfToken=${csrf}`,
       ])
       .set("x-csrf-token", csrf);
@@ -63,7 +68,7 @@ describe("Refresh HTTP validation and controller boundary", () => {
   it("accepts cookie-only refresh and returns production cookie attributes without JWT JSON", async () => {
     const response = await withCookie().send({});
     expect(response.status).toBe(200);
-    expect(rotate).toHaveBeenCalledExactlyOnceWith("cookie-refresh-fixture");
+    expect(rotate).toHaveBeenCalledExactlyOnceWith(credentials.refreshToken);
     expect(response.body.data.user.id).toBe("refresh-user");
     expect(response.body.data.csrfToken).toMatch(/^[a-f0-9]{64}$/);
     expect(response.body.data).not.toHaveProperty("accessToken");
@@ -91,7 +96,7 @@ describe("Refresh HTTP validation and controller boundary", () => {
   it("accepts a cookie refresh without a JSON request body", async () => {
     const response = await withCookie().send();
     expect(response.status).toBe(200);
-    expect(rotate).toHaveBeenCalledExactlyOnceWith("cookie-refresh-fixture");
+    expect(rotate).toHaveBeenCalledExactlyOnceWith(credentials.refreshToken);
   });
 
   it("retains cookie precedence when both credentials are provided", async () => {
@@ -99,7 +104,7 @@ describe("Refresh HTTP validation and controller boundary", () => {
       refreshToken: "body-refresh-fixture",
     });
     expect(response.status).toBe(200);
-    expect(rotate).toHaveBeenCalledExactlyOnceWith("cookie-refresh-fixture");
+    expect(rotate).toHaveBeenCalledExactlyOnceWith(credentials.refreshToken);
   });
 
   it("rejects a request with neither credential", async () => {
@@ -121,7 +126,7 @@ describe("Refresh HTTP validation and controller boundary", () => {
     const response = await request(app)
       .post("/api/auth/refresh")
       .set("Cookie", [
-        "refreshToken=cookie-refresh-fixture",
+        `refreshToken=${credentials.refreshToken}`,
         `csrfToken=${csrf}`,
       ])
       .send({});

@@ -271,7 +271,7 @@ Set-Location E:\DNEK
     ["missing-header", { Cookie: `${access}; ${csrf}` }, 403],
     ["missing-csrf-cookie", { Cookie: access, "x-csrf-token": "synthetic-csrf-value" }, 403],
     ["mismatched-token", { Cookie: `${access}; ${csrf}`, "x-csrf-token": "synthetic-other-value" }, 403],
-    ["matching-csrf-invalid-auth", { Cookie: `${access}; ${csrf}`, "x-csrf-token": "synthetic-csrf-value" }, 401],
+    ["unsigned-csrf-invalid-auth", { Cookie: `${access}; ${csrf}`, "x-csrf-token": "synthetic-csrf-value" }, 403],
     ["refresh-cookie-missing-csrf", { Cookie: "refreshToken=synthetic-invalid-refresh" }, 403],
     ["invalid-bearer-bypass", { Cookie: access, Authorization: "Bearer synthetic-invalid-bearer" }, 401],
     ["no-credentials", {}, 401],
@@ -300,8 +300,9 @@ Set-Location E:\DNEK
 '@ | node
 ```
 
-The probe is intentionally tied to the current unsigned double-submit contract;
-update its matching-token fixture if that design changes. Do not substitute real
+The reproduction now expects 403 for an unsigned matching pair on the signed
+build. The historical measured table remains unchanged: the old build returned
+401 for that case. Do not substitute real
 session cookies into this snippet or publish tokens in logs/artifacts.
 The Node reproduction also passed on this test host with Node 24 and
 `NODE_USE_ENV_PROXY=1` for its configured network proxy.
@@ -394,6 +395,71 @@ The automated replay and negative-CSRF results use disposable loopback
 PostgreSQL/Redis fixtures. They do not establish browser cookie attributes on
 HTTPS, cross-origin browser rejection, or production fault recovery. Keep #90
 open for the remaining deployed-session checks and session-binding decision.
+
+#### Session-bound CSRF hardening — 2026-10-23
+
+The [session-binding decision](THREAT_MODEL.md#12-csrf) is implemented while
+retaining the 64-hex frontend contract. The backend signs a random nonce using
+the login family shared by access/refresh JWTs. Ordinary writes use the access
+identity; refresh uses the refresh family. The patch also rejects public form
+login and empty-Bearer CSRF bypasses, and disables CSRF-response caching.
+
+Three new regression tests failed on the previous source: an unsigned matching
+pair passed, an empty Bearer header skipped cookie CSRF, and public login
+accepted a simple form. After the patch, local verification passed **1,180 unit
+tests in 112 files**, typecheck, lint, architecture rules and production build.
+The PostgreSQL rotation race test now verifies the binding on real issued and
+rotated JWTs, including rejection of another login's CSRF. Integration/fullstack
+CI results belong to the implementing PR; local unit results do not establish
+those results or new hosted HTTPS acceptance.
+
+Already observed on the **previous deployed revision**, before this patch:
+
+| Evidence              | Exact revision/result                                                                                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend               | `c6f88976782d751815eb38236396bad74ea9e470`, Render `dep-dbdd138ae00c73fom5f0`, live                                                           |
+| Frontend              | `e2c3ba31a4bbde83d4f9d0fd13193ef0deb95683`, `https://triad-staging-three.vercel.app`                                                          |
+| Backend main CI       | [39893508767](https://github.com/Thang4869/TriAD-Backend/actions/runs/39893508767), success                                                   |
+| HTTPS functional path | Sign in; add one synthetic item; increase to 2; reload with quantity retained; remove that item; sign out; reload with `Đăng nhập` and cart 0 |
+| Logout response       | HTTP 200 at 13:03:05 UTC+7, application handler duration 17 ms. UI delay does not establish slow backend revocation                           |
+
+No real user's JWTs were exported and the cookie jar was not inspected.
+Production cookie attributes are asserted in controller HTTP tests; this is not
+a hosted browser-cookie inspection claim. Redis revocation-failure tests cover
+requests reaching the logout controller. Upstream authentication/rate-limiter
+failures may prevent the controller from running.
+
+**Release and remaining #90 acceptance:**
+
+1. Review/merge, deploy the exact merged backend revision and verify its live
+   deployment ID. Keep the canonical frontend `/api` rewrite.
+2. Sign in again. Legacy access JWTs lack the binding and unsigned CSRF is
+   deliberately rejected. No database reset or unsigned fallback is needed.
+3. On the new HTTPS source, verify Secure/SameSite/host-only/Path, credentials,
+   cross-origin JSON preflight and rejected simple-form login. Use a disposable
+   staging session for negatives; never put a real user's JWTs in shell commands,
+   replay scripts, screenshots, browser traces or CI artifacts.
+4. Verify a second tab's bootstrap followed by a first-tab write. Check open-page
+   access-expiry UX separately from reload recovery; never silently replay a
+   write. Refresh/logout replay probes must use disposable test sessions.
+5. Keep #90 open until the new deployed-session evidence is recorded. Controller
+   failure tests do not replace the upstream Redis outage drill tracked by #140.
+
+Local reproduction using actual repository scripts:
+
+```powershell
+Set-Location E:\DNEK
+npm ci
+npm run test:unit -- tests/unit/shared/utils/csrf-token.test.ts tests/unit/shared/middlewares/csrf.middleware.test.ts tests/unit/modules/auth tests/unit/app.csrf.test.ts
+npm run typecheck
+npm run lint
+npm run architecture:check
+npm run build
+```
+
+Expected: all listed tests/checks pass. PostgreSQL/Redis integration and the real
+frontend flow are separate CI jobs. Their checks must refer to this patch,
+not the already passing `c6f8897` deployment.
 
 ### Limits of the initial Free stack
 

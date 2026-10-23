@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { TokenService } from "@modules/auth/services/token.service";
 import { PrismaAuthRepository } from "@modules/auth/infrastructure/repositories/prisma-auth.repository";
 import type { TokenStorePort } from "@modules/auth/application/ports/token-store.port";
+import {
+  readCsrfSessionId,
+  generateCsrfToken,
+  isCsrfTokenForSession,
+} from "@shared/utils/csrf-token";
 
 function createTokenStore(): TokenStorePort {
   return {
@@ -28,6 +33,12 @@ describe("Refresh token rotation race (integration)", () => {
     });
 
     const issued = await service.generateTokens(user);
+    const originalSessionId = readCsrfSessionId(issued.accessToken, "access");
+    expect(originalSessionId).toBeTruthy();
+    expect(readCsrfSessionId(issued.refreshToken, "refresh")).toBe(
+      originalSessionId,
+    );
+    const csrf = generateCsrfToken(originalSessionId!);
 
     const results = await Promise.allSettled([
       service.refreshToken(issued.refreshToken),
@@ -45,6 +56,21 @@ describe("Refresh token rotation race (integration)", () => {
       fulfilled[0].status === "fulfilled" ? fulfilled[0].value : null;
 
     expect(succeeded).not.toBeNull();
+    expect(readCsrfSessionId(succeeded?.accessToken, "access")).toBe(
+      originalSessionId,
+    );
+    expect(readCsrfSessionId(succeeded?.refreshToken, "refresh")).toBe(
+      originalSessionId,
+    );
+    expect(isCsrfTokenForSession(csrf, originalSessionId!)).toBe(true);
+
+    const anotherLogin = await service.generateTokens(user);
+    const anotherSessionId = readCsrfSessionId(
+      anotherLogin.accessToken,
+      "access",
+    );
+    expect(anotherSessionId).not.toBe(originalSessionId);
+    expect(isCsrfTokenForSession(csrf, anotherSessionId!)).toBe(false);
 
     const activeTokens = await repository.findActiveRefreshTokenByFamily(
       (await repository.findRefreshTokenWithUser(succeeded?.refreshToken ?? ""))

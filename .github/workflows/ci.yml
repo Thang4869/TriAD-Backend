@@ -9,6 +9,10 @@ on:
 env:
   NODE_VERSION: "22"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   dependency-audit:
     name: Dependency Audit (critical gate)
@@ -160,7 +164,7 @@ jobs:
   build:
     name: Build Application
     runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test]
+    # Independent build runs in parallel with lint and coverage.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -180,7 +184,15 @@ jobs:
   frontend-backend-e2e:
     name: Frontend ↔ Backend E2E
     runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test, build]
+    # Keep lint and coverage gates; build is independently verified.
+    needs: [lint-and-typecheck, test]
+    # Pinned to frontend package-lock Playwright version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --shm-size=1gb
+    defaults:
+      run:
+        shell: bash
 
     services:
       postgres:
@@ -211,8 +223,9 @@ jobs:
       NODE_ENV: test
       PORT: 5000
 
-      DATABASE_URL: postgresql://test:test@127.0.0.1:5432/triad_e2e
-      REDIS_URL: redis://127.0.0.1:6379
+      # Container jobs reach Actions services by hostname, not localhost.
+      DATABASE_URL: postgresql://test:test@postgres:5432/triad_e2e
+      REDIS_URL: redis://redis:6379
 
       JWT_ACCESS_SECRET: ci-fullstack-access-secret-32charslong-enough
       JWT_REFRESH_SECRET: ci-fullstack-refresh-secret-32chars-long-enough
@@ -241,7 +254,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -288,9 +301,11 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Install Playwright Chromium
+      - name: Check preinstalled Chromium matches Playwright
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: |
+          npx playwright --version
+          node -e 'const fs = require("node:fs"); const { chromium } = require("playwright"); if (!fs.existsSync(chromium.executablePath())) throw new Error("Playwright image lacks the pinned Chromium executable");'
 
       - name: Run full Frontend ↔ Backend journey
         working-directory: frontend

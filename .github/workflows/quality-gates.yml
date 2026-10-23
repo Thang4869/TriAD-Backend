@@ -2,7 +2,14 @@ name: quality-gates
 
 on:
   push:
+    branches: [main, develop]
   pull_request:
+    branches: [main, develop]
+
+# Prevent wasting runner minutes on outdated PR revisions.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -30,10 +37,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run architecture:check
+      # CI already gates architecture, typecheck, unit/contract, coverage and build.
+      # Keep the independently valuable database-backed chaos test in this
+      # named quality-gates check, preserving branch protection requirements.
       - run: npx prisma migrate deploy
-      - run: npm run typecheck
-      - run: npm run test:contract -- --reporter=dot
-      - run: npm run test:unit -- --reporter=dot
-      - run: npm run build
       - run: npm run test:chaos

@@ -14,11 +14,33 @@
 
 ## Critical limitation
 
-**An expiring Redis lease is not a distributed business-transaction lock.** After Redis outage, TTL expiry, or process crash, an old request may still execute database writes even if it can no longer update the cached response. Redis owner checks protect the *cache entry*, not PostgreSQL domain mutations.
+**An expiring Redis lease is not a distributed business-transaction lock.** After Redis outage, TTL expiry, or process crash, an old request may still execute database writes even if it can no longer update the cached response. Redis owner checks protect the _cache entry_, not PostgreSQL domain mutations.
 
 Therefore checkout/order creation must enforce idempotency at the durable transaction/database boundary as well. Do not claim exactly-once checkout solely from this HTTP middleware.
 
 ## Acceptance evidence for issue #84
+
+### Automated process-crash candidate (2026-10-24)
+
+`tests/integration/checkout.process-crash.test.ts` forks a disposable HTTP
+process with the real idempotency middleware, checkout service, Prisma unit of
+work and Redis. Authentication is a synthetic fixture, not a hosted login.
+Two barriers pause execution **before PostgreSQL commit** and **after commit
+but before HTTP delivery**. The test sends SIGKILL, waits for the real Redis
+lease to expire (shortened to two seconds only in the child fixture), starts a
+replacement HTTP process and retries the same key/body. Assertions require one
+order, one stock decrement/version change, an empty cart, one OrderPlaced event,
+and the same order on another HTTP retry. Existing `idempotency.redis.test.ts`
+checks stale-owner completion/deletion fencing with real Redis.
+
+The initial Redis read/claim/concurrent read now each have a one-second deadline;
+a queued or stalled ioredis command returns HTTP 503 without executing the
+mutation. A late NX claim can remain until its TTL, but cannot authorize the
+already-rejected HTTP operation. Cache writes remain owner-checked. This does
+not turn the Redis lease into a business-transaction lock.
+
+Execution is required before claiming PASS. These fixtures prove isolated
+process recovery, not deployed staging worker or infrastructure recovery.
 
 1. Run unit, integration (real Redis), typecheck and lint on the branch; publish links to CI executions.
 2. During a long-running test, verify that heartbeat renews only the current owner and stops on connection loss, response completion and process termination.
@@ -29,9 +51,9 @@ Therefore checkout/order creation must enforce idempotency at the durable transa
 
 ### Required evidence record for a staging run
 
-| Date (UTC) | Deployment SHA | Scenario | Expected/observed result | Order count before/after retry | Sanitized artifact link |
-| --- | --- | --- | --- | --- | --- |
-| Pending staging execution | — | Redis outage / lost response / stale lease | — | — | No deployed result claimed |
+| Date (UTC)                | Deployment SHA | Scenario                                   | Expected/observed result | Order count before/after retry | Sanitized artifact link    |
+| ------------------------- | -------------- | ------------------------------------------ | ------------------------ | ------------------------------ | -------------------------- |
+| Pending staging execution | —              | Redis outage / lost response / stale lease | —                        | —                              | No deployed result claimed |
 
 Use synthetic accounts and orders. Record incident and recovery timestamps, HTTP status, Redis availability, and durable order identifiers in redacted form. Never attach raw idempotency keys, access tokens, request bodies or customer data.
 

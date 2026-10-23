@@ -1,21 +1,26 @@
 services:
   api:
+    image: ${TRIAD_IMAGE:-triad-backend:local}
     build:
       context: .
       target: production
     restart: unless-stopped
+    init: true
+    stop_grace_period: 15s
     ports:
-      - "3000:3000"
+      - "${TRIAD_API_BIND:-127.0.0.1}:${TRIAD_API_PORT:-3000}:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
-      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
-      - JWT_PREAUTH_SECRET=${JWT_PREAUTH_SECRET}
+      - DATABASE_URL=${DATABASE_URL:?DATABASE_URL is required}
+      - REDIS_URL=${REDIS_URL:?REDIS_URL is required}
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      - JWT_PREAUTH_SECRET=${JWT_PREAUTH_SECRET:?JWT_PREAUTH_SECRET is required}
+      - API_EDGE_SECRET=${API_EDGE_SECRET:-}
+      - TRUST_PROXY=0
       - TOTP_ISSUER=${TOTP_ISSUER:-TriAD}
-      - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}
+      - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY is required}
 
       - FRONTEND_URL=${FRONTEND_URL:?FRONTEND_URL is required}
       - CORS_ORIGIN=${CORS_ORIGIN:?CORS_ORIGIN is required}
@@ -30,28 +35,29 @@ services:
       - ENABLE_TRACING=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
     depends_on:
-      - otel-collector
+      migrate:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
+
+  migrate:
+    image: ${TRIAD_IMAGE:-triad-backend:local}
+    build:
+      context: .
+      target: production
+    restart: "no"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.110.0
     restart: unless-stopped
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
-      - ./otel-collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
-
-  redis-prod-check:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command:
-      [
-        "redis-server",
-        "--appendonly",
-        "yes",
-        "--maxmemory-policy",
-        "noeviction",
-      ]
-    volumes:
-      - redis-prod-check-data:/data
-volumes:
-  product-images:
-  redis-prod-check-data:
+      - type: bind
+        source: ./otel-collector-config.yml
+        target: /etc/otelcol-contrib/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false

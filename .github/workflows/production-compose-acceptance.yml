@@ -1,0 +1,56 @@
+name: Production Compose acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "docker-compose.prod.yml"
+      - "Dockerfile"
+      - "otel-collector-config.yml"
+      - "ops/compose.acceptance.yml"
+      - "scripts/acceptance/production-compose.sh"
+      - ".github/workflows/production-compose-acceptance.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE_ACCEPTANCE_ENABLED: "true"
+      COMPOSE_PROJECT_NAME: triad-acceptance-${{ github.run_id }}
+      TRIAD_IMAGE: triad-backend:compose-acceptance
+      TRIAD_API_BIND: 127.0.0.1
+      TRIAD_API_PORT: "13000"
+      DATABASE_URL: postgresql://acceptance:acceptance@postgres:5432/triad_compose_acceptance
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ci-compose-access-disposable-at-least-32-chars
+      JWT_REFRESH_SECRET: ci-compose-refresh-disposable-at-least-32-chars
+      JWT_PREAUTH_SECRET: ci-compose-preauth-disposable-at-least-32-chars
+      TOTP_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      FRONTEND_URL: https://compose.example.invalid
+      CORS_ORIGIN: https://compose.example.invalid
+      SMTP_HOST: smtp.invalid
+      SMTP_USER: acceptance
+      SMTP_PASS: acceptance
+      SMTP_FROM: acceptance@example.invalid
+      CLOUDINARY_CLOUD_NAME: acceptance
+      CLOUDINARY_API_KEY: acceptance
+      CLOUDINARY_API_SECRET: acceptance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Exercise the actual production Compose with disposable dependencies
+        run: bash scripts/acceptance/production-compose.sh
+      - name: Upload sanitized acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-compose-evidence
+          path: production-compose-evidence.json
+          retention-days: 14
+          if-no-files-found: ignore

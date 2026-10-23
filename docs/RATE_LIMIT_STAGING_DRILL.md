@@ -18,7 +18,10 @@ Code-level protection is implemented in
   reachable direct backend.
 - Redis rate-limit **request commands** fail closed: HTTP **503** during
   outage/timeout and HTTP **429** for exceeded budgets. HTTP Redis commands
-  have a 1000ms timeout. Startup Lua `SCRIPT LOAD` is intentionally exempt:
+  have a 1000ms timeout. An additional **1500ms HTTP middleware deadline**
+  handles stalls while the RedisStore itself is waiting for lazy Lua
+  initialization; late callbacks are ignored after the 503 response.
+  Startup Lua `SCRIPT LOAD` is intentionally exempt:
   `rate-limit-redis` v4 initializes and awaits Lua SHA promises asynchronously,
   so rejecting those during a cold Redis connection produced unhandled
   rejections and a failed Render deploy (`dep-dbdoet6q1p3s739ahskg`).
@@ -110,6 +113,13 @@ fairness between users behind the same ingress/proxy remains a documented
 residual risk. If this cannot be remedied on current Free hosting, leave #140
 open (or explicitly accept the risk through an issue decision); never call
 the simulated NAT test an actual multi-public-IP production proof.
+
+### Hosted ingress canary — observed 2026-10-24
+
+- [GitHub Actions B7 run #39995502666](https://github.com/Thang4869/TriAD-Backend/actions/runs/39995502666) sent two read-only API requests: direct to Render and through Vercel. **Both returned HTTP 200** with `success=true`.
+- Render log records correlated by the unique `TriAD-B7-Canary/39995502666` user agent show **the same derived `req.ip` value, `::1`, for both paths** despite a forged `X-Forwarded-For` header in each request. No real end-user IP was captured in the evidence. This proves the current deployment does **not** distinguish the two ingress paths by IP; it does **not** prove multiple public users receive independent rate-limit buckets.
+- The direct Render hostname is publicly reachable. With `TRUST_PROXY=0`, ignoring client-supplied forwarded IPs avoids a trivial bypass, but the reverse proxy collapses clients to an internal peer address. Changing to `TRUST_PROXY=1` without an enforced, allowlisted edge would be unsafe. **Real hosted user-IP fairness is NOT ACCEPTED** on this topology.
+- A safe remediation requires an authenticated/trusted edge path or network restrictions that prevent untrusted direct traffic from supplying forged forwarded addresses. Until available, maintain global anti-abuse limits and separate auth/account protections; document the residual shared-IP lockout/bypass trade-off.
 
 ## Preconditions
 - Dedicated staging stack with a known reverse-proxy topology, isolated Redis, no production accounts or data.

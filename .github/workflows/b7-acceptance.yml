@@ -1,0 +1,113 @@
+name: B7 proxy and Redis acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/b7-acceptance.yml"
+      - "scripts/acceptance/b7-isolated-proxy-redis.cjs"
+      - "src/shared/middlewares/rate-limit.middleware.ts"
+      - "src/config/trust-proxy.ts"
+      - "docs/RATE_LIMIT_STAGING_DRILL.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  disposable-redis-and-proxy:
+    name: Isolated Redis outage and real HTTP proxy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      B7_ACCEPTANCE_ENABLED: "true"
+      B7_REDIS_CONTAINER: triad-b7-redis-${{ github.run_id }}
+      REDIS_URL: redis://127.0.0.1:16379
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/triad_b7_unused
+      JWT_ACCESS_SECRET: "b7-ci-disposable-access-secret-long-enough"
+      JWT_REFRESH_SECRET: "b7-ci-disposable-refresh-secret-long-enough"
+      JWT_PREAUTH_SECRET: "b7-ci-disposable-preauth-secret-long-enough"
+      TOTP_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      LOG_LEVEL: error
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Start own disposable Redis Docker container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name "$B7_REDIS_CONTAINER" \
+            -p 127.0.0.1:16379:6379 redis:7-alpine
+          for attempt in $(seq 1 40); do
+            if [[ "$(docker exec "$B7_REDIS_CONTAINER" redis-cli ping 2>/dev/null)" == "PONG" ]]; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Disposable Redis not ready"; exit 1
+      - name: Exercise real proxy, spoofing, NAT, Redis pause/stop/restart
+        shell: bash
+        run: node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/acceptance/b7-isolated-proxy-redis.cjs
+      - name: Upload sanitized drill evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b7-isolated-evidence
+          path: b7-isolated-evidence.json
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Always restore and destroy disposable Redis
+        if: always()
+        shell: bash
+        run: |
+          docker unpause "$B7_REDIS_CONTAINER" 2>/dev/null || true
+          docker rm -f "$B7_REDIS_CONTAINER" 2>/dev/null || true
+
+  hosted-ingress-canary:
+    name: Low-volume Vercel and direct Render ingress canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check public HTTPS origins without credentials
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # Two harmless read-only requests. Do not burst traffic or mutate
+          # staging Redis/database, and never trust input XFF as identity.
+          for path in direct via-vercel; do
+            if [[ "$path" == "direct" ]]; then
+              url="https://triad-api-staging.onrender.com/api/products?b7_canary=direct-$RUN_ID"
+            else
+              url="https://triad-staging-three.vercel.app/api/products?b7_canary=via-vercel-$RUN_ID"
+            fi
+            code=$(curl --silent --show-error --location \
+              --retry 2 --retry-delay 2 --max-time 95 \
+              -H "User-Agent: TriAD-B7-Canary/$RUN_ID/$path" \
+              -H "X-Forwarded-For: 203.0.113.89, 198.51.100.89" \
+              --output "/tmp/b7-$path.json" --write-out "%{http_code}" "$url")
+            if [[ "$code" != "200" ]]; then
+              echo "B7 $path unexpected HTTPS status: $code"
+              exit 1
+            fi
+            if ! jq -e '.success == true' "/tmp/b7-$path.json" >/dev/null; then
+              echo "B7 $path unexpected public API response"
+              exit 1
+            fi
+            echo "PASS $path: HTTPS 200 and public catalog success"
+            echo "- $path: HTTPS 200, marker TriAD-B7-Canary/$RUN_ID/$path" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "No assertion on Render client-IP derivation was made from HTTP status alone." >> "$GITHUB_STEP_SUMMARY"
+      # Deliberately do not attach raw HTTP bodies or Render IPs to artifacts.

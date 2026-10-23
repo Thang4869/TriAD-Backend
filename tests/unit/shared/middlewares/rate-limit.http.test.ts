@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ hits: 0, unavailable: false }));
+const state = vi.hoisted(() => ({ hits: 0, unavailable: false, stalled: false }));
 
 vi.mock("@core/redis/client", () => ({
   default: { status: "ready", call: vi.fn() },
@@ -15,6 +15,7 @@ vi.mock("rate-limit-redis", async () => {
   return {
     RedisStore: class {
       async increment() {
+        if (state.stalled) return new Promise(() => {});
         if (state.unavailable) {
           throw new DependencyUnavailableError("Rate limit store unavailable");
         }
@@ -51,6 +52,7 @@ describe("B7 HTTP rate limiting contract", () => {
   beforeEach(() => {
     state.hits = 0;
     state.unavailable = false;
+    state.stalled = false;
   });
 
   it("returns 429 after the configured request budget", async () => {
@@ -61,6 +63,25 @@ describe("B7 HTTP rate limiting contract", () => {
     expect(response.status).toBe(429);
     expect(response.body).toMatchObject({ success: false });
     expect(response.headers["ratelimit-limit"]).toBe("2");
+  });
+
+  it("bounds a RedisStore call stuck before sendCommand completes and recovers", async () => {
+    const app = makeApp();
+    state.stalled = true;
+    const start = Date.now();
+
+    const rejected = await request(app).get("/api/example");
+    expect(rejected.status).toBe(503);
+    expect(rejected.body).toMatchObject({
+      success: false,
+      code: "APPLICATION.DEPENDENCY_UNAVAILABLE",
+      error: "Rate limit store timed out",
+    });
+    expect(Date.now() - start).toBeLessThan(3500);
+
+    state.stalled = false;
+    const healthy = await request(app).get("/api/example");
+    expect(healthy.status).toBe(200);
   });
 
   it("fails closed with 503 during store outage and resumes after recovery", async () => {

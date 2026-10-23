@@ -6,14 +6,19 @@ import config from "@config";
 import { AuthController } from "@modules/auth/auth.controller";
 import type { AuthService } from "@modules/auth/auth.service";
 import { DependencyUnavailableError } from "@shared/errors/application-error";
-import { csrfProtection } from "@shared/middlewares/csrf.middleware";
+import {
+  csrfProtection,
+  generateCsrfToken,
+} from "@shared/middlewares/csrf.middleware";
+import { authSessionFixture } from "../../../helpers/auth-session";
 import { createErrorHandler } from "@shared/middlewares/error-handler.middleware";
 
 vi.mock("@core/logger/winston", () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
 }));
 
-const csrf = "a".repeat(64);
+const credentials = authSessionFixture("logout-session");
+const csrf = generateCsrfToken("logout-session");
 const originalConfig = {
   isProduction: config.isProduction,
   COOKIE_DOMAIN: config.COOKIE_DOMAIN,
@@ -75,8 +80,8 @@ describe.each([undefined, ".example.invalid"])(
       request(app)
         .post("/api/auth/logout")
         .set("Cookie", [
-          "accessToken=logout-access-fixture",
-          "refreshToken=logout-refresh-fixture",
+          `accessToken=${credentials.accessToken}`,
+          `refreshToken=${credentials.refreshToken}`,
           `csrfToken=${csrf}`,
         ]);
 
@@ -86,8 +91,8 @@ describe.each([undefined, ".example.invalid"])(
       expect(response.status).toBe(200);
       expect(logout).toHaveBeenCalledExactlyOnceWith(
         "logout-user",
-        "logout-access-fixture",
-        "logout-refresh-fixture",
+        credentials.accessToken,
+        credentials.refreshToken,
       );
       expectClearedCookies(response, domain);
     });
@@ -106,8 +111,8 @@ describe.each([undefined, ".example.invalid"])(
       });
       expect(logout).toHaveBeenCalledExactlyOnceWith(
         "logout-user",
-        "logout-access-fixture",
-        "logout-refresh-fixture",
+        credentials.accessToken,
+        credentials.refreshToken,
       );
       expectClearedCookies(response, domain);
     });

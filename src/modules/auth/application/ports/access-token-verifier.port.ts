@@ -7,6 +7,8 @@ export interface AccessTokenClaims {
   aud: string;
   tokenType: "access";
   exp: number;
+  // Absent only on pre-migration tokens; new cookie writes require this binding.
+  sessionId?: string;
 }
 
 export interface AccessTokenVerifierPort {

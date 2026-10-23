@@ -210,6 +210,22 @@ describe("TokenService.generateTokens", () => {
     };
 
     expect(payload.familyId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(vi.mocked(signToken).mock.calls[0][0]).toMatchObject({
+      sessionId: payload.familyId,
+    });
+  });
+
+  it("preserves the CSRF session binding across refresh rotation", async () => {
+    await new TokenService(createRepo(), createTokenStore()).generateTokens(
+      user,
+      "existing-session",
+    );
+    expect(vi.mocked(signToken).mock.calls[0][0]).toMatchObject({
+      sessionId: "existing-session",
+    });
+    expect(vi.mocked(signToken).mock.calls[1][0]).toMatchObject({
+      familyId: "existing-session",
+    });
   });
 
   it("ép is2FAEnabled về false khi giá trị là null/undefined", async () => {
@@ -532,12 +548,13 @@ describe("TokenService access-token claims and revocation", () => {
     expect(store.getAndDelete).not.toHaveBeenCalled();
   });
 
-
   it("fails closed when Redis cannot save the 2FA preauth nonce", async () => {
     const store = createTokenStore();
     store.set.mockRejectedValueOnce(new Error("redis offline"));
     await expect(
-      new TokenService(createRepo(), store).issueTwoFactorPreAuthToken("user-1"),
+      new TokenService(createRepo(), store).issueTwoFactorPreAuthToken(
+        "user-1",
+      ),
     ).rejects.toThrow(DependencyUnavailableError);
   });
 
@@ -551,7 +568,9 @@ describe("TokenService access-token claims and revocation", () => {
     const store = createTokenStore();
     store.getAndDelete.mockRejectedValueOnce(new Error("redis offline"));
     await expect(
-      new TokenService(createRepo(), store).consumeTwoFactorPreAuthToken("PREAUTH"),
+      new TokenService(createRepo(), store).consumeTwoFactorPreAuthToken(
+        "PREAUTH",
+      ),
     ).rejects.toThrow(DependencyUnavailableError);
   });
 

@@ -39,12 +39,29 @@ function storeFailure(
 }
 
 function sendRateLimitCommand(...args: string[]): Promise<RedisReply> {
-  // rate-limit-redis initiates SCRIPT LOAD during store construction, often
-  // while ioredis is still connecting. Allow that one command to queue, but
-  // NEVER let a stalled Redis or offline queue hang HTTP/bootstrap forever.
+  // Store bootstrap needs a separate lifecycle from bounded HTTP commands.
   const isScriptLoad = args[0] === "SCRIPT" && args[1] === "LOAD";
-  const operation = isScriptLoad ? "bootstrap" : "request";
-  if (!isScriptLoad && redis.status !== "ready") {
+
+  // rate-limit-redis v4 starts two SCRIPT LOAD promises during middleware
+  // construction. A startup timeout can reject these before the store awaits
+  // them, causing unhandledRejection and crashing cold cloud deployments.
+  // Let ioredis queue bootstrap until its connection is ready; non-bootstrap
+  // commands below still fail closed promptly with a bounded timeout.
+  if (isScriptLoad) {
+    return new Promise<RedisReply>((resolve, reject) => {
+      try {
+        Promise.resolve(redis.call(args[0], ...args.slice(1))).then(
+          (reply) => resolve(reply as RedisReply),
+          () => reject(storeFailure("bootstrap", "error")),
+        );
+      } catch {
+        reject(storeFailure("bootstrap", "error"));
+      }
+    });
+  }
+
+  const operation = "request";
+  if (redis.status !== "ready") {
     return Promise.reject(storeFailure(operation, "not_ready"));
   }
 

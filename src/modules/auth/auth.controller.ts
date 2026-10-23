@@ -123,11 +123,13 @@ export class AuthController {
       ? req.headers.authorization.substring(7)
       : req.cookies?.accessToken;
     const refreshToken = req.cookies?.refreshToken;
-    await this.service.logout(userId, accessToken, refreshToken);
-
-    res.clearCookie("accessToken", cookieOptions(0));
-    res.clearCookie("refreshToken", cookieOptions(0));
-    res.clearCookie(CSRF_COOKIE_NAME, csrfCookieOptions(0));
+    try {
+      await this.service.logout(userId, accessToken, refreshToken);
+    } finally {
+      res.clearCookie("accessToken", cookieOptions(0));
+      res.clearCookie("refreshToken", cookieOptions(0));
+      res.clearCookie(CSRF_COOKIE_NAME, csrfCookieOptions(0));
+    }
     sendMessage(res, "Logged out successfully");
   });
 

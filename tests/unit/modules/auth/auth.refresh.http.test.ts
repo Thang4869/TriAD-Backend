@@ -90,7 +90,7 @@ describe("Refresh HTTP validation and controller boundary", () => {
   });
 
   it("retains an explicitly configured cookie domain during refresh", async () => {
-    config.COOKIE_DOMAIN = ".example.invalid";
+    Object.assign(config, { COOKIE_DOMAIN: ".example.invalid" });
     const response = await withCookie().send({});
     expect(response.status).toBe(200);
 

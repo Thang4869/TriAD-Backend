@@ -10,6 +10,7 @@ import {
   generateCsrfToken,
 } from "@shared/middlewares/csrf.middleware";
 import { createErrorHandler } from "@shared/middlewares/error-handler.middleware";
+import { AuthenticationError } from "@shared/errors/application-error";
 import { authSessionFixture } from "../../../helpers/auth-session";
 
 vi.mock("@core/logger/winston", () => ({
@@ -25,11 +26,14 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
   };
   let app: express.Express;
   const cartWrite = vi.fn();
+  const login = vi.fn();
   beforeEach(() => {
     cartWrite.mockClear();
     const issued = { ...credentials, user: { id: "user-1" } };
+    login.mockReset();
+    login.mockResolvedValue(issued);
     const controller = new AuthController({
-      login: vi.fn().mockResolvedValue(issued),
+      login,
       verifyEmail: vi.fn().mockResolvedValue(issued),
       verifyTOTP: vi.fn().mockResolvedValue(issued),
     } as unknown as AuthService);
@@ -59,6 +63,35 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
     ["refreshToken", 604800, true],
     ["csrfToken", 604800, false],
   ] as const;
+
+  it("does not issue identity cookies during the pending two-factor challenge", async () => {
+    login.mockResolvedValueOnce({
+      requires2FA: true,
+      preAuthToken: "disposable-preauth-fixture",
+      message: "Additional verification required",
+    });
+
+    const response = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "fixture@example.invalid", password: "fixture" });
+
+    expect(response.status).toBe(200);
+    expect(response.get("Set-Cookie")).toBeUndefined();
+    expect(response.body.data.requires2FA).toBe(true);
+    expect(response.body.data).not.toHaveProperty("csrfToken");
+    expect(response.body.data).not.toHaveProperty("accessToken");
+    expect(response.body.data).not.toHaveProperty("refreshToken");
+  });
+
+  it("does not issue cookies when authentication fails", async () => {
+    login.mockRejectedValueOnce(new AuthenticationError("Invalid login"));
+    const response = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "fixture@example.invalid", password: "fixture" });
+
+    expect(response.status).toBe(401);
+    expect(response.get("Set-Cookie")).toBeUndefined();
+  });
 
   it.each([
     {

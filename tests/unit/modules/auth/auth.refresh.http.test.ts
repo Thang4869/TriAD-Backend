@@ -134,6 +134,55 @@ describe("Refresh HTTP validation and controller boundary", () => {
     expect(rotate).not.toHaveBeenCalled();
   });
 
+  it("binds refresh CSRF to the refresh family, not an unrelated access cookie", async () => {
+    const other = authSessionFixture("unrelated-access-session");
+    const accessCsrf = generateCsrfToken("unrelated-access-session");
+    const response = await request(app)
+      .post("/api/auth/refresh")
+      .set("Cookie", [
+        `accessToken=${other.accessToken}`,
+        `refreshToken=${credentials.refreshToken}`,
+        `csrfToken=${accessCsrf}`,
+      ])
+      .set("x-csrf-token", accessCsrf)
+      .send({});
+
+    expect(response.status).toBe(403);
+    expect(rotate).not.toHaveBeenCalled();
+    expect(response.get("Set-Cookie")).toBeUndefined();
+  });
+
+  it("accepts the refresh family's signed CSRF despite an unrelated access cookie", async () => {
+    const other = authSessionFixture("unrelated-access-session");
+    const response = await request(app)
+      .post("/api/auth/refresh")
+      .set("Cookie", [
+        `accessToken=${other.accessToken}`,
+        `refreshToken=${credentials.refreshToken}`,
+        `csrfToken=${csrf}`,
+      ])
+      .set("x-csrf-token", csrf)
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(rotate).toHaveBeenCalledExactlyOnceWith(credentials.refreshToken);
+  });
+
+  it("rejects another login family's signed CSRF before rotating a refresh token", async () => {
+    const otherCsrf = generateCsrfToken("another-login-session");
+    const response = await request(app)
+      .post("/api/auth/refresh")
+      .set("Cookie", [
+        `refreshToken=${credentials.refreshToken}`,
+        `csrfToken=${otherCsrf}`,
+      ])
+      .set("x-csrf-token", otherCsrf)
+      .send({});
+
+    expect(response.status).toBe(403);
+    expect(rotate).not.toHaveBeenCalled();
+  });
+
   it.each([
     [new AuthenticationError("Refresh rejected"), 401],
     [new DependencyUnavailableError("Token store unavailable"), 503],

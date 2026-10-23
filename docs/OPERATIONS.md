@@ -461,6 +461,32 @@ Expected: all listed tests/checks pass. PostgreSQL/Redis integration and the rea
 frontend flow are separate CI jobs. Their checks must refer to this patch,
 not the already passing `c6f8897` deployment.
 
+#### CSRF code-only acceptance matrix — 2026-10-23
+
+The focused HTTP regression suite exercises session-bound CSRF without hosted
+credentials or browser cookies. It covers POST/PUT/PATCH/DELETE with a legitimate
+session token; missing cookie or header; header mismatch; unsigned matching
+cookie/header; tampering; and a signed token replayed from another session.
+Rejected writes must return 403 **before** the cart handler is called.
+
+The refresh HTTP suite separately checks a mismatched access/refresh identity:
+a CSRF token signed for the access session must not rotate another refresh
+family; the refresh family's genuine CSRF token must still allow rotation.
+This deliberately uses a mocked refresh service; it does not establish JWT
+revocation or Redis availability.
+
+Run the focused checks from `E:\DNEK`:
+
+```powershell
+npm run test:unit -- tests/unit/modules/auth/auth.csrf.http.test.ts tests/unit/modules/auth/auth.refresh.http.test.ts tests/unit/shared/middlewares/csrf.middleware.test.ts tests/unit/shared/utils/csrf-token.test.ts tests/unit/app.csrf.test.ts
+```
+
+Acceptance for this **source-only** gate requires CI PASS on the precise PR
+commit, with the test matrix and no known failed CSRF case. The hosted HTTPS,
+Secure/SameSite/domain/path, credentials and real-browser origin behavior are
+**explicitly deferred**; #90 must remain open until these checks are recorded.
+A successful local/synthetic HTTP test is not deployed browser acceptance.
+
 ### Limits of the initial Free stack
 
 This Blueprint is for temporary functional testing. Free web services can

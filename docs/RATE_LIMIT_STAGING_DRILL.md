@@ -1,8 +1,8 @@
 # Rate limiting — B7 staging verification
 
-**Status:** Source-level and real-Redis CI regression tests added in candidate PR (2026-10-23); deployed proxy/IP and Redis-outage evidence still pending. Do not close #140 on CI alone.
+**Status (2026-10-24):** authenticated Vercel → Render ingress is live. Direct/forged `/api` requests return 403; Vercel catalog returns 200; private correlated logs verify spoof resistance and distinct real network-source identities. Physical Redis outage and idempotency fail-closed/recovery checks PASS on a disposable CI stack. Current evidence and limits supersede the historical pre-gate observations below; see OPERATIONS.md.
 
-## Current code/CI protection and remaining staging gate
+## Runtime protections and verification policy
 
 Code-level protection is implemented in
 `src/shared/middlewares/rate-limit.middleware.ts`:
@@ -54,15 +54,7 @@ untrusted hops / distinct client budgets under a deliberately trusted test
 proxy, 429 response headers, and liveness outside the API limiter.
 This is deliberately _not_ a deployment proxy drill.
 
-**Still required to close #140:** independently establish actual Render
-ingress hop/IP behavior and whether `/api` is directly reachable in addition
-to the Vercel rewrite; verify it without leaking test client identities.
-Rehearse Redis outage/reconnect on an **isolated, disposable** stack, not by
-shutting down the shared Render staging Key Value service. Record 429/503
-observations, health/readiness, recovery timestamps, sanitized metrics and
-shared-NAT fairness. Keep `TRUST_PROXY=0` until a reviewed, verified trust
-boundary is available. An isolated CI Redis disconnect test is not evidence
-for Render ingress behavior.
+Acceptance requires actual hosted source-IP/edge verification and an isolated physical Redis outage drill. Both are recorded in the live rollout section below. Keep `TRUST_PROXY=0`; accept client identity only through the authenticated server-side edge. Never rehearse outages by stopping shared hosted Redis.
 
 ## Automated B7 CI acceptance — 2026-10-24
 
@@ -99,32 +91,22 @@ fixtures; this job **does not establish real hosted source-IP handling**.
 `GET /api/products` requests with a forged documentation-only XFF header,
 directly to `triad-api-staging.onrender.com` and through
 `triad-staging-three.vercel.app/api`. The unique `TriAD-B7-Canary/RUN_ID`
-user agent allows correlation with Render logs. HTTP 200 and catalog success
-prove reachability, **not** that Render derived the correct end-user IP.
+user agent allows correlation with Render logs. After gate activation the direct request returns 403 and the Vercel catalog returns 200. HTTP status alone does not prove Render derived the correct end-user IP.
 Use the Render logs to inspect only the verdict (forged vs peer/proxy-derived)
 and publish redacted evidence; never put public user IPs into GitHub artifacts.
 
-**Trust-boundary limitation:** Render's public API currently allows direct
-connections and Vercel forwards via rewrite. Do **not** enable hop-count
-`TRUST_PROXY=1` just to separate users: untrusted direct clients could
-then choose arbitrary XFF addresses and evade per-IP limits. Leave
-`TRUST_PROXY=0` until a verified allowlisted proxy address range (or a
-network restriction preventing direct bypass) is available. This means that
-fairness between users behind the same ingress/proxy remains a documented
-residual risk. If this cannot be remedied on current Free hosting, leave #140
-open (or explicitly accept the risk through an issue decision); never call
-the simulated NAT test an actual multi-public-IP production proof.
+**Trust boundary:** the Render hostname remains publicly reachable at the network layer, but the configured `API_EDGE_SECRET` rejects unauthenticated `/api` traffic. Vercel's server-side function overwrites caller-supplied edge headers and supplies the shared credential plus its platform-derived client address. Keep `TRUST_PROXY=0`. Disabling the gate restores the old shared-peer-IP limitation; blindly enabling hop-count trust would reopen spoofing risk. Shared public NATs still intentionally share IP-wide budgets, supplemented by account-specific auth protection.
 
-### Hosted ingress canary — observed 2026-10-24
+### Historical ingress canary — before authenticated edge activation
 
-- [GitHub Actions B7 run #39995502666](https://github.com/Thang4869/TriAD-Backend/actions/runs/39995502666) sent two read-only API requests: direct to Render and through Vercel. **Both returned HTTP 200** with `success=true`.
+- [GitHub Actions B7 run #39995502666](https://github.com/Thang4869/TriAD-Backend/actions/runs/39995502666) sent two read-only API requests: direct to Render and through Vercel. **Both returned HTTP 200** with `success=true` before the authenticated edge was enabled.
 - Render log records correlated by the unique `TriAD-B7-Canary/39995502666` user agent show **the same derived `req.ip` value, `::1`, for both paths** despite a forged `X-Forwarded-For` header in each request. No real end-user IP was captured in the evidence. This proves the current deployment does **not** distinguish the two ingress paths by IP; it does **not** prove multiple public users receive independent rate-limit buckets.
 - The direct Render hostname is publicly reachable. With `TRUST_PROXY=0`, ignoring client-supplied forwarded IPs avoids a trivial bypass, but the reverse proxy collapses clients to an internal peer address. Changing to `TRUST_PROXY=1` without an enforced, allowlisted edge would be unsafe. **Real hosted user-IP fairness is NOT ACCEPTED** on this topology.
 - A safe remediation requires an authenticated/trusted edge path or network restrictions that prevent untrusted direct traffic from supplying forged forwarded addresses. Until available, maintain global anti-abuse limits and separate auth/account protections; document the residual shared-IP lockout/bypass trade-off.
 
 ## Preconditions
 
-### Authenticated edge rollout (candidate, 2026-10-24)
+### Authenticated edge rollout (live, 2026-10-24)
 
 `createTrustedEdgeMiddleware` now supports an optional server-only
 `API_EDGE_SECRET` (32–256 characters). When configured, **every `/api` method**,
@@ -154,8 +136,11 @@ Required deployed acceptance: direct Render `/api/products` with missing/forged
 edge headers returns 403; Vercel catalog and cookie/CSRF journeys still pass;
 spoofed XFF cannot choose buckets; distinct real clients get distinct budgets,
 while shared NAT remains intentionally shared. Unit and real-Redis synthetic
-client tests are separate from this live proof. **#140 remains open until rollout
-and deployed acceptance.** No hosting configuration has been changed by this code.
+client tests are separate from this live proof. Rollout is now verified on Render `dep-dbdqtrrncjis73d6rbj0` (`c1ff0af`) and canonical Vercel `dpl_3kKVn4MrxjPbo5MusxRLy1DpU9Wg` (`5a5aa7d`). Backend `API_EDGE_SECRET` and `TRUST_PROXY=0` are configured on the existing staging service; the matching credential exists only in Vercel's production environment and Render's secret configuration. No database/Redis instance was interrupted. The branch preview uses a different disposable credential.
+
+Read-only native canaries `TriAD-Edge-Canary/work-mode/a` and `/b` at 2026-10-23 19:02 UTC used different forged XFF/edge headers: Vercel returned 200, direct Render returned 403. Render app logs show the same non-loopback, non-forged client identity for the two requests, and a different identity for the GitHub-hosted Playwright source. Publish only these verdicts, never actual addresses. Hosted cookie/CSRF acceptance on [trusted main run #40007506209, attempt 2](https://github.com/Thang4869/TriAD-12/actions/runs/40007506209/attempts/2) PASS after rollout. The mandatory direct-ingress regression is merged in frontend PR #38 (`ac87f6f`); trusted-main execution retains the dedicated-account checks.
+
+[B7 #40002408535](https://github.com/Thang4869/TriAD-Backend/actions/runs/40002408535) verifies physical Redis pause/stop and recovery. Idempotency returns 503 after 1,015/1,003 ms with no rejected mutation; resumes with 201 without API restart. Health, 429 and metric checks also PASS. Distinct clients sharing one genuine public NAT intentionally still share the IP-wide budget; separate identity-specific auth buckets supplement it. Synthetic shared-NAT budget tests are not a claim of independently observed public multi-device NAT traffic.
 
 - Dedicated staging stack with a known reverse-proxy topology, isolated Redis, no production accounts or data.
 - Record the deployment SHA, proxy addresses, `TRUST_PROXY`, rate-limit settings, Redis version, test client IPs and timestamps.
@@ -170,14 +155,16 @@ and deployed acceptance.** No hosting configuration has been changed by this cod
 5. **Reconnect:** Restore Redis and show HTTP requests recover without API restart. Confirm failed/in-flight calls are not retroactively accepted.
 6. **Isolation:** Check `/health/live` and `/health/ready` separately; health routes outside `/api` must not depend on the API rate limiter. Record readiness behavior during the outage.
 
-## Evidence record template
+## Verified evidence
 
-| Date (UTC)                | Deployment SHA | Proxy / `TRUST_PROXY` | Redis version | Case | Expected / observed status | Recovery time | Sanitized artifact link    |
-| ------------------------- | -------------- | --------------------- | ------------- | ---- | -------------------------- | ------------- | -------------------------- |
-| Pending staging execution | —              | —                     | —             | —    | —                          | —             | No deployed result claimed |
+| Date             | Environment / SHA                         | Case                                | Observed result                                                                                                | Evidence                                                                                                     |
+| ---------------- | ----------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 2026-10-24 UTC+7 | Hosted Render `c1ff0af`, Vercel `5a5aa7d` | Direct/forged ingress vs proxy      | 403 direct; 200 via Vercel; stable spoof-resistant and distinct network-source identities in private logs      | Live rollout section; OPERATIONS.md                                                                          |
+| 2026-10-24 UTC+7 | Disposable CI `815b15c`                   | Physical Redis pause/stop/reconnect | Rate limit and idempotency 503, no rejected mutation, readiness 503/liveness 200, recovery without API restart | [B7 #40002408535](https://github.com/Thang4869/TriAD-Backend/actions/runs/40002408535) + sanitized artifact  |
+| 2026-10-24 UTC+7 | Hosted canonical frontend `5a5aa7d`       | Cookie/CSRF/refresh/logout          | Trusted main acceptance PASS after secret configuration                                                        | [Frontend #40007506209 attempt 2](https://github.com/Thang4869/TriAD-12/actions/runs/40007506209/attempts/2) |
 
 Keep identities, credentials, tokens and raw HMAC-derived keys out of artifacts. Record timestamps and whether readiness, 429 budgets, Redis outage, and recovery behaved as expected.
 
 ## Release gate
 
-Attach a completed evidence table with request/response samples, sanitized logs, architecture/proxy diagram, observed 429/503 and downtime. Close B7/#140 only after passing the actual deployment drill; unit tests or mocked Redis stores alone are insufficient.
+The table and live rollout section provide current acceptance. Keep these checks for future releases: deployed source-IP/edge proof plus disposable outage/429/503/recovery evidence are required; unit tests or mocked Redis alone are insufficient. No outage is induced on the shared hosted service.

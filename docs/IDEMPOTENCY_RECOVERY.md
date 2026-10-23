@@ -1,7 +1,7 @@
 # Idempotency recovery and lease ownership
 
 **Scope:** HTTP idempotency middleware, checkout retry safety and Redis availability.
-**Verification (2026-10-18):** Implementation and unit/integration tests are on `main`; the current CI run [#39116584480](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480) reports unit/integration and typecheck jobs passed at the time of review. Deployed failure drills remain **OPEN**; no staging outcome is claimed.
+**Verification (2026-10-24):** [backend #225](https://github.com/Thang4869/TriAD-Backend/pull/225) merged. [CI #40002408505](https://github.com/Thang4869/TriAD-Backend/actions/runs/40002408505) at `815b15c` passed 1,387 tests/140 files, including the two real HTTP SIGKILL cases. [B7 #40002408535](https://github.com/Thang4869/TriAD-Backend/actions/runs/40002408535) passed physical Redis pause/stop/reconnect with idempotency HTTP 503 and no rejected mutation. These are **disposable CI production-like** results, not hosted crash/RTO/RPO evidence.
 
 ## Runtime contract
 
@@ -20,7 +20,7 @@ Therefore checkout/order creation must enforce idempotency at the durable transa
 
 ## Acceptance evidence for issue #84
 
-### Automated process-crash candidate (2026-10-24)
+### Automated process-crash acceptance (2026-10-24)
 
 `tests/integration/checkout.process-crash.test.ts` forks a disposable HTTP
 process with the real idempotency middleware, checkout service, Prisma unit of
@@ -39,8 +39,7 @@ mutation. A late NX claim can remain until its TTL, but cannot authorize the
 already-rejected HTTP operation. Cache writes remain owner-checked. This does
 not turn the Redis lease into a business-transaction lock.
 
-Execution is required before claiming PASS. These fixtures prove isolated
-process recovery, not deployed staging worker or infrastructure recovery.
+Both SIGKILL cases PASS in the linked CI, with one durable order/stock change and replayed order identity. These fixtures prove isolated process recovery, not deployed staging worker or infrastructure recovery.
 
 1. Run unit, integration (real Redis), typecheck and lint on the branch; publish links to CI executions.
 2. During a long-running test, verify that heartbeat renews only the current owner and stops on connection loss, response completion and process termination.
@@ -57,4 +56,4 @@ process recovery, not deployed staging worker or infrastructure recovery.
 
 Use synthetic accounts and orders. Record incident and recovery timestamps, HTTP status, Redis availability, and durable order identifiers in redacted form. Never attach raw idempotency keys, access tokens, request bodies or customer data.
 
-**Do not close #84** until durable recovery proof and CI checks are available.
+Issue #84 has the linked durable recovery and CI proof. Full hosted worker/infrastructure recovery remains tracked separately by #143; do not reinterpret these results as its completion.

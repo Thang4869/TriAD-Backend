@@ -1,30 +1,20 @@
 # TriAD Backend — Work Checklist
 
-**Cập nhật:** 2026-10-23 (đối chiếu code và trình duyệt staging thực tế) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
+**Cập nhật:** 2026-10-24 (đối chiếu code và trình duyệt staging thực tế) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
 
 **Trạng thái:** `[ ]` Chưa hoàn thành · `[~]` Đang làm / đã có code nhưng thiếu nghiệm thu · `[B]` Cần môi trường, dữ liệu hoặc quyết định bổ sung. Không tự chuyển sang hoàn thành chỉ vì CI xanh. Trong lúc chờ staging cloud, có thể thực hiện `production-like` trên máy cá nhân (Docker Compose) và ghi chính xác loại môi trường.
 
 ## Làm tiếp — Hoàn tất nghiệm thu staging
 
-**Thứ tự tiếp theo:** proxy/Redis (#140) → crash/retry (#84) → Compose (#102) → recovery (#143). Cookie/CSRF #90 đã nghiệm thu và đóng với bằng chứng thực tế ngày 23/10/2026. Chuẩn bị yêu cầu backup/hosting song song; OAuth/PayPal theo các mục riêng sau khi các gate checkout đã đạt.
+**Thứ tự tiếp theo:** recovery (#143) → dependency/config (#141) → order read-after-write (#139). Proxy/Redis #140, crash/retry #84 và production Compose #102 đã có bằng chứng nghiệm thu ngày 24/10/2026; xem mục mới nhất trong OPERATIONS.md. Cookie/CSRF #90 đã nghiệm thu và đóng với bằng chứng thực tế ngày 23/10/2026. Chuẩn bị yêu cầu backup/hosting song song; OAuth/PayPal theo các mục riêng sau khi các gate checkout đã đạt.
 
-- [~] **Nghiệm thu môi trường còn lại:** Cookie/CSRF #90 đã nghiệm thu trên HTTPS (5/5 Playwright thực tế, không skipped); tiếp tục kiểm tra client IP/rate-limit qua Vercel → Render, upload Cloudinary và worker/relay thực tế; chạy các P0 dưới đây. Gói Free chỉ phù hợp thử chức năng, không chứng minh độ bền queue hoặc khả năng chạy worker liên tục. [Bằng chứng staging và giới hạn hiện tại](OPERATIONS.md#deployed-staging-evidence--2026-10-22).
+- [~] **Nghiệm thu môi trường còn lại:** Cookie/CSRF #90 đã nghiệm thu trên HTTPS (5/5 Playwright thực tế, không skipped); tiếp tục kiểm tra upload Cloudinary và worker/relay thực tế; hoàn tất recovery dưới đây. Gói Free chỉ phù hợp thử chức năng, không chứng minh độ bền queue hoặc khả năng chạy worker liên tục. [Bằng chứng staging và giới hạn hiện tại](OPERATIONS.md#deployed-staging-evidence--2026-10-22).
 
 ## P0 — Ưu tiên làm trước
 
-**Candidate 24/10/2026 (chưa nghiệm thu hosting):** thêm authenticated Vercel
-proxy + backend API gate cho #140; bài HTTP/SIGKILL trước/sau commit và Redis
-HTTP deadline cho #84; migration dependency và workflow chạy production Compose
-thực cho #102. Chờ CI và rollout/acceptance; không đóng issue theo code đơn thuần.
-Runbook: [proxy](RATE_LIMIT_STAGING_DRILL.md), [crash/retry](IDEMPOTENCY_RECOVERY.md),
-[Compose](PRODUCTION_COMPOSE_ACCEPTANCE.md).
-
 - [~] **[#143 — Backup, restore và recovery](https://github.com/Thang4869/TriAD-Backend/issues/143):** Local recovery PASS (`3f4ad02`, 2026-10-19; 9.866s từ backup có sẵn đến HTTP/API ready, không phải production RTO). Issue GitHub hiện đã đóng, nhưng gate deployment này vẫn thiếu bằng chứng. **Còn làm:** xác nhận lịch backup, retention, encryption/off-site/key recovery; phê duyệt và đo RPO thực tế; nghiệm thu BullMQ/Outbox Relay, authenticated API, cutover/rollback và staging deployment. [Evidence/runbook](RECOVERY_DRILL.md).
-- [~] **[#140 — Redis + reverse proxy](https://github.com/Thang4869/TriAD-Backend/issues/140):** Giữ Lua `SCRIPT LOAD` chờ Redis sẵn sàng lúc cold start (tránh unhandled rejection của rate-limit-redis v4), giới hạn timeout cho lệnh Redis HTTP, Prometheus metrics label cố định (429/store failure), kiểm thử Redis thật + X-Forwarded-For/trusted hops/NAT budget/health; giữ fail-closed 503. **Còn nghiệm thu:** proxy IP/hop trực tiếp tại Render↔Vercel, Redis ngắt/kết nối lại trên stack cô lập, 429/503 và shared NAT với logs/metrics ẩn định danh. **Không đổi TRUST_PROXY staging trước khi xác minh topology.** [Runbook](RATE_LIMIT_STAGING_DRILL.md).
-- [~] **[#84 — Checkout crash/retry](https://github.com/Thang4869/TriAD-Backend/issues/84):** Test mất response, kill process và retry cùng idempotency key; so sánh order/stock/Redis lease-owner fencing; khẳng định không nhân đôi order/trừ stock, lưu kịch bản/lệnh/log thực thi. [Runbook](IDEMPOTENCY_RECOVERY.md).
-- [~] **[#102 — Production Compose + smoke](https://github.com/Thang4869/TriAD-Backend/issues/102):** Kiểm tra file collector mount/paths, môi trường/secrets, service dependencies và migrations; chạy `docker compose config`, image build, ready/API smoke, SIGTERM trong môi trường sạch. Đối chiếu bằng chứng CI hiện có trước khi đóng; không mặc định CI image smoke đồng nghĩa production Compose đã nghiệm thu.
 
-Đã nghiệm thu/đóng: [Backend #90](https://github.com/Thang4869/TriAD-Backend/issues/90) và [Frontend #23](https://github.com/Thang4869/TriAD-12/issues/23). Source-only cookie/CSRF: backend PR #217–#219; live Render `dep-dbdm9n8ae00c738mhi10` (`d986ced`) và frontend Vercel (`7e345a3`). [Playwright trên HTTPS thật #39967055295](https://github.com/Thang4869/TriAD-12/actions/runs/39967055295) **5/5 PASS, 0 SKIPPED**, cả 3 jobs PASS; nội dung và giới hạn nghiệm thu [ghi tại OPERATIONS.md](OPERATIONS.md#deployed-https-cookie-and-csrf-acceptance--2026-10-23). Phần reverse-proxy IP/rate-limit và Redis outage tiếp tục ở #140, không gộp vào tiêu chí #90.
+Đã nghiệm thu/đóng: [Backend #90](https://github.com/Thang4869/TriAD-Backend/issues/90) và [Frontend #23](https://github.com/Thang4869/TriAD-12/issues/23). Source-only cookie/CSRF: backend PR #217–#219; live Render `dep-dbdm9n8ae00c738mhi10` (`d986ced`) và frontend Vercel (`7e345a3`). [Playwright trên HTTPS thật #39967055295](https://github.com/Thang4869/TriAD-12/actions/runs/39967055295) **5/5 PASS, 0 SKIPPED**, cả 3 jobs PASS; nội dung và giới hạn nghiệm thu [ghi tại OPERATIONS.md](OPERATIONS.md#deployed-https-cookie-and-csrf-acceptance--2026-10-23). Bằng chứng gate proxy, Redis outage và nghiệm thu lại cookie sau rollout được ghi trong mục 24/10/2026 tại OPERATIONS.md.
 
 ## P1 — Hoàn thiện code, security và contract
 

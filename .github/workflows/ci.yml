@@ -223,8 +223,9 @@ jobs:
       NODE_ENV: test
       PORT: 5000
 
-      DATABASE_URL: postgresql://test:test@127.0.0.1:5432/triad_e2e
-      REDIS_URL: redis://127.0.0.1:6379
+      # Container jobs reach Actions services by hostname, not localhost.
+      DATABASE_URL: postgresql://test:test@postgres:5432/triad_e2e
+      REDIS_URL: redis://redis:6379
 
       JWT_ACCESS_SECRET: ci-fullstack-access-secret-32charslong-enough
       JWT_REFRESH_SECRET: ci-fullstack-refresh-secret-32chars-long-enough
@@ -253,7 +254,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: |
             package-lock.json

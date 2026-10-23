@@ -301,9 +301,11 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Install Playwright Chromium
+      - name: Check preinstalled Chromium matches Playwright
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: |
+          npx playwright --version
+          node -e 'const fs = require("node:fs"); const { chromium } = require("playwright"); if (!fs.existsSync(chromium.executablePath())) throw new Error("Playwright image lacks the pinned Chromium executable");'
 
       - name: Run full Frontend ↔ Backend journey
         working-directory: frontend

@@ -19,7 +19,9 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
   const credentials = authSessionFixture("session-1");
   const otherCredentials = authSessionFixture("session-2");
   let app: express.Express;
+  const cartWrite = vi.fn();
   beforeEach(() => {
+    cartWrite.mockClear();
     const controller = new AuthController({
       login: vi
         .fn()
@@ -33,7 +35,8 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
     // is exercised by TokenService tests and fullstack CI, not this fixture.
     app.get("/api/auth/csrf", controller.csrf);
     app.post("/api/auth/login", controller.login);
-    app.post("/api/cart/items", (_req, res) => {
+    app.all("/api/cart/items", (_req, res) => {
+      cartWrite();
       res.sendStatus(204);
     });
     app.use(createErrorHandler({ classify: () => null }));
@@ -98,6 +101,52 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
       .send({});
     expect(response.status).toBe(403);
   });
+
+  it.each(["post", "put", "patch", "delete"] as const)(
+    "accepts a session-bound CSRF token for a protected %s request",
+    async (method) => {
+      const token = generateCsrfToken("session-1");
+      const response = await request(app)
+        [method]("/api/cart/items")
+        .set("Cookie", [
+          `accessToken=${credentials.accessToken}`,
+          `csrfToken=${token}`,
+        ])
+        .set("x-csrf-token", token)
+        .send({});
+
+      expect(response.status).toBe(204);
+      expect(cartWrite).toHaveBeenCalledOnce();
+    },
+  );
+
+  const validToken = generateCsrfToken("session-1");
+  const tamperedToken =
+    (validToken[0] === "a" ? "b" : "a") + validToken.slice(1);
+  const otherSessionToken = generateCsrfToken("session-2");
+  const rejectedTokens: Array<[string, string | undefined, string | undefined]> = [
+    ["missing CSRF cookie", undefined, validToken],
+    ["missing CSRF header", validToken, undefined],
+    ["mismatched header", validToken, otherSessionToken],
+    ["matching unsigned pair", "a".repeat(64), "a".repeat(64)],
+    ["tampered matching pair", tamperedToken, tamperedToken],
+    ["another session's signed pair", otherSessionToken, otherSessionToken],
+  ];
+
+  it.each(rejectedTokens)(
+    "rejects %s before a protected write reaches its handler",
+    async (_case, cookieToken, headerToken) => {
+      const cookies = [`accessToken=${credentials.accessToken}`];
+      if (cookieToken !== undefined) cookies.push(`csrfToken=${cookieToken}`);
+      let pending = request(app).post("/api/cart/items").set("Cookie", cookies);
+      if (headerToken !== undefined)
+        pending = pending.set("x-csrf-token", headerToken);
+
+      const response = await pending.send({});
+      expect(response.status).toBe(403);
+      expect(cartWrite).not.toHaveBeenCalled();
+    },
+  );
 
   it("requires old access sessions without a binding to sign in again", async () => {
     const response = await request(app)

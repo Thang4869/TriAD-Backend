@@ -475,7 +475,7 @@ family; the refresh family's genuine CSRF token must still allow rotation.
 This deliberately uses a mocked refresh service; it does not establish JWT
 revocation or Redis availability.
 
-Run the focused checks from `E:\\DNEK`:
+Run the focused checks from `E:\DNEK`:
 
 ```powershell
 npm run test:unit -- tests/unit/modules/auth/auth.csrf.http.test.ts tests/unit/modules/auth/auth.refresh.http.test.ts tests/unit/shared/middlewares/csrf.middleware.test.ts tests/unit/shared/utils/csrf-token.test.ts tests/unit/app.csrf.test.ts

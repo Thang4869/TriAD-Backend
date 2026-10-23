@@ -184,7 +184,15 @@ jobs:
   frontend-backend-e2e:
     name: Frontend ↔ Backend E2E
     runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test, build]
+    # Keep lint and coverage gates; build is independently verified.
+    needs: [lint-and-typecheck, test]
+    # Pinned to frontend package-lock Playwright version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --shm-size=1gb
+    defaults:
+      run:
+        shell: bash
 
     services:
       postgres:

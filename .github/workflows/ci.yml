@@ -164,7 +164,7 @@ jobs:
   build:
     name: Build Application
     runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test]
+    # Independent build runs in parallel with lint and coverage.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

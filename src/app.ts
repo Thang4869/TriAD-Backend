@@ -9,6 +9,7 @@ import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "@config/swagger";
 import config from "@config";
 import { parseTrustProxy } from "@config/trust-proxy";
+import { createTrustedEdgeMiddleware } from "@shared/middlewares/trusted-edge.middleware";
 
 import { rateLimiter } from "@shared/middlewares/rate-limit.middleware";
 import { notFoundHandler } from "@shared/middlewares/error-handler.middleware";
@@ -34,6 +35,8 @@ import { AuthorizationError } from "@shared/errors/application-error";
 
 const app: Application = express();
 app.set("trust proxy", parseTrustProxy(config.TRUST_PROXY));
+// Before CORS/preflight, body parsing, logging and every /api rate limiter.
+app.use("/api", createTrustedEdgeMiddleware(config.API_EDGE_SECRET));
 
 app.use(
   helmet({

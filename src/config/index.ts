@@ -53,6 +53,10 @@ const configSchema = z
       ),
 
     TRUST_PROXY: z.string().default("0"),
+    API_EDGE_SECRET: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.string().min(32).max(256).optional(),
+    ),
 
     RATE_LIMIT_WINDOW_MS: z.string().default("60000").transform(Number),
     RATE_LIMIT_MAX: z.string().default("100").transform(Number),
@@ -82,6 +86,13 @@ const configSchema = z
     CLOUDINARY_API_SECRET: z.string().optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.API_EDGE_SECRET && data.TRUST_PROXY !== "0") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["TRUST_PROXY"],
+        message: "TRUST_PROXY must be 0 when API_EDGE_SECRET is configured",
+      });
+    }
     if (data.NODE_ENV === "production") {
       const smtpVars = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"];
       for (const v of smtpVars) {

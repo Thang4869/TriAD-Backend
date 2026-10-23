@@ -106,8 +106,7 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
     "accepts a session-bound CSRF token for a protected %s request",
     async (method) => {
       const token = generateCsrfToken("session-1");
-      const response = await request(app)
-        [method]("/api/cart/items")
+      const response = await request(app)[method]("/api/cart/items")
         .set("Cookie", [
           `accessToken=${credentials.accessToken}`,
           `csrfToken=${token}`,

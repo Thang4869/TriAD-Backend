@@ -487,6 +487,38 @@ Secure/SameSite/domain/path, credentials and real-browser origin behavior are
 **explicitly deferred**; #90 must remain open until these checks are recorded.
 A successful local/synthetic HTTP test is not deployed browser acceptance.
 
+#### Cookie lifecycle source-only acceptance — 2026-10-23
+
+The focused HTTP tests assert the emitted `Set-Cookie` attributes across
+successful login, post-email-verification and post-2FA issuance, refresh and
+logout. Login must issue exactly three cookies: `accessToken` (15 minutes),
+`refreshToken` (7 days) and readable `csrfToken` (7 days). Access/refresh
+must be `HttpOnly`, whereas the CSRF cookie is intentionally JavaScript-
+readable for the double-submit header. Responses must not include JWTs in JSON.
+
+The test matrix covers production `Secure; SameSite=None` with host-only
+cookies and configured `COOKIE_DOMAIN`, plus local-development
+`SameSite=Lax` without `Secure`. All cookies require `Path=/`, and the
+HTTP suite checks the exact `Max-Age` seconds. A pending two-factor challenge,
+a failed login and a rejected refresh must never issue identity cookies.
+`GET /api/auth/csrf` must issue only a fresh CSRF cookie with `Cache-Control:
+no-store`; logout must expire all three cookies on the matching path/domain
+even when controller-level revocation fails, without suppressing the 503.
+
+Run the focused acceptance tests:
+
+```powershell
+Set-Location E:\DNEK
+npm run test:unit -- tests/unit/modules/auth/auth.csrf.http.test.ts tests/unit/modules/auth/auth.refresh.http.test.ts tests/unit/modules/auth/auth.logout.http.test.ts tests/unit/shared/middlewares/csrf.middleware.test.ts
+```
+
+**Gate:** mark the source-only cookie matrix PASS only with linked CI results for
+the exact PR head. This inspects HTTP headers, not browser cookie persistence.
+Hosted HTTPS acceptance is deferred: inspect actual Secure/SameSite/host-only/
+Path behavior in the browser, the frontend `credentials: include` flow,
+cookie handling through the Vercel `/api` rewrite, allowed/denied origins and
+reload/cross-tab expiry. Keep #90 open until that deployed evidence exists.
+
 ### Limits of the initial Free stack
 
 This Blueprint is for temporary functional testing. Free web services can

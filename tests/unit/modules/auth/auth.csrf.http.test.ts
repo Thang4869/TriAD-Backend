@@ -1,7 +1,8 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import request from "supertest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import config from "@config";
 import { AuthController } from "@modules/auth/auth.controller";
 import type { AuthService } from "@modules/auth/auth.service";
 import {
@@ -9,6 +10,7 @@ import {
   generateCsrfToken,
 } from "@shared/middlewares/csrf.middleware";
 import { createErrorHandler } from "@shared/middlewares/error-handler.middleware";
+import { AuthenticationError } from "@shared/errors/application-error";
 import { authSessionFixture } from "../../../helpers/auth-session";
 
 vi.mock("@core/logger/winston", () => ({
@@ -18,14 +20,22 @@ vi.mock("@core/logger/winston", () => ({
 describe("CSRF issuance and authenticated write HTTP boundary", () => {
   const credentials = authSessionFixture("session-1");
   const otherCredentials = authSessionFixture("session-2");
+  const originalCookieConfig = {
+    isProduction: config.isProduction,
+    COOKIE_DOMAIN: config.COOKIE_DOMAIN,
+  };
   let app: express.Express;
   const cartWrite = vi.fn();
+  const login = vi.fn();
   beforeEach(() => {
     cartWrite.mockClear();
+    const issued = { ...credentials, user: { id: "user-1" } };
+    login.mockReset();
+    login.mockResolvedValue(issued);
     const controller = new AuthController({
-      login: vi
-        .fn()
-        .mockResolvedValue({ ...credentials, user: { id: "user-1" } }),
+      login,
+      verifyEmail: vi.fn().mockResolvedValue(issued),
+      verifyTOTP: vi.fn().mockResolvedValue(issued),
     } as unknown as AuthService);
     app = express();
     app.use(cookieParser());
@@ -35,11 +45,121 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
     // is exercised by TokenService tests and fullstack CI, not this fixture.
     app.get("/api/auth/csrf", controller.csrf);
     app.post("/api/auth/login", controller.login);
+    app.get("/api/auth/verify-email", controller.verifyEmail);
+    app.post("/api/auth/verify-totp", controller.verifyTOTP);
     app.all("/api/cart/items", (_req, res) => {
       cartWrite();
       res.sendStatus(204);
     });
     app.use(createErrorHandler({ classify: () => null }));
+  });
+
+  afterEach(() => {
+    Object.assign(config, originalCookieConfig);
+  });
+
+  const expectedCookies = [
+    ["accessToken", 900, true],
+    ["refreshToken", 604800, true],
+    ["csrfToken", 604800, false],
+  ] as const;
+
+  it("does not issue identity cookies during the pending two-factor challenge", async () => {
+    login.mockResolvedValueOnce({
+      requires2FA: true,
+      preAuthToken: "disposable-preauth-fixture",
+      message: "Additional verification required",
+    });
+
+    const response = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "fixture@example.invalid", password: "fixture" });
+
+    expect(response.status).toBe(200);
+    expect(response.get("Set-Cookie")).toBeUndefined();
+    expect(response.body.data.requires2FA).toBe(true);
+    expect(response.body.data).not.toHaveProperty("csrfToken");
+    expect(response.body.data).not.toHaveProperty("accessToken");
+    expect(response.body.data).not.toHaveProperty("refreshToken");
+  });
+
+  it("does not issue cookies when authentication fails", async () => {
+    login.mockRejectedValueOnce(new AuthenticationError("Invalid login"));
+    const response = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "fixture@example.invalid", password: "fixture" });
+
+    expect(response.status).toBe(401);
+    expect(response.get("Set-Cookie")).toBeUndefined();
+  });
+
+  it.each([
+    {
+      mode: "production with host-only cookies",
+      isProduction: true,
+      domain: undefined,
+      sameSite: "None",
+    },
+    {
+      mode: "production with a configured cookie domain",
+      isProduction: true,
+      domain: ".example.invalid",
+      sameSite: "None",
+    },
+    {
+      mode: "local development with host-only cookies",
+      isProduction: false,
+      domain: undefined,
+      sameSite: "Lax",
+    },
+  ])(
+    "issues the three cookies with exact flags and Max-Age in $mode",
+    async ({ isProduction, domain, sameSite }) => {
+      Object.assign(config, { isProduction, COOKIE_DOMAIN: domain });
+      const response = await request(app)
+        .post("/api/auth/login")
+        .send({ email: "fixture@example.invalid", password: "fixture" });
+
+      expect(response.status).toBe(200);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.body.data).not.toHaveProperty("accessToken");
+      expect(response.body.data).not.toHaveProperty("refreshToken");
+
+      const cookies = response.get("Set-Cookie") ?? [];
+      expect(cookies).toHaveLength(3);
+      for (const [name, maxAgeSeconds, httpOnly] of expectedCookies) {
+        const cookie = cookies.find((value) => value.startsWith(`${name}=`));
+        expect(cookie).toBeDefined();
+        const flags = cookie?.split(";").map((value) => value.trim()) ?? [];
+        expect(flags).toContain(`Max-Age=${maxAgeSeconds}`);
+        expect(flags).toContain("Path=/");
+        expect(flags).toContain(`SameSite=${sameSite}`);
+        expect(flags.includes("Secure")).toBe(isProduction);
+        expect(flags.includes("HttpOnly")).toBe(httpOnly);
+        if (domain) expect(flags).toContain(`Domain=${domain}`);
+        else expect(flags.some((flag) => flag.startsWith("Domain="))).toBe(false);
+      }
+      expect(
+        cookies.find((value) => value.startsWith("csrfToken=")),
+      ).toContain(`csrfToken=${response.body.data.csrfToken};`);
+    },
+  );
+
+  it.each([
+    ["email verification", "/api/auth/verify-email?token=fixture"],
+    ["two-factor completion", "/api/auth/verify-totp"],
+  ])("issues session cookies after %s, without JWTs in JSON", async (_case, route) => {
+    const response = route.includes("?")
+      ? await request(app).get(route)
+      : await request(app)
+          .post(route)
+          .send({ preAuthToken: "test-preauth", token: "123456" });
+
+    expect(response.status).toBe(200);
+    expect(response.get("Set-Cookie")).toHaveLength(3);
+    expect(response.body.data.csrfToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(response.body.data).not.toHaveProperty("accessToken");
+    expect(response.body.data).not.toHaveProperty("refreshToken");
   });
 
   it("returns the same signed value in the JSON bootstrap and readable cookie, without JWT JSON", async () => {
@@ -77,6 +197,13 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
       ]);
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toBe("no-store");
+    const issuedCookies = response.get("Set-Cookie") ?? [];
+    expect(issuedCookies).toHaveLength(1);
+    expect(issuedCookies[0]).toContain("csrfToken=");
+    expect(issuedCookies[0]).toContain("Max-Age=604800");
+    expect(issuedCookies[0]).not.toContain("HttpOnly");
+    expect(response.body.data).not.toHaveProperty("accessToken");
+    expect(response.body.data).not.toHaveProperty("refreshToken");
     const token = response.body.data.csrfToken;
     const write = await request(app)
       .post("/api/cart/items")

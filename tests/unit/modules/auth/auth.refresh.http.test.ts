@@ -71,6 +71,7 @@ describe("Refresh HTTP validation and controller boundary", () => {
     expect(rotate).toHaveBeenCalledExactlyOnceWith(credentials.refreshToken);
     expect(response.body.data.user.id).toBe("refresh-user");
     expect(response.body.data.csrfToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(response.headers["cache-control"]).toBe("no-store");
     expect(response.body.data).not.toHaveProperty("accessToken");
     expect(response.body.data).not.toHaveProperty("refreshToken");
     const cookies = response.headers["set-cookie"] as unknown as string[];
@@ -79,10 +80,28 @@ describe("Refresh HTTP validation and controller boundary", () => {
       expect(cookie).toContain("Secure");
       expect(cookie).toContain("SameSite=None");
       expect(cookie).toContain("Path=/");
+      expect(cookie).toContain(
+        `Max-Age=${name === "accessToken" ? 900 : 604800}`,
+      );
       expect(cookie).not.toContain("Domain=");
       if (name === "csrfToken") expect(cookie).not.toContain("HttpOnly");
       else expect(cookie).toContain("HttpOnly");
     }
+  });
+
+  it("retains an explicitly configured cookie domain during refresh", async () => {
+    Object.assign(config, { COOKIE_DOMAIN: ".example.invalid" });
+    const response = await withCookie().send({});
+    expect(response.status).toBe(200);
+
+    const cookies = response.get("Set-Cookie") ?? [];
+    expect(cookies).toHaveLength(3);
+    for (const name of ["accessToken", "refreshToken", "csrfToken"]) {
+      const cookie = cookies.find((value) => value.startsWith(`${name}=`));
+      expect(cookie).toContain("Domain=.example.invalid");
+      expect(cookie).toContain("Path=/");
+    }
+    expect(rotate).toHaveBeenCalledExactlyOnceWith(credentials.refreshToken);
   });
 
   it("preserves explicit body-token clients", async () => {

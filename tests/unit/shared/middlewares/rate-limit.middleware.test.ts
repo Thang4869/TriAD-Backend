@@ -331,6 +331,47 @@ describe("rate-limit Redis fail-closed policy", () => {
     }
   });
 
+  it("bounds a stalled first SCRIPT LOAD while Redis is still connecting", async () => {
+    vi.useFakeTimers();
+    const client = redis as typeof redis & { status: string };
+    const originalStatus = client.status;
+    try {
+      const sendCommand = commandBridge();
+      client.status = "connecting";
+      vi.mocked(redis.call).mockImplementationOnce(
+        () => new Promise(() => {}) as ReturnType<typeof redis.call>,
+      );
+
+      const pending = expect(
+        sendCommand("SCRIPT", "LOAD", "return redis.call('PING')"),
+      ).rejects.toThrow("Rate limit store timed out");
+      await vi.advanceTimersByTimeAsync(1000);
+      await pending;
+      expect(redis.call).toHaveBeenCalledWith(
+        "SCRIPT", "LOAD", "return redis.call('PING')",
+      );
+
+      client.status = "ready";
+      vi.mocked(redis.call).mockResolvedValueOnce("sha-on-recovery");
+      await expect(
+        sendCommand("SCRIPT", "LOAD", "return 1"),
+      ).resolves.toBe("sha-on-recovery");
+    } finally {
+      client.status = originalStatus;
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not leak Redis host, keys or connection internals from SCRIPT LOAD errors", async () => {
+    const sendCommand = commandBridge();
+    vi.mocked(redis.call).mockRejectedValueOnce(
+      new Error("redis://private-host:6379 sensitive-key"),
+    );
+    await expect(sendCommand("SCRIPT", "LOAD", "sensitive-lua")).rejects.toThrow(
+      "Rate limit store unavailable",
+    );
+  });
+
   it("returns a 503-class dependency error immediately if Redis is disconnected", async () => {
     const sendCommand = commandBridge();
     const redisClient = redis as typeof redis & { status: string };

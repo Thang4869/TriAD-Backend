@@ -18,6 +18,7 @@ if (process.env.B7_ACCEPTANCE_ENABLED !== "true" ||
 }
 const redis = require("../../src/core/redis/client").default;
 const { rateLimiter } = require("../../src/shared/middlewares/rate-limit.middleware");
+const { idempotencyMiddleware } = require("../../src/shared/middlewares/idempotency.middleware");
 const { parseTrustProxy } = require("../../src/config/trust-proxy");
 const { createErrorHandler } = require("../../src/shared/middlewares/error-handler.middleware");
 const { rateLimitStoreFailuresTotal } = require("../../src/core/metrics/metrics.registry");
@@ -122,6 +123,28 @@ async function redisHealthy(maxWait = 20000) {
 }
 async function drill() {
   await redisHealthy();
+  // Separate route: the idempotency store itself must fail closed, rather than
+  // having the rate limiter reject the request before it reaches that store.
+  let mutations = 0;
+  const idemApp = express();
+  idemApp.use(express.json());
+  idemApp.post("/api/checkout", idempotencyMiddleware(), (_req, res) => {
+    mutations += 1;
+    res.status(201).json({ success: true });
+  });
+  idemApp.use(createErrorHandler({ classify: () => null }));
+  const idemPort = await listen(http.createServer(idemApp));
+  const post = async (key) => {
+    const start = Date.now();
+    const response = await fetch("http://127.0.0.1:" + idemPort + "/api/checkout", {
+      method: "POST", headers: { "content-type": "application/json", "idempotency-key": key },
+      body: "{}", signal: AbortSignal.timeout(6500),
+    });
+    await response.arrayBuffer();
+    return { status: response.status, ms: Date.now() - start };
+  };
+  const pausedKey = randomUUID();
+  const stoppedKey = randomUUID();
   const direct = await listen(http.createServer(makeApp("0", "direct", 2)));
   const directResponses = [];
   for (const spoof of ["203.0.113.10", "198.51.100.45", "203.0.113.99"]) {
@@ -164,6 +187,10 @@ async function drill() {
     record("health-readiness-down-liveness-up",
       ready.status === 503 && live.status === 200,
       { ready: ready.status, live: live.status });
+    const rejected = await post(pausedKey);
+    record("idempotency-paused-Redis-fails-closed-without-mutation",
+      rejected.status === 503 && rejected.ms < 3500 && mutations === 0,
+      { http: rejected.status, elapsedMs: rejected.ms, mutations });
   } finally {
     docker("unpause", dockerName);
   }
@@ -173,6 +200,10 @@ async function drill() {
   record("resume-after-Redis-unpause-without-API-restart",
     unpaused.status === 200,
     { status: unpaused.status, recoveryMs: Date.now() - unpauseStart });
+  const idemResumed = await post(pausedKey);
+  record("idempotency-recovers-after-unpause-without-API-restart",
+    idemResumed.status === 201 && mutations === 1,
+    { http: idemResumed.status, mutations });
 
   docker("stop", "--time", "2", dockerName);
   const stopped = await probe(port, "/api/probe");
@@ -180,6 +211,10 @@ async function drill() {
     stopped.status === 503 &&
       stopped.body.code === "APPLICATION.DEPENDENCY_UNAVAILABLE",
     { status: stopped.status });
+  const idemStopped = await post(stoppedKey);
+  record("idempotency-stopped-Redis-fails-closed-without-mutation",
+    idemStopped.status === 503 && mutations === 1,
+    { http: idemStopped.status, elapsedMs: idemStopped.ms, mutations });
 
   docker("start", dockerName);
   const restartStart = Date.now();
@@ -188,6 +223,10 @@ async function drill() {
   record("reconnected-Redis-recovers-without-API-restart",
     restored.status === 200,
     { status: restored.status, recoveryMs: Date.now() - restartStart });
+  const idemRestarted = await post(stoppedKey);
+  record("idempotency-recovers-after-restart-without-API-restart",
+    idemRestarted.status === 201 && mutations === 2,
+    { http: idemRestarted.status, mutations });
 
   const values = (await rateLimitStoreFailuresTotal.get()).values.filter((m) => m.value > 0);
   record("Redis-failure-metrics-avoid-user-identifiers",

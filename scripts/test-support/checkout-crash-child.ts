@@ -1,12 +1,12 @@
 // Disposable integration harness: real HTTP/middleware/service/DB, synthetic auth.
 import express from "express";
-import { randomUUID } from "node:crypto";
 import prisma from "@core/database/prisma";
 import redis from "@core/redis/client";
 import { CheckoutService } from "@modules/checkout/checkout.service";
 import { PrismaCheckoutRepository } from "@modules/checkout/infrastructure/repositories/prisma-checkout.repository";
 import { PrismaCheckoutUnitOfWork } from "@modules/checkout/infrastructure/prisma-checkout-unit-of-work";
 import { PricingService } from "@modules/checkout/services/pricing.service";
+import { CryptoOrderNumberGenerator } from "@modules/checkout/infrastructure/order-number-generator";
 import { StockReservationService } from "@modules/checkout/services/stock-reservation.service";
 import { idempotencyMiddleware } from "@shared/middlewares/idempotency.middleware";
 import { createErrorHandler } from "@shared/middlewares/error-handler.middleware";
@@ -39,7 +39,7 @@ const service = new CheckoutService(
     : realUow,
   new PricingService({ isEnabled: () => true }),
   new StockReservationService(noopTracer, noopMetrics),
-  { generate: () => "CRASH-" + randomUUID() },
+  new CryptoOrderNumberGenerator(),
   noopTracer,
   noopMetrics,
 );

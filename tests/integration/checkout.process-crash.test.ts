@@ -2,9 +2,14 @@ import { fork, ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
+
+const disposeClients: Array<() => Promise<unknown>> = [];
+afterEach(async () => {
+  await Promise.all(disposeClients.splice(0).map((dispose) => dispose()));
+});
 
 function message(
   child: ChildProcess,
@@ -86,6 +91,10 @@ describe("checkout HTTP recovery after real process termination", () => {
         datasources: { db: { url: process.env.DATABASE_URL } },
       });
       const redis = new Redis(process.env.REDIS_URL!);
+      disposeClients.push(
+        () => prisma.$disconnect(),
+        () => redis.quit(),
+      );
       const user = await prisma.user.create({
         data: {
           email: randomUUID() + "@example.invalid",
@@ -188,6 +197,13 @@ describe("checkout HTTP recovery after real process termination", () => {
           idempotent: boolean;
         };
         expect(result.idempotent).toBe(mode === "after-commit");
+        await vi.waitFor(
+          async () => {
+            const cached = await redis.get(cacheKey);
+            expect(cached && JSON.parse(cached).state).toBe("COMPLETED");
+          },
+          { timeout: 1500, interval: 20 },
+        );
         const repeated = await post(replacement.url);
         expect(repeated.status).toBe(201);
         expect(
@@ -210,8 +226,6 @@ describe("checkout HTTP recovery after real process termination", () => {
       } finally {
         for (const child of children) await kill(child);
         await redis.del(cacheKey);
-        await redis.quit();
-        await prisma.$disconnect();
       }
     },
     60_000,

@@ -519,6 +519,55 @@ Path behavior in the browser, the frontend `credentials: include` flow,
 cookie handling through the Vercel `/api` rewrite, allowed/denied origins and
 reload/cross-tab expiry. Keep #90 open until that deployed evidence exists.
 
+### Deployed HTTPS cookie and CSRF acceptance — 2026-10-23
+
+**Accepted for the current Vercel same-origin `/api` rewrite, not for arbitrary
+third-party frontend/API domain arrangements.**
+
+- Backend: Render `triad-api-staging`, `dep-dbdm9n8ae00c738mhi10`,
+  `d986ced677cd1e42c3b4fd23999a6bbed5c6f10c`, `live`.
+  Render readiness logs confirmed HTTP 200 after deploy.
+- Frontend: Vercel `https://triad-staging-three.vercel.app`,
+  source `7e345a3ac0de7c103ca058d5a9203e794905dc41`
+  ([PR #35](https://github.com/Thang4869/TriAD-12/pull/35)).
+  Browser fetches `/api/*` over the frontend origin; Vercel rewrites those
+  calls to the Render HTTPS API. Cookie `Domain` is host-only
+  (`triad-staging-three.vercel.app`), `Path=/`, `Secure` and
+  `SameSite=None` in deployed production-mode responses. Access and refresh
+  cookies are HttpOnly; the readable CSRF cookie supplies the
+  `x-csrf-token` header. Frontend sends `credentials: include`.
+- Trusted `main` workflow dispatch:
+  [TriAD-12 Actions #39967055295](https://github.com/Thang4869/TriAD-12/actions/runs/39967055295),
+  event `workflow_dispatch`, exact head
+  `7e345a3ac0de7c103ca058d5a9203e794905dc41`, all **3/3 jobs SUCCESS**.
+  Live Chromium `tests/staging/auth-origin.spec.js` reported **5 passed,
+  0 skipped** (11.6 seconds for this test suite).
+- The five tests covered canonical HTTPS proxy/catalog, anonymous
+  CSRF/refresh, direct Render allowed/denied CORS preflight, rejected
+  simple-form login without issuing cookies, and authenticated login →
+  browser cookie flags/HttpOnly visibility → missing/wrong CSRF rejection →
+  signed CSRF accepted by middleware (invalid body rejected by validation) →
+  reload/second-tab bootstrap → refresh → logout/cookie removal → 401 when
+  accessing protected cart after logout.
+- The browser suite uses a dedicated staging account via GitHub Actions
+  encrypted repository secrets. No account credentials, JWTs, CSRF token
+  values, browser trace, video or screenshots are included in the acceptance
+  evidence. In normal PR events, credentialed tests stay skipped; the
+  successful authenticated result belongs specifically to the trusted manual
+  `main` dispatch above.
+- Backend HTTP tests (PRs #217–#219) separately cover session binding,
+  replay, rotation, failure and production cookie `Max-Age`; local
+  Frontend/Backend fullstack suites verify additional open-page expiry
+  behavior. This hosted run is evidence for the staging topology and current
+  revisions only; it does **not** establish production durability, availability
+  during Redis outages or upstream proxy IP attribution (tracked by #140).
+
+**Outcome:** Backend [#90](https://github.com/Thang4869/TriAD-Backend/issues/90)
+and Frontend [#23](https://github.com/Thang4869/TriAD-12/issues/23)
+meet the stated Cookie/CSRF HTTPS acceptance criteria. Retain this run's
+source/deployment IDs for the audit trail. Do not apply this finding to future
+revisions or a different cookie origin topology without rerunning tests.
+
 ### Limits of the initial Free stack
 
 This Blueprint is for temporary functional testing. Free web services can

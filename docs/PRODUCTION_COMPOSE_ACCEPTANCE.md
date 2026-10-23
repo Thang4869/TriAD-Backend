@@ -30,5 +30,4 @@ exit code 0 plus the application shutdown marker. Sanitized JSON evidence is
 uploaded with the tested commit SHA. No SMTP/Cloudinary real delivery, hosted
 TLS, backup durability, or production recovery result is implied.
 
-Run the workflow on the reviewed commit and record its successful URL before
-closing #102. A normal production-image smoke alone does not execute Compose.
+Verified 2026-10-24: [Production Compose #40002408473](https://github.com/Thang4869/TriAD-Backend/actions/runs/40002408473) at `815b15c` **PASS**, with the sanitized `production-compose-evidence` artifact. [Implementation #225](https://github.com/Thang4869/TriAD-Backend/pull/225) is merged; [main CI #40007517274](https://github.com/Thang4869/TriAD-Backend/actions/runs/40007517274) at `c1ff0af` also passed production-image smoke and fullstack checks. This is actual Compose execution on disposable CI services, not a hosted infrastructure recovery drill.

@@ -61,6 +61,56 @@ shared-NAT fairness. Keep `TRUST_PROXY=0` until a reviewed, verified trust
 boundary is available. An isolated CI Redis disconnect test is not evidence
 for Render ingress behavior.
 
+## Automated B7 CI acceptance — 2026-10-24
+
+The opt-in [`B7 proxy and Redis acceptance`](../.github/workflows/b7-acceptance.yml)
+workflow runs two independent jobs on relevant PRs and by manual dispatch on
+`main`. Neither job is given staging credentials or mutable hosted secrets.
+
+**Disposable Redis + real HTTP proxy hop.** The runner creates its own
+`redis:7-alpine` Docker container, mapped to `127.0.0.1:16379`, and runs
+`scripts/acceptance/b7-isolated-proxy-redis.cjs`. The script refuses execution
+without the explicit opt-in, `NODE_ENV=test`, loopback-only Redis URL and
+the unique disposable container name. On failure or success the workflow
+unpauses and destroys the disposable container. The backend process is not
+restarted during the outage tests. Assertions cover:
+- Direct API requests with three spoofed `X-Forwarded-For` values hitting a
+  shared limit and receiving HTTP 429 under `TRUST_PROXY=0`.
+- An actual HTTP reverse-proxy TCP hop on loopback with header sanitization;
+  two **simulated** clients behind the same RFC5737 NAT address share an IP
+  budget and a different simulated source remains independent. This also
+  demonstrates the fairness trade-off of per-IP buckets for shared NATs.
+- A paused Redis server returning bounded HTTP **503**, readiness **503** and
+  liveness **200**, then recovering without API restart.
+- A stopped Redis container returning HTTP **503**, then recovering after
+  `docker start` without API restart.
+- Failure metrics include only fixed `operation` and `reason` labels,
+  never client IDs, IPs, headers, tokens, Redis URLs or keys.
+
+Output is a sanitized `b7-isolated-evidence.json` GitHub Actions artifact,
+not raw request logs, secrets or Redis state. RFC5737 addresses are test
+fixtures; this job **does not establish real hosted source-IP handling**.
+
+**Hosted ingress canary.** The second job sends two read-only public
+`GET /api/products` requests with a forged documentation-only XFF header,
+directly to `triad-api-staging.onrender.com` and through
+`triad-staging-three.vercel.app/api`. The unique `TriAD-B7-Canary/RUN_ID`
+user agent allows correlation with Render logs. HTTP 200 and catalog success
+prove reachability, **not** that Render derived the correct end-user IP.
+Use the Render logs to inspect only the verdict (forged vs peer/proxy-derived)
+and publish redacted evidence; never put public user IPs into GitHub artifacts.
+
+**Trust-boundary limitation:** Render's public API currently allows direct
+connections and Vercel forwards via rewrite. Do **not** enable hop-count
+`TRUST_PROXY=1` just to separate users: untrusted direct clients could
+then choose arbitrary XFF addresses and evade per-IP limits. Leave
+`TRUST_PROXY=0` until a verified allowlisted proxy address range (or a
+network restriction preventing direct bypass) is available. This means that
+fairness between users behind the same ingress/proxy remains a documented
+residual risk. If this cannot be remedied on current Free hosting, leave #140
+open (or explicitly accept the risk through an issue decision); never call
+the simulated NAT test an actual multi-public-IP production proof.
+
 ## Preconditions
 - Dedicated staging stack with a known reverse-proxy topology, isolated Redis, no production accounts or data.
 - Record the deployment SHA, proxy addresses, `TRUST_PROXY`, rate-limit settings, Redis version, test client IPs and timestamps.

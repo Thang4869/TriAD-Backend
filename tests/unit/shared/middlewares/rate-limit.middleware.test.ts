@@ -409,32 +409,37 @@ describe("rate-limit Redis fail-closed policy", () => {
     }
   });
 
-  it("bounds a stalled first SCRIPT LOAD while Redis is still connecting", async () => {
+  it("does not reject queued SCRIPT LOAD while Redis connects during cold startup", async () => {
     vi.useFakeTimers();
     const client = redis as typeof redis & { status: string };
     const originalStatus = client.status;
+    const failures = vi.spyOn(rateLimitStoreFailuresTotal, "inc");
     try {
       const sendCommand = commandBridge();
       client.status = "connecting";
+      let complete!: (reply: unknown) => void;
       vi.mocked(redis.call).mockImplementationOnce(
-        () => new Promise(() => {}) as ReturnType<typeof redis.call>,
+        () => new Promise((resolve) => { complete = resolve; }) as ReturnType<typeof redis.call>,
       );
 
-      const pending = expect(
-        sendCommand("SCRIPT", "LOAD", "return redis.call('PING')"),
-      ).rejects.toThrow("Rate limit store timed out");
-      await vi.advanceTimersByTimeAsync(1000);
-      await pending;
-      expect(redis.call).toHaveBeenCalledWith(
-        "SCRIPT", "LOAD", "return redis.call('PING')",
-      );
+      // The upstream v4 store creates and awaits startup Lua SHA promises
+      // asynchronously. Rejecting them on a timer can crash a cold deploy.
+      const pending = sendCommand("SCRIPT", "LOAD", "return 1");
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(failures).not.toHaveBeenCalledWith({
+        operation: "bootstrap",
+        reason: "timeout",
+      });
 
       client.status = "ready";
+      complete("script-sha");
+      await expect(pending).resolves.toBe("script-sha");
       vi.mocked(redis.call).mockResolvedValueOnce("sha-on-recovery");
       await expect(
         sendCommand("SCRIPT", "LOAD", "return 1"),
       ).resolves.toBe("sha-on-recovery");
     } finally {
+      failures.mockRestore();
       client.status = originalStatus;
       vi.useRealTimers();
     }

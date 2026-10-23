@@ -16,10 +16,16 @@ Code-level protection is implemented in
   Only set trusted hops/IP networks after verifying ingress and direct-access
   protections; an unverified `TRUST_PROXY=1` is not safe on a publicly
   reachable direct backend.
-- Redis rate-limit commands fail closed: HTTP **503** during outage/timeout
-  and HTTP **429** for exceeded budgets. The initial Lua `SCRIPT LOAD`
-  is now bounded by the same 1000ms timeout even if ioredis is still
-  connecting; a subsequent healthy Redis call can retry.
+- Redis rate-limit **request commands** fail closed: HTTP **503** during
+  outage/timeout and HTTP **429** for exceeded budgets. HTTP Redis commands
+  have a 1000ms timeout. Startup Lua `SCRIPT LOAD` is intentionally exempt:
+  `rate-limit-redis` v4 initializes and awaits Lua SHA promises asynchronously,
+  so rejecting those during a cold Redis connection produced unhandled
+  rejections and a failed Render deploy (`dep-dbdoet6q1p3s739ahskg`).
+  The startup exception is not an HTTP fail-open bypass; the API is not ready
+  until Redis and its initialization have succeeded. The prior deployment
+  remained live during the failed update. Review a compatible v5+ store
+  upgrade separately before revisiting bounded bootstrap.
 - Safe Prometheus metrics:
   `triad_backend_rate_limit_decisions_total{bucket,outcome}`
   and `triad_backend_rate_limit_store_failures_total{operation,reason}`.

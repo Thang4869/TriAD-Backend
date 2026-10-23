@@ -1,6 +1,59 @@
 # Rate limiting — B7 staging verification
 
-**Status:** Procedure only. No staging run or successful outcome is claimed.
+**Status:** Source-level and real-Redis CI regression tests added in candidate PR (2026-10-23); deployed proxy/IP and Redis-outage evidence still pending. Do not close #140 on CI alone.
+
+## Current code/CI protection and remaining staging gate
+
+Code-level protection is implemented in
+`src/shared/middlewares/rate-limit.middleware.ts`:
+
+- `/api` global IP budget: `ratelimit:global:`; additional IP-wide
+  authentication, 2FA and refresh budgets prevent rotating account identifiers
+  to bypass throttling. Login and 2FA also use per-IP plus HMAC-derived
+  email/pre-auth buckets. HMAC keys never expose raw credentials or email.
+- The client address comes from Express `req.ip`, not directly from
+  `X-Forwarded-For`. `TRUST_PROXY=0` ignores client-supplied proxy headers.
+  Only set trusted hops/IP networks after verifying ingress and direct-access
+  protections; an unverified `TRUST_PROXY=1` is not safe on a publicly
+  reachable direct backend.
+- Redis rate-limit commands fail closed: HTTP **503** during outage/timeout
+  and HTTP **429** for exceeded budgets. The initial Lua `SCRIPT LOAD`
+  is now bounded by the same 1000ms timeout even if ioredis is still
+  connecting; a subsequent healthy Redis call can retry.
+- Safe Prometheus metrics:
+  `triad_backend_rate_limit_decisions_total{bucket,outcome}`
+  and `triad_backend_rate_limit_store_failures_total{operation,reason}`.
+  Labels are a finite, code-defined set; never emit raw IP, email, token,
+  Redis key, forwarded chain or a user-selected prefix. The metrics route
+  remains protected/disabled for the public production API.
+- `/health/live` and `/health/ready` are mounted outside the
+  `/api` limiter. Readiness may still reflect Redis/cache health.
+
+Focused regression commands (require disposable local Redis for integration):
+
+```powershell
+Set-Location E:\DNEK
+npm run typecheck
+npm run lint
+npx vitest run tests/unit/config/trust-proxy.test.ts tests/unit/shared/middlewares/rate-limit.middleware.test.ts tests/unit/shared/middlewares/rate-limit.http.test.ts
+npx vitest run tests/integration/rate-limit.redis.test.ts tests/integration/rate-limit.proxy.test.ts
+```
+
+The new **real Redis + supertest** integration suite covers direct spoofed
+forwarded headers with `TRUST_PROXY=0`, IP allowlist mismatches, nearest
+untrusted hops / distinct client budgets under a deliberately trusted test
+proxy, 429 response headers, and liveness outside the API limiter.
+This is deliberately *not* a deployment proxy drill.
+
+**Still required to close #140:** independently establish actual Render
+ingress hop/IP behavior and whether `/api` is directly reachable in addition
+to the Vercel rewrite; verify it without leaking test client identities.
+Rehearse Redis outage/reconnect on an **isolated, disposable** stack, not by
+shutting down the shared Render staging Key Value service. Record 429/503
+observations, health/readiness, recovery timestamps, sanitized metrics and
+shared-NAT fairness. Keep `TRUST_PROXY=0` until a reviewed, verified trust
+boundary is available. An isolated CI Redis disconnect test is not evidence
+for Render ingress behavior.
 
 ## Preconditions
 - Dedicated staging stack with a known reverse-proxy topology, isolated Redis, no production accounts or data.

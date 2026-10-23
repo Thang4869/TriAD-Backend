@@ -133,3 +133,18 @@ export const authTokenStoreFailuresTotal = new client.Counter({
   labelNames: ["operation"],
   registers: [metricsRegistry],
 });
+
+export const rateLimitDecisionsTotal = new client.Counter({
+  name: "triad_backend_rate_limit_decisions_total",
+  help: "HTTP requests rejected by a Redis-backed rate-limit bucket",
+  // Bucket is one of a fixed set of service-defined names, never a Redis key.
+  labelNames: ["bucket", "outcome"],
+  registers: [metricsRegistry],
+});
+
+export const rateLimitStoreFailuresTotal = new client.Counter({
+  name: "triad_backend_rate_limit_store_failures_total",
+  help: "Rate-limit Redis store failures, including bootstrap and command timeouts",
+  labelNames: ["operation", "reason"],
+  registers: [metricsRegistry],
+});

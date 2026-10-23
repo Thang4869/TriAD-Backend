@@ -5,37 +5,53 @@ import { Request } from "express";
 import redis from "@core/redis/client";
 import config from "@config";
 import { DependencyUnavailableError } from "@shared/errors/application-error";
+import {
+  rateLimitDecisionsTotal,
+  rateLimitStoreFailuresTotal,
+} from "@core/metrics/metrics.registry";
 
 // The main Redis client supports long-lived queue consumers. HTTP rate-limit
 // lookups must instead fail promptly and closed when Redis is unavailable.
 const RATE_LIMIT_STORE_TIMEOUT_MS = 1000;
 
-function sendRateLimitCommand(...args: string[]): Promise<RedisReply> {
-  // rate-limit-redis loads its Lua script lazily on the first request.
-  // Let that bootstrap command wait for Redis readiness, but normalize
-  // connection failures so the HTTP error handler returns 503.
-  if (args[0] === "SCRIPT" && args[1] === "LOAD") {
-    return new Promise<RedisReply>((resolve, reject) => {
-      try {
-        Promise.resolve(redis.call(args[0], ...args.slice(1))).then(
-          (reply) => resolve(reply as RedisReply),
-          () => reject(new DependencyUnavailableError("Rate limit store unavailable")),
-        );
-      } catch {
-        reject(new DependencyUnavailableError("Rate limit store unavailable"));
-      }
-    });
-  }
+// Metrics use finite, code-defined labels; never expose IP/email/token/Redis keys.
+function bucketLabel(prefix: string): string {
+  const names: Readonly<Record<string, string>> = {
+    "ratelimit:global:": "global",
+    "ratelimit:strict:": "strict",
+    "ratelimit:auth-ip:": "auth_ip",
+    "ratelimit:auth:": "auth_identity",
+    "ratelimit:totp-ip:": "totp_ip",
+    "ratelimit:totp:": "totp_identity",
+    "ratelimit:refresh-ip:": "refresh_ip",
+  };
+  return names[prefix] ?? "custom";
+}
 
-  if (redis.status !== "ready") {
-    return Promise.reject(new DependencyUnavailableError("Rate limit store unavailable"));
+function storeFailure(
+  operation: "bootstrap" | "request",
+  reason: "not_ready" | "timeout" | "error",
+): DependencyUnavailableError {
+  rateLimitStoreFailuresTotal.inc({ operation, reason });
+  return new DependencyUnavailableError(
+    reason === "timeout" ? "Rate limit store timed out" : "Rate limit store unavailable",
+  );
+}
+
+function sendRateLimitCommand(...args: string[]): Promise<RedisReply> {
+  // rate-limit-redis initiates SCRIPT LOAD during store construction, often
+  // while ioredis is still connecting. Allow that one command to queue, but
+  // NEVER let a stalled Redis or offline queue hang HTTP/bootstrap forever.
+  const isScriptLoad = args[0] === "SCRIPT" && args[1] === "LOAD";
+  const operation = isScriptLoad ? "bootstrap" : "request";
+  if (!isScriptLoad && redis.status !== "ready") {
+    return Promise.reject(storeFailure(operation, "not_ready"));
   }
 
   return new Promise<RedisReply>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new DependencyUnavailableError("Rate limit store timed out")),
-      RATE_LIMIT_STORE_TIMEOUT_MS,
-    );
+    const timeout = setTimeout(() => {
+      reject(storeFailure(operation, "timeout"));
+    }, RATE_LIMIT_STORE_TIMEOUT_MS);
 
     try {
       Promise.resolve(redis.call(args[0], ...args.slice(1))).then(
@@ -45,12 +61,13 @@ function sendRateLimitCommand(...args: string[]): Promise<RedisReply> {
         },
         () => {
           clearTimeout(timeout);
-          reject(new DependencyUnavailableError("Rate limit store unavailable"));
+          // Do not propagate Redis connection details or raw key material.
+          reject(storeFailure(operation, "error"));
         },
       );
     } catch {
       clearTimeout(timeout);
-      reject(new DependencyUnavailableError("Rate limit store unavailable"));
+      reject(storeFailure(operation, "error"));
     }
   });
 }
@@ -84,6 +101,13 @@ export const rateLimiter = (options?: {
     legacyHeaders: false,
     // Redis outage must not silently disable abuse protection.
     passOnStoreError: false,
+    handler: (_req, res, _next, options) => {
+      rateLimitDecisionsTotal.inc({
+        bucket: bucketLabel(prefix),
+        outcome: "deny",
+      });
+      res.status(options.statusCode).json(options.message);
+    },
     message: {
       success: false,
       error: "Too many requests, please try again later.",

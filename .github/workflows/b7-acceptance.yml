@@ -8,6 +8,7 @@ on:
       - "scripts/acceptance/b7-isolated-proxy-redis.cjs"
       - "src/shared/middlewares/rate-limit.middleware.ts"
       - "src/config/trust-proxy.ts"
+      - "src/shared/middlewares/trusted-edge.middleware.ts"
       - "docs/RATE_LIMIT_STAGING_DRILL.md"
   workflow_dispatch:
 
@@ -98,6 +99,10 @@ jobs:
               -H "User-Agent: TriAD-B7-Canary/$RUN_ID/$path" \
               -H "X-Forwarded-For: 203.0.113.89, 198.51.100.89" \
               --output "/tmp/b7-$path.json" --write-out "%{http_code}" "$url")
+            if [[ "$path" == "direct" && "$code" == "403" ]]; then
+              echo "PASS direct: HTTPS 403, authenticated API edge is enforced" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
             if [[ "$code" != "200" ]]; then
               echo "B7 $path unexpected HTTPS status: $code"
               exit 1

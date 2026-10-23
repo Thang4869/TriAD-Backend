@@ -12,6 +12,13 @@
 
 ## P0 — Ưu tiên làm trước
 
+**Candidate 24/10/2026 (chưa nghiệm thu hosting):** thêm authenticated Vercel
+proxy + backend API gate cho #140; bài HTTP/SIGKILL trước/sau commit và Redis
+HTTP deadline cho #84; migration dependency và workflow chạy production Compose
+thực cho #102. Chờ CI và rollout/acceptance; không đóng issue theo code đơn thuần.
+Runbook: [proxy](RATE_LIMIT_STAGING_DRILL.md), [crash/retry](IDEMPOTENCY_RECOVERY.md),
+[Compose](PRODUCTION_COMPOSE_ACCEPTANCE.md).
+
 - [~] **[#143 — Backup, restore và recovery](https://github.com/Thang4869/TriAD-Backend/issues/143):** Local recovery PASS (`3f4ad02`, 2026-10-19; 9.866s từ backup có sẵn đến HTTP/API ready, không phải production RTO). Issue GitHub hiện đã đóng, nhưng gate deployment này vẫn thiếu bằng chứng. **Còn làm:** xác nhận lịch backup, retention, encryption/off-site/key recovery; phê duyệt và đo RPO thực tế; nghiệm thu BullMQ/Outbox Relay, authenticated API, cutover/rollback và staging deployment. [Evidence/runbook](RECOVERY_DRILL.md).
 - [~] **[#140 — Redis + reverse proxy](https://github.com/Thang4869/TriAD-Backend/issues/140):** Giữ Lua `SCRIPT LOAD` chờ Redis sẵn sàng lúc cold start (tránh unhandled rejection của rate-limit-redis v4), giới hạn timeout cho lệnh Redis HTTP, Prometheus metrics label cố định (429/store failure), kiểm thử Redis thật + X-Forwarded-For/trusted hops/NAT budget/health; giữ fail-closed 503. **Còn nghiệm thu:** proxy IP/hop trực tiếp tại Render↔Vercel, Redis ngắt/kết nối lại trên stack cô lập, 429/503 và shared NAT với logs/metrics ẩn định danh. **Không đổi TRUST_PROXY staging trước khi xác minh topology.** [Runbook](RATE_LIMIT_STAGING_DRILL.md).
 - [~] **[#84 — Checkout crash/retry](https://github.com/Thang4869/TriAD-Backend/issues/84):** Test mất response, kill process và retry cùng idempotency key; so sánh order/stock/Redis lease-owner fencing; khẳng định không nhân đôi order/trừ stock, lưu kịch bản/lệnh/log thực thi. [Runbook](IDEMPOTENCY_RECOVERY.md).

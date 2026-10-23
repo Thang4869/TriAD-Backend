@@ -52,7 +52,7 @@ The new **real Redis + supertest** integration suite covers direct spoofed
 forwarded headers with `TRUST_PROXY=0`, IP allowlist mismatches, nearest
 untrusted hops / distinct client budgets under a deliberately trusted test
 proxy, 429 response headers, and liveness outside the API limiter.
-This is deliberately *not* a deployment proxy drill.
+This is deliberately _not_ a deployment proxy drill.
 
 **Still required to close #140:** independently establish actual Render
 ingress hop/IP behavior and whether `/api` is directly reachable in addition
@@ -77,6 +77,7 @@ without the explicit opt-in, `NODE_ENV=test`, loopback-only Redis URL and
 the unique disposable container name. On failure or success the workflow
 unpauses and destroys the disposable container. The backend process is not
 restarted during the outage tests. Assertions cover:
+
 - Direct API requests with three spoofed `X-Forwarded-For` values hitting a
   shared limit and receiving HTTP 429 under `TRUST_PROXY=0`.
 - An actual HTTP reverse-proxy TCP hop on loopback with header sanitization;
@@ -122,11 +123,46 @@ the simulated NAT test an actual multi-public-IP production proof.
 - A safe remediation requires an authenticated/trusted edge path or network restrictions that prevent untrusted direct traffic from supplying forged forwarded addresses. Until available, maintain global anti-abuse limits and separate auth/account protections; document the residual shared-IP lockout/bypass trade-off.
 
 ## Preconditions
+
+### Authenticated edge rollout (candidate, 2026-10-24)
+
+`createTrustedEdgeMiddleware` now supports an optional server-only
+`API_EDGE_SECRET` (32–256 characters). When configured, **every `/api` method**,
+including OPTIONS, requires the server-side edge credential and a single valid
+`X-Triad-Client-Ip`. The credential is compared in constant time and removed
+before logging/routes. Health routes remain public. With no secret, local and
+existing deployments retain their previous behavior and ignore edge IP headers.
+`TRUST_PROXY` must remain `0`; do not enable hop-count trust.
+
+The paired frontend replaces the external rewrite with a Node.js Vercel
+Function. It accepts only Vercel's overwritten `x-vercel-forwarded-for`, replaces
+incoming edge headers, forwards to the fixed Render origin, and never follows
+upstream redirects with credentials. Cookies, CSRF, idempotency headers, methods,
+query and body are preserved. The server secret is never named `VITE_*`.
+Vercel's function request-size limit applies (4.5 MB including multipart overhead),
+even though the direct backend upload cap is 5 MiB. Larger uploads need a separate
+reviewed direct-upload design; they must not bypass the API edge.
+
+Rollout order: set the same random secret on the two **staging** hosting services;
+deploy the backend code **without** enabling its gate, deploy/verify the frontend
+proxy with its secret, then enable the backend secret and redeploy it. During
+rotation, coordinate both services; a key mismatch fails closed. Roll back by
+disabling the backend gate before reverting the frontend proxy. Never publish
+the secret, request headers, cookies or real client addresses as evidence.
+
+Required deployed acceptance: direct Render `/api/products` with missing/forged
+edge headers returns 403; Vercel catalog and cookie/CSRF journeys still pass;
+spoofed XFF cannot choose buckets; distinct real clients get distinct budgets,
+while shared NAT remains intentionally shared. Unit and real-Redis synthetic
+client tests are separate from this live proof. **#140 remains open until rollout
+and deployed acceptance.** No hosting configuration has been changed by this code.
+
 - Dedicated staging stack with a known reverse-proxy topology, isolated Redis, no production accounts or data.
 - Record the deployment SHA, proxy addresses, `TRUST_PROXY`, rate-limit settings, Redis version, test client IPs and timestamps.
 - Use two test identities behind a shared NAT and one independent source IP. Redact credentials and tokens from captured logs.
 
 ## Test cases and evidence
+
 1. **429 budget:** Send more than the configured per-IP global requests within the window. Record status, RateLimit headers, rate-limit key category (not the raw identity), window and response body.
 2. **Auth buckets:** Rotate test email identities from the same source IP. Confirm the shared IP budget cannot be bypassed and the per-identity budget is independent. Check two users behind shared NAT for accidental lockout; document any unavoidable trade-off.
 3. **Header spoofing:** Send conflicting `X-Forwarded-For` values via the actual reverse proxy and directly to any accidentally exposed API endpoint. The derived client IP must follow only the configured trusted hops. Direct client headers must not allow rate-limit bypass.
@@ -136,11 +172,12 @@ the simulated NAT test an actual multi-public-IP production proof.
 
 ## Evidence record template
 
-| Date (UTC) | Deployment SHA | Proxy / `TRUST_PROXY` | Redis version | Case | Expected / observed status | Recovery time | Sanitized artifact link |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Pending staging execution | — | — | — | — | — | — | No deployed result claimed |
+| Date (UTC)                | Deployment SHA | Proxy / `TRUST_PROXY` | Redis version | Case | Expected / observed status | Recovery time | Sanitized artifact link    |
+| ------------------------- | -------------- | --------------------- | ------------- | ---- | -------------------------- | ------------- | -------------------------- |
+| Pending staging execution | —              | —                     | —             | —    | —                          | —             | No deployed result claimed |
 
 Keep identities, credentials, tokens and raw HMAC-derived keys out of artifacts. Record timestamps and whether readiness, 429 budgets, Redis outage, and recovery behaved as expected.
 
 ## Release gate
+
 Attach a completed evidence table with request/response samples, sanitized logs, architecture/proxy diagram, observed 429/503 and downtime. Close B7/#140 only after passing the actual deployment drill; unit tests or mocked Redis stores alone are insufficient.

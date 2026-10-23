@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { RedisReply, RedisStore } from "rate-limit-redis";
-import { Request } from "express";
+import { Request, Response, NextFunction } from "express";
 import redis from "@core/redis/client";
 import config from "@config";
 import { DependencyUnavailableError } from "@shared/errors/application-error";
@@ -13,6 +13,8 @@ import {
 // The main Redis client supports long-lived queue consumers. HTTP rate-limit
 // lookups must instead fail promptly and closed when Redis is unavailable.
 const RATE_LIMIT_STORE_TIMEOUT_MS = 1000;
+// Covers a RedisStore request blocked on an unresolved lazy Lua SHA promise.
+const RATE_LIMIT_HTTP_DEADLINE_MS = 1500;
 
 // Metrics use finite, code-defined labels; never expose IP/email/token/Redis keys.
 function bucketLabel(prefix: string): string {
@@ -102,7 +104,7 @@ export const rateLimiter = (options?: {
     prefix = "ratelimit:global:",
   } = options || {};
 
-  return rateLimit({
+  const limiter = rateLimit({
     store: new RedisStore({
       prefix,
       sendCommand: sendRateLimitCommand,
@@ -119,6 +121,7 @@ export const rateLimiter = (options?: {
     // Redis outage must not silently disable abuse protection.
     passOnStoreError: false,
     handler: (_req, res, _next, options) => {
+      if (res.headersSent || res.writableEnded) return;
       rateLimitDecisionsTotal.inc({
         bucket: bucketLabel(prefix),
         outcome: "deny",
@@ -130,6 +133,36 @@ export const rateLimiter = (options?: {
       error: "Too many requests, please try again later.",
     },
   });
+
+  return (req: Request, res: Response, next: NextFunction): void => {
+    // rate-limit-redis v4 may await a pending SCRIPT LOAD before invoking
+    // sendCommand for a request. A timeout on sendCommand alone cannot
+    // bound that wait. Fail closed at the HTTP boundary instead, without
+    // rejecting eager bootstrap promises during cold startup.
+    let settled = false;
+    const cleanup = () => {
+      settled = true;
+      clearTimeout(deadline);
+      res.off("finish", cleanup);
+      res.off("close", cleanup);
+    };
+    const finish = (error?: unknown) => {
+      if (settled) return;
+      cleanup();
+      next(error);
+    };
+    const deadline = setTimeout(
+      () => finish(storeFailure("request", "timeout")),
+      RATE_LIMIT_HTTP_DEADLINE_MS,
+    );
+    res.once("finish", cleanup);
+    res.once("close", cleanup);
+    try {
+      Promise.resolve(limiter(req, res, finish)).catch(finish);
+    } catch (error) {
+      finish(error);
+    }
+  };
 };
 
 export const strictRateLimiter = rateLimiter({

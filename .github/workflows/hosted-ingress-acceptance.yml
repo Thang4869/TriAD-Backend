@@ -1,0 +1,36 @@
+name: Hosted authenticated ingress acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/hosted-ingress-acceptance.yml"
+      - "scripts/acceptance/hosted-ingress-429.cjs"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+jobs:
+  hosted-429:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HOSTED_INGRESS_ACCEPTANCE: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify bounded hosted 429 and spoof-resistant client budget
+        run: node scripts/acceptance/hosted-ingress-429.cjs
+      - name: Upload address-free acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosted-ingress-429-evidence
+          path: hosted-ingress-429-evidence.json
+          retention-days: 14
+          if-no-files-found: ignore

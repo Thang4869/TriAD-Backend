@@ -3,14 +3,15 @@ import { once } from "node:events";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import prisma from "@core/database/prisma";
-import redis from "@core/redis/client";
+import { PrismaClient } from "@prisma/client";
+import Redis from "ioredis";
 
 function message(
   child: ChildProcess,
   event: string,
 ): Promise<{ port: number }> {
   return new Promise((accept, reject) => {
+    let stage = "spawn";
     const cleanup = () => {
       clearTimeout(timer);
       child.off("message", receive);
@@ -18,7 +19,24 @@ function message(
       child.off("error", failed);
     };
     const receive = (value: unknown) => {
-      const result = value as { event?: string; port: number };
+      const result = value as {
+        event?: string;
+        port: number;
+        stage?: string;
+        error?: string;
+      };
+      if (result.event === "stage") stage = result.stage ?? stage;
+      if (result.event === "fixture-error") {
+        cleanup();
+        reject(
+          new Error(
+            "Checkout fixture failed while waiting for " +
+              event +
+              ": " +
+              result.error,
+          ),
+        );
+      }
       if (result.event === event) {
         cleanup();
         accept(result);
@@ -34,7 +52,15 @@ function message(
     };
     const timer = setTimeout(() => {
       cleanup();
-      reject(new Error("Checkout fixture marker timed out"));
+      reject(
+        new Error(
+          "Checkout fixture marker timed out: " +
+            event +
+            " (stage " +
+            stage +
+            ")",
+        ),
+      );
     }, 20_000);
     child.on("message", receive);
     child.once("exit", exited);
@@ -54,6 +80,12 @@ describe("checkout HTTP recovery after real process termination", () => {
   it.each(["before-commit", "after-commit"])(
     "recovers after SIGKILL %s without duplicate stock/order/outbox effects",
     async (mode) => {
+      // setupFiles sets worker-scoped URLs in beforeAll. Construct these clients
+      // afterwards: a top-level singleton may have captured a different URL.
+      const prisma = new PrismaClient({
+        datasources: { db: { url: process.env.DATABASE_URL } },
+      });
+      const redis = new Redis(process.env.REDIS_URL!);
       const user = await prisma.user.create({
         data: {
           email: randomUUID() + "@example.invalid",
@@ -178,6 +210,8 @@ describe("checkout HTTP recovery after real process termination", () => {
       } finally {
         for (const child of children) await kill(child);
         await redis.del(cacheKey);
+        await redis.quit();
+        await prisma.$disconnect();
       }
     },
     60_000,

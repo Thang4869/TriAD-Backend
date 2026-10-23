@@ -45,8 +45,11 @@ const service = new CheckoutService(
 );
 
 async function start() {
+  process.send?.({ event: "stage", stage: "database-connect" });
   await prisma.$connect();
+  process.send?.({ event: "stage", stage: "redis-connect" });
   await redis.ping();
+  process.send?.({ event: "stage", stage: "http-listen" });
   const app = express();
   app.use(express.json());
   const router = express.Router();
@@ -59,7 +62,19 @@ async function start() {
       const result = await service.checkout(userId, req.body);
       if (mode === "after-commit") await hold();
       res.status(201).json(result);
-    })().catch(next);
+    })().catch((error: unknown) => {
+      process.send?.({
+        event: "fixture-error",
+        error:
+          error instanceof Error
+            ? error.message.replace(
+                /(?:postgresql|rediss?):\/\/\S+/g,
+                "<redacted>",
+              )
+            : "Unknown checkout error",
+      });
+      next(error);
+    });
   });
   app.use("/api/checkout", router);
   app.use(createErrorHandler({ classify: () => null }));
@@ -69,7 +84,14 @@ async function start() {
       process.send?.({ event: "ready", port: address.port });
   });
 }
-void start().catch(() => {
+void start().catch((error: unknown) => {
+  process.send?.({
+    event: "fixture-error",
+    error:
+      error instanceof Error
+        ? error.message.replace(/(?:postgresql|rediss?):\/\/\S+/g, "<redacted>")
+        : "Unknown startup error",
+  });
   process.exitCode = 1;
   process.disconnect?.();
 });

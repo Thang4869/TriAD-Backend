@@ -14,6 +14,10 @@ import { RedisStore } from "rate-limit-redis";
 import redis from "@core/redis/client";
 import config from "@config";
 import { DependencyUnavailableError } from "@shared/errors/application-error";
+import {
+  rateLimitDecisionsTotal,
+  rateLimitStoreFailuresTotal,
+} from "@core/metrics/metrics.registry";
 
 vi.mock("express-rate-limit", () => ({
   default: vi.fn().mockImplementation((_options) => {
@@ -110,6 +114,59 @@ describe("rate-limit middleware", () => {
     const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
     // The health routes are mounted outside /api; no path-based exemption is needed.
     expect(options?.skip).toBeUndefined();
+  });
+
+  it("reports 429 decisions with a fixed bucket label, not client identifiers", () => {
+    rateLimiter({ prefix: "ratelimit:auth:" });
+    const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
+    const handler = options?.handler as (
+      req: Request,
+      res: Response,
+      next: NextFunction,
+      options: { statusCode: number; message: unknown },
+    ) => void;
+    const status = vi.fn();
+    const json = vi.fn();
+    const res = { status: vi.fn().mockReturnValue({ json }), json } as unknown as Response;
+    const metric = vi.spyOn(rateLimitDecisionsTotal, "inc");
+
+    try {
+      handler(
+        { ip: "192.0.2.7", body: { email: "private@example.invalid" } } as Request,
+        res,
+        vi.fn(),
+        { statusCode: 429, message: { success: false, error: "Too many requests" } },
+      );
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(json).toHaveBeenCalledWith({ success: false, error: "Too many requests" });
+      expect(metric).toHaveBeenCalledWith({ bucket: "auth_identity", outcome: "deny" });
+      expect(JSON.stringify(metric.mock.calls)).not.toContain("192.0.2.7");
+      expect(JSON.stringify(metric.mock.calls)).not.toContain("private@example.invalid");
+      expect(status).not.toHaveBeenCalled();
+    } finally {
+      metric.mockRestore();
+    }
+  });
+
+  it("caps unknown custom Redis prefixes to a single metric bucket", () => {
+    rateLimiter({ prefix: "random-tenant-specific-prefix" });
+    const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
+    expect(options?.handler).toBeDefined();
+    const handler = options?.handler as (
+      req: Request,
+      res: Response,
+      next: NextFunction,
+      options: { statusCode: number; message: unknown },
+    ) => void;
+    const json = vi.fn();
+    const res = { status: vi.fn().mockReturnValue({ json }) } as unknown as Response;
+    const metric = vi.spyOn(rateLimitDecisionsTotal, "inc");
+    try {
+      handler({} as Request, res, vi.fn(), { statusCode: 429, message: {} });
+      expect(metric).toHaveBeenCalledWith({ bucket: "custom", outcome: "deny" });
+    } finally {
+      metric.mockRestore();
+    }
   });
 
   it("should create strictRateLimiter with 50 max and 15min window", () => {
@@ -328,6 +385,27 @@ describe("rate-limit Redis fail-closed policy", () => {
       expect(redis.call).toHaveBeenCalledWith("SCRIPT", "LOAD", "return 1");
     } finally {
       redisClient.status = old;
+    }
+  });
+
+  it("counts an unavailable store without recording keys or connection secrets", async () => {
+    const sendCommand = commandBridge();
+    const client = redis as typeof redis & { status: string };
+    const previous = client.status;
+    const counter = vi.spyOn(rateLimitStoreFailuresTotal, "inc");
+    client.status = "reconnecting";
+    try {
+      await expect(sendCommand("INCR", "private-user-key")).rejects.toBeInstanceOf(
+        DependencyUnavailableError,
+      );
+      expect(counter).toHaveBeenCalledWith({
+        operation: "request",
+        reason: "not_ready",
+      });
+      expect(JSON.stringify(counter.mock.calls)).not.toContain("private-user-key");
+    } finally {
+      client.status = previous;
+      counter.mockRestore();
     }
   });
 

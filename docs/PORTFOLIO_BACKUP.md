@@ -31,9 +31,10 @@ Linux containers. No npm installation is needed for these backup scripts.
 
 ## Enable on your Windows PC
 
-**Pending owner execution.** Requires Node.js 22+, Docker Desktop running, a local
-checkout containing the scripts, free local disk space and internet access.
-Preserve any uncommitted work when syncing the checkout.
+**Owner setup and initial end-to-end Windows acceptance completed on 2026-10-24.**
+Requires Node.js 22+, Docker Desktop running, a local checkout containing the
+scripts, free disk space and internet access. Preserve uncommitted work when
+syncing. This is a best-effort PC schedule, not managed cloud backup.
 
 1. Render → `triad-postgres-staging` → Networking: add **only your current public
    IPv4 `/32`**, preserving existing rules. Do not open `0.0.0.0/0`. Update the
@@ -83,6 +84,38 @@ Preserve any uncommitted work when syncing the checkout.
    Keep this checkout at its current path. Check `LastTaskResult = 0` and the
    latest receipt: registration alone is not proof a backup ran.
 
+## Windows acceptance evidence — 2026-10-24
+
+Owner-provided PowerShell outputs for the **real Render Free staging PostgreSQL 18**
+and their **own Windows PC** (not CI, no hosted restore):
+
+- The owner added their public IPv4 `/32` to Render's allowlist and saved the
+  External Database URL via DPAPI-protected Setup. TCP port 5432 was reachable.
+- `prisma migrate status` reported **16 migrations, schema up to date**.
+  The actual physical tables include `users`, `orders` and `outbox_events`
+  (Prisma `@@map`), rather than the model names `User`, `Order`,
+  `OutboxEvent`. The original backup restore check used the incorrect model
+  names; it was corrected and the synthetic CI fixture aligned.
+- Manual **Backup PASS**: encrypted archive
+  `triad-portfolio-20261024T092754679Z-8e96c460.dump.enc`, restored and
+  schema-verified in a disposable PostgreSQL 18 container.
+- `InstallTask` registered **TriAD Portfolio Backup** daily at **20:30 local**.
+  A manual **Start-ScheduledTask** trigger ran at 16:29:29 local;
+  `LastTaskResult = 0` and the fresh archive
+  `triad-portfolio-20261024T092936861Z-e27a3f3d.dump.enc`
+  (50,898 bytes, 16:29:36 local) has a receipt containing
+  `result: PASS`, `verifiedAt: 2026-10-24T09:29:40.465Z` and
+  `disposableRestore: true`.
+- These observations prove a successful **user-triggered Task Scheduler run**,
+  not yet an unattended 20:30 trigger across multiple days. Retention/off-device
+  archive copies and an independent offline recovery-key copy remain to be
+  confirmed by the owner.
+- PostgreSQL Free expiration is still **2026-11-20**; a replacement/export
+  plan is not yet confirmed. No hosted recovery cutover or guaranteed RTO/RPO.
+
+Evidence is limited to owner-shared command output. Neither encrypted archives
+nor passwords, DPAPI settings, or recovery keys are committed or uploaded.
+
 ## Rehearse recovery safely
 
 Select an actual archive, replacing the example filename:
@@ -120,9 +153,11 @@ To remove only the schedule and keep archives/keys:
 | Scope             | PostgreSQL only; Cloudinary files, provider configuration, secrets and OAuth settings need their own recoverable setup.                                                             |
 
 CI tests a synthetic PostgreSQL source and the Windows parser/DPAPI without live
-credentials. No archive/key/plaintext is uploaded. Passing CI does not activate
-or prove a real backup or Windows task. Issue #143 remains open for that evidence
-under the accepted free-demo scope; paid production targets are not imposed.
+credentials. No archive/key/plaintext is uploaded. The initial **real** backup
+and user-triggered scheduled run were separately accepted on the owner's PC
+(see dated evidence above). Issue #143 remains open for offline key custody and
+the Free PostgreSQL replacement/export plan. Unattended daily reliability and
+hosted recovery are not guaranteed; paid production targets are not imposed.
 
 References: [Render external access](https://render.com/docs/postgresql-creating-connecting#restricting-external-access),
 [Free hosting limits](https://render.com/docs/free).

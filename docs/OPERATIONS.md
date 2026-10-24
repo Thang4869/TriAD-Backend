@@ -12,6 +12,22 @@ Latest verified code: backend [#225](https://github.com/Thang4869/TriAD-Backend/
 
 Environment changes use hosting-managed secret configuration; secret values are never committed. Vercel's production target here serves the **staging project**, not a production customer environment. The deployment remains on Free infrastructure. These results do not establish hosted checkout process-crash recovery, worker durability, real RPO/RTO, email/image delivery, or completion of #143. Historical sections below preserve their original environment/date and do not override this current evidence.
 
+## Recovery gate #143 — work started 2026-10-24
+
+Issue #143 is reopened: the local 9.866-second recovery-only benchmark never
+established hosted backups, measured production RPO or full worker durability.
+The candidate full-runtime recovery workflow exercises PostgreSQL 18 snapshot
+restore, authenticated archive/key roundtrip, committed-write markers, AOF
+SIGKILL recovery, actual Outbox Relay/BullMQ/SMTP-sink processing, authenticated
+API and reversible isolated rollback. See [recovery runbook](RECOVERY_DRILL.md).
+
+Live read-only inspection: the staging PostgreSQL is Free/PG18 and expires on
+2026-11-20; the staging Free Key Value has `persistenceMode=off`, despite
+`noeviction`. No managed Postgres backup or durable queue guarantee is available
+from this current Free configuration. No hosting upgrade, staging restore,
+backup schedule or external storage/key system has been provisioned. Those need
+owner decisions; a successful disposable CI result cannot close this gate.
+
 ## First response
 
 1. Check `/health/ready` and `/metrics`.

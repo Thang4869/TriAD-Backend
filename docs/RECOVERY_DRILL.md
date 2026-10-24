@@ -1,6 +1,8 @@
 # I9 — PostgreSQL backup, restore and read-model rebuild
 
-**Status (2026-10-18):** The isolated PostgreSQL drill is merged and passed on `main` in [CI run #39116584480](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480) ([restore-drill job](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480/job/117643501456)). This proves the CI fixture only; deployed recovery evidence for issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143), including RTO/RPO, remains **OPEN**.
+**Status (2026-10-24):** #143 has been reopened because hosted recovery acceptance is incomplete. The existing snapshot evidence remains valid within its original scope.
+
+**Historical baseline (2026-10-18):** The isolated PostgreSQL drill is merged and passed on `main` in [CI run #39116584480](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480) ([restore-drill job](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480/job/117643501456)). This proves the CI fixture only; deployed recovery evidence for issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143), including RTO/RPO, remains **OPEN**.
 
 ## Disposable CI drill
 
@@ -33,12 +35,12 @@ The recorded seconds describe a small **CI fixture**, not production RTO, RPO, f
 
 ### Continuous local recovery timing
 
-| Phase | Duration |
-| --- | ---: |
-| Create database and restore backup | 1.166 seconds |
-| Rebuild order and product projections | 0.933 seconds |
-| API startup and HTTP verification | 7.767 seconds |
-| **Total local recovery** | **9.866 seconds** |
+| Phase                                 |          Duration |
+| ------------------------------------- | ----------------: |
+| Create database and restore backup    |     1.166 seconds |
+| Rebuild order and product projections |     0.933 seconds |
+| API startup and HTTP verification     |     7.767 seconds |
+| **Total local recovery**              | **9.866 seconds** |
 
 The timer started before database creation and stopped after
 successful HTTP health and product verification.
@@ -67,12 +69,73 @@ are satisfied. The snapshot boundary test does not establish actual RPO.
 
 ## Production-like acceptance (still OPEN)
 
-In a *separate* staging environment, document backup schedule, retention, encryption/key recovery, restore operator and off-host storage. Restore to a new environment, apply/reconcile migrations, rebuild projections and replay eligible outbox items safely. Verify queue consumer restart, read-only/draining cutover and sample authenticated API requests. Measure recovery **from incident declared to service healthy** (RTO) and actual time gap between last committed write and durable recovered record (RPO) with timestamps, not benchmark inference. Record rollback procedures and explicitly approve RTO/RPO targets before calling I9 CLOSED.
+In a _separate_ staging environment, document backup schedule, retention, encryption/key recovery, restore operator and off-host storage. Restore to a new environment, apply/reconcile migrations, rebuild projections and replay eligible outbox items safely. Verify queue consumer restart, read-only/draining cutover and sample authenticated API requests. Measure recovery **from incident declared to service healthy** (RTO) and actual time gap between last committed write and durable recovered record (RPO) with timestamps, not benchmark inference. Record rollback procedures and explicitly approve RTO/RPO targets before calling I9 CLOSED.
 
 ### Required evidence record
 
-| Drill date (UTC) | Deployment SHA | Backup/snapshot reference (redacted) | RTO | RPO | Projection/outbox checks | Result and artifact link |
-| --- | --- | --- | --- | --- | --- | --- |
-| Pending staging execution | — | — | — | — | — | No deployed result claimed |
+| Drill date (UTC)          | Deployment SHA | Backup/snapshot reference (redacted) | RTO | RPO | Projection/outbox checks | Result and artifact link   |
+| ------------------------- | -------------- | ------------------------------------ | --- | --- | ------------------------ | -------------------------- |
+| Pending staging execution | —              | —                                    | —   | —   | —                        | No deployed result claimed |
 
 Capture timestamps for incident declaration, restore completion, projection readiness and first successful authenticated health/API checks. Calculate RTO from incident declaration to service healthy. Calculate RPO from the last committed write before the incident to the latest durable write present after recovery. Keep credentials, customer data and raw secrets out of the evidence artifact.
+
+## Full production-runtime CI drill — candidate 2026-10-24
+
+The new `.github/workflows/recovery-runtime-acceptance.yml` runs only against
+owned disposable Docker resources. No Render credentials or staging account
+secrets are supplied. `scripts/acceptance/recovery-runtime.sh`:
+
+1. Builds the actual production image; starts PostgreSQL **18** (matching the
+   hosted major version), Redis 7 with AOF `appendfsync=always`/`noeviction`, and
+   an internal SMTP sink that discards message content and never sends email.
+2. Migrates a synthetic source database and creates a verified login fixture,
+   an order/idempotency/stock fixture, an explicitly dead-lettered valid
+   UserRegistered event, projections, and a waiting BullMQ email job.
+3. Records PostgreSQL commit timestamps for marker 1, exports `pg_dump -Fc`,
+   encrypts it using AES-256-GCM, deletes the plaintext/original key and restores
+   using the separately copied ephemeral escrow key. Native tests reject
+   wrong keys, tampering and overwriting output without publishing plaintext.
+4. Commits marker 2 after the backup, declares the simulated incident and
+   restores into a clean target. Only marker 1 must be present. The observed
+   fixture RPO is the actual source commit-timestamp gap between these markers;
+   `track_commit_timestamp` is enabled **only on the disposable database**.
+5. SIGKILLs and restarts the disposable Redis process. The AOF marker and waiting
+   BullMQ job must survive. This is a process crash, not a host/power-loss test.
+6. Rebuilds both projections using compiled production functions, requeues only
+   the selected dead letter through the production maintenance service, then
+   starts **dist/server.js**, including its real Outbox Relay and BullMQ workers.
+7. Logs in through the actual HTTP API and checks authenticated order history
+   plus catalog. The restored event must publish with successful handler logs;
+   two real worker jobs must complete into the internal SMTP sink.
+8. Gracefully drains the target, starts the preserved source on the same local
+   endpoint for an authenticated rollback rehearsal, then returns to the target.
+   Source post-backup marker 2 remains intact; restarting must not repeat email
+   effects or alter order/stock state.
+
+The address/token/key/dump-free `recovery-runtime-evidence` artifact records
+incident-to-authenticated-worker-ready time, marker commit timestamps/loss gap,
+replay/worker/persistence/API/rollback assertions and the tested SHA. The backup,
+image and source services are already available at incident declaration. No
+production objective is approved or inferred from this microfixture. The CI
+artifact retains **evidence only**, not a usable backup or encryption key.
+
+### Confirmed hosting blockers — 2026-10-24
+
+Read-only inspection of My Workspace confirms:
+
+| Resource               | Actual configuration                                | Recovery consequence                                                                                |
+| ---------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| triad-postgres-staging | Free, PostgreSQL 18, expires 2026-11-20             | No Render-managed backup/PITR; logical dump and a separate retention destination are not configured |
+| triad-redis-staging    | Free Valkey 8.1.10, noeviction, persistenceMode=off | Queue/cache state is lost on restart; CI AOF guarantees do not apply to this instance               |
+| triad-api-staging      | Free Docker, HTTP/worker/relay in one process       | Idle spin-down/restarts preclude a continuously running worker guarantee                            |
+
+Current provider references: [Free limitations](https://render.com/docs/free),
+[Postgres recovery](https://render.com/docs/postgresql-backups). Use PostgreSQL
+**18** client tools for a dump of the hosted PostgreSQL 18 database; the old
+PostgreSQL 16 CI drill is not a hosted export procedure.
+
+**Owner decisions still needed:** supported hosting/durability model, backup
+cadence and retention, independent off-host destination, recoverable key custody,
+RTO/RPO targets and permission for a separate hosted restore/cutover exercise.
+No paid resource, schedule, secret, IP allowlist or live datastore has been
+changed by this candidate. Keep #143 open even if the full-runtime CI passes.

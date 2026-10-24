@@ -16,13 +16,13 @@ export const getWishlistQuerySchema = z.object({
   query: z.object({
     page: z
       .string()
-      .optional()
+      .default("1")
       .transform(Number)
-      .pipe(z.number().int().min(1).default(1)),
+      .pipe(z.number().int().min(1)),
     limit: z
       .string()
-      .optional()
+      .default("20")
       .transform(Number)
-      .pipe(z.number().int().min(1).max(50).default(20)),
+      .pipe(z.number().int().min(1).max(50)),
   }),
 });

@@ -149,7 +149,7 @@ const parseResult = configSchema.safeParse(process.env);
 
 if (!parseResult.success) {
   console.error("Invalid environment configuration:");
-  parseResult.error.errors.forEach((err) => {
+  parseResult.error.issues.forEach((err) => {
     console.error(`  - ${err.path.join(".")}: ${err.message}`);
   });
   if (process.env.NODE_ENV !== "test") {

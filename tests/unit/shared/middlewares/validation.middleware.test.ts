@@ -90,7 +90,7 @@ describe("validation middleware", () => {
     expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
     const error = next.mock.calls[0][0] as ValidationError;
     expect(error.message).toContain(
-      "String must contain at least 3 character(s)",
+      "Too small: expected string to have >=3 characters",
     );
   });
 
@@ -100,7 +100,7 @@ describe("validation middleware", () => {
       parse: vi.fn(() => {
         throw unexpectedError;
       }),
-    } as unknown as z.ZodSchema;
+    } as unknown as Parameters<typeof validate>[0];
 
     const req = {
       body: {},

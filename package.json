@@ -59,8 +59,8 @@
     "helmet": "^7.2.0",
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.2",
-    "multer": "2.4.0",
-    "nodemailer": "10.0.16",
+    "multer": "2.5.0",
+    "nodemailer": "10.2.1",
     "opossum": "^10.0.0",
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
@@ -76,11 +76,11 @@
     "swagger-ui-express": "^5.0.1",
     "winston": "^3.11.0",
     "winston-daily-rotate-file": "^4.7.1",
-    "zod": "^3.22.4"
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "^10.13.2",
-    "@testcontainers/redis": "^10.13.2",
+    "@testcontainers/postgresql": "^12.2.1",
+    "@testcontainers/redis": "^12.2.1",
     "@types/async-retry": "^1.4.9",
     "@types/bcrypt": "6.0.0",
     "@types/compression": "^1.8.1",
@@ -103,10 +103,10 @@
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/uuid": "^10.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.19.0",
-    "@typescript-eslint/parser": "^6.19.0",
-    "@vitest/coverage-v8": "^4.1.11",
-    "@vitest/ui": "^4.1.11",
+    "@typescript-eslint/eslint-plugin": "^8.72.0",
+    "@typescript-eslint/parser": "^8.72.0",
+    "@vitest/coverage-v8": "^4.1.12",
+    "@vitest/ui": "^4.1.12",
     "cross-env": "^10.1.0",
     "dependency-cruiser": "^18.5.0",
     "eslint": "^8.56.0",
@@ -116,13 +116,13 @@
     "nodemon": "^3.0.3",
     "prettier": "^3.2.4",
     "supertest": "^7.3.0",
-    "testcontainers": "^10.13.2",
+    "testcontainers": "^12.2.1",
     "ts-node": "^10.9.2",
     "tsc-alias": "^1.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.3.3",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "lint-staged": {
     "*.ts": [

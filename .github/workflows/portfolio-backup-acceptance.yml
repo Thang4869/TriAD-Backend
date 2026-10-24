@@ -95,10 +95,10 @@ jobs:
           docker exec -i triad-portfolio-source psql -U test -d triad_portfolio_fixture -v ON_ERROR_STOP=1 <<'SQL'
           CREATE TABLE "_prisma_migrations" (id text);
           INSERT INTO "_prisma_migrations" VALUES ('synthetic');
-          CREATE TABLE "User" (id text);
-          INSERT INTO "User" VALUES ('synthetic');
-          CREATE TABLE "Order" (id text);
-          CREATE TABLE "OutboxEvent" (id text);
+          CREATE TABLE users (id text);
+          INSERT INTO users VALUES ('synthetic');
+          CREATE TABLE orders (id text);
+          CREATE TABLE outbox_events (id text);
           SQL
           node scripts/backup/portfolio-backup.cjs backup
           export PORTFOLIO_BACKUP_ARCHIVE="$(find "$temporary" -maxdepth 1 -name '*.dump.enc' -print -quit)"
@@ -106,5 +106,5 @@ jobs:
           node scripts/backup/portfolio-backup.cjs verify
           node -e 'const fs=require("node:fs"),p=process.env.PORTFOLIO_BACKUP_ARCHIVE,b=fs.readFileSync(p);b[b.length-1]^=1;fs.writeFileSync(p,b)'
           if node scripts/backup/portfolio-backup.cjs verify; then echo 'Tamper was accepted'; exit 1; fi
-          test "$(docker exec triad-portfolio-source psql -U test -d triad_portfolio_fixture -Atc 'SELECT count(*) FROM "User"')" = '1'
+          test "$(docker exec triad-portfolio-source psql -U test -d triad_portfolio_fixture -Atc 'SELECT count(*) FROM users')" = '1'
           # Deliberately no artifact upload: source, plaintext, key and ciphertext are disposable.

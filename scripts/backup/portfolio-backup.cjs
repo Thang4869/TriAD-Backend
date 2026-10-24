@@ -190,6 +190,8 @@ async function run(mode, env = process.env) {
           "exec",
           target,
           "pg_isready",
+          "-h",
+          "127.0.0.1",
           "-U",
           "test",
           "-d",

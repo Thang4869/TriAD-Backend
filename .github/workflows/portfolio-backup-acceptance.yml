@@ -89,7 +89,7 @@ jobs:
           docker network create triad-portfolio-test
           docker run -d --name triad-portfolio-source --network triad-portfolio-test -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=triad_portfolio_fixture postgres:18-alpine
           for attempt in $(seq 1 30); do
-            if docker exec triad-portfolio-source pg_isready -U test -d triad_portfolio_fixture; then break; fi
+            if docker exec triad-portfolio-source pg_isready -h 127.0.0.1 -U test -d triad_portfolio_fixture; then break; fi
             sleep 1
           done
           docker exec -i triad-portfolio-source psql -U test -d triad_portfolio_fixture -v ON_ERROR_STOP=1 <<'SQL'

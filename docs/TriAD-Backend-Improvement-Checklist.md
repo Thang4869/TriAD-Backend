@@ -18,7 +18,7 @@
 
 ## P1 — Hoàn thiện code, security và contract
 
-- [ ] **[#141 — Dependency/config](https://github.com/Thang4869/TriAD-Backend/issues/141):** Chạy audit trên lockfile hiện tại, phân loại advisories ở cả prod/dev, xác minh test-only secret không lọt runtime, upload regression, staging Cloudinary/OTLP, lưu quyết định chấp nhận rủi ro có hạn; không dùng số liệu audit cũ như kết quả mới.
+- [~] **[#141 — Dependency/config](https://github.com/Thang4869/TriAD-Backend/issues/141):** Đã đối chiếu audit CI **24/10/2026**: production **0 critical / 3 high / 2 moderate**, full **0 / 11 / 11**. Bổ sung fail-closed Redis/Frontend/CORS production, test secrets và kiểm thử filter upload đồng bộ. **Chưa xong:** nâng cấp Multer/Zod/Nodemailer và tái tạo lockfile chuẩn bằng npm, audit lại prod/dev, nghiệm thu upload Cloudinary và OTLP staging. Không tuyên bố dependency sạch khi CI chỉ chặn Critical. [Audit và risk triage](DEPENDENCY_SECURITY_AUDIT.md).
 
 - [~] **[#146 — DI / composition root](https://github.com/Thang4869/TriAD-Backend/issues/146):** Kiểm tra registration theo module, reuse Auth adapter, request scope có tác dụng hay bỏ, health injection, không service locator; regression tests + architecture/typecheck/lint.
 - [~] **[#148 — OpenAPI/FE route](https://github.com/Thang4869/TriAD-Backend/issues/148):** Thêm schema request/response và negative-case contract cho auth/product/cart/checkout/orders; xác định source of truth Zod; chuyển FE sang canonical `/api/orders` nếu còn alias, xác minh FE↔BE E2E trước deprecation.

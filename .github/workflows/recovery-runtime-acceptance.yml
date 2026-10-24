@@ -1,0 +1,47 @@
+name: Full runtime recovery acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/recovery-runtime-acceptance.yml"
+      - "scripts/acceptance/recovery-*"
+      - "tests/scripts/recovery-*"
+      - "docs/RECOVERY_DRILL.md"
+      - "Dockerfile"
+      - "src/server.ts"
+      - "src/core/outbox/**"
+      - "src/core/queue/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  full-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RECOVERY_RUNTIME_ENABLED: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Verify archive authentication and destructive-operation guards
+        run: node --test tests/scripts/recovery-archive.test.cjs tests/scripts/recovery-runtime.test.cjs
+      - name: Restore encrypted snapshot, recover AOF/queues/outbox, authenticate API and rehearse rollback
+        run: bash scripts/acceptance/recovery-runtime.sh
+      - name: Publish sanitized timing and recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-runtime-evidence
+          path: recovery-runtime-evidence.json
+          retention-days: 14
+          if-no-files-found: ignore

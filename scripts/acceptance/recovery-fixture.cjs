@@ -245,7 +245,7 @@ async function main(mode) {
       console.error(JSON.stringify({ phase: "login-cookie", present: Boolean(cookie) }));
       assert.ok(cookie);
       const token = cookie.slice("accessToken=".length).split(";", 1)[0];
-      const orders = await fetch(base + "/api/orders", {
+      const orders = await fetch(base + "/api/orders?page=1&limit=10", {
         headers: { authorization: "Bearer " + token },
         signal: AbortSignal.timeout(5000),
       });

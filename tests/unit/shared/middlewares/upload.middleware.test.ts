@@ -82,7 +82,10 @@ describe("upload.middleware", () => {
     const fileFilter = capturedOptions.current.fileFilter;
     const req = {} as any;
     const cb = vi.fn();
-    fileFilter(req, { mimetype: "image/jpeg" } as any, cb);
+    const result = fileFilter(req, { mimetype: "image/jpeg" } as any, cb);
+    // Keep the Multer filter synchronous: async fileFilter is affected by GHSA-q7qp-rjg7-q26m.
+    expect(result).toBeUndefined();
+    expect(cb).toHaveBeenCalledTimes(1);
     expect(cb).toHaveBeenCalledWith(null, true);
   });
 

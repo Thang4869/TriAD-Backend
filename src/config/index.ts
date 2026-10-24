@@ -13,7 +13,7 @@ const configSchema = z
 
     DATABASE_URL: z.string().url().min(1, "DATABASE_URL is required"),
 
-    REDIS_URL: z.string().url().default("redis://localhost:6379"),
+    REDIS_URL: z.string().url(),
 
     JWT_ACCESS_SECRET: z
       .string()
@@ -38,7 +38,7 @@ const configSchema = z
     FACEBOOK_APP_SECRET: z.string().optional(),
     FACEBOOK_CALLBACK_URL: z.string().url().optional(),
 
-    FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+    FRONTEND_URL: z.string().url(),
     COOKIE_DOMAIN: z.string().min(1).optional(),
 
     CORS_ORIGIN: z
@@ -94,6 +94,13 @@ const configSchema = z
       });
     }
     if (data.NODE_ENV === "production") {
+      if (data.CORS_ORIGIN.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["CORS_ORIGIN"],
+          message: "CORS_ORIGIN must be configured in production",
+        });
+      }
       const smtpVars = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"];
       for (const v of smtpVars) {
         if (!data[v as keyof typeof data]) {

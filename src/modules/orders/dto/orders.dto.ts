@@ -4,7 +4,7 @@ import { OrderStatus } from "../domain/order-status";
 export const updateOrderStatusSchema = z.object({
   body: z.object({
     status: z.enum(Object.values(OrderStatus) as [string, ...string[]], {
-      errorMap: () => ({ message: "Invalid order status" }),
+      error: "Invalid order status",
     }),
   }),
   params: z.object({
@@ -16,14 +16,14 @@ export const adminGetOrdersQuerySchema = z.object({
   query: z.object({
     page: z
       .string()
-      .optional()
+      .default("1")
       .transform(Number)
-      .pipe(z.number().int().min(1).default(1)),
+      .pipe(z.number().int().min(1)),
     limit: z
       .string()
-      .optional()
+      .default("10")
       .transform(Number)
-      .pipe(z.number().int().min(1).max(50).default(10)),
+      .pipe(z.number().int().min(1).max(50)),
     status: z
       .enum(Object.values(OrderStatus) as [string, ...string[]])
       .optional(),
@@ -41,13 +41,13 @@ export const getMyOrdersQuerySchema = z.object({
   query: z.object({
     page: z
       .string()
-      .optional()
+      .default("1")
       .transform(Number)
-      .pipe(z.number().int().min(1).default(1)),
+      .pipe(z.number().int().min(1)),
     limit: z
       .string()
-      .optional()
+      .default("10")
       .transform(Number)
-      .pipe(z.number().int().min(1).max(50).default(10)),
+      .pipe(z.number().int().min(1).max(50)),
   }),
 });

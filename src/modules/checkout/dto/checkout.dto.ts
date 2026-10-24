@@ -4,9 +4,7 @@ export const checkoutSchema = z.object({
   body: z.object({
     idempotencyKey: z.string().optional(),
     paymentMethod: z.literal("COD", {
-      errorMap: () => ({
-        message: "Only COD payment is currently supported",
-      }),
+      error: "Only COD payment is currently supported",
     }),
     address: z
       .string()
@@ -33,14 +31,14 @@ export const getOrdersQuerySchema = z.object({
   query: z.object({
     page: z
       .string()
-      .optional()
+      .default("1")
       .transform(Number)
-      .pipe(z.number().int().min(1).default(1)),
+      .pipe(z.number().int().min(1)),
     limit: z
       .string()
-      .optional()
+      .default("10")
       .transform(Number)
-      .pipe(z.number().int().min(1).max(50).default(10)),
+      .pipe(z.number().int().min(1).max(50)),
   }),
 });
 

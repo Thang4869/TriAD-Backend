@@ -6,7 +6,7 @@ const productIdSchema = z.union(
     z.string().uuid("Invalid product ID"),
     z.string().cuid("Invalid product ID"),
   ],
-  { errorMap: () => ({ message: "Invalid product ID" }) },
+  { error: "Invalid product ID" },
 );
 
 export const addItemSchema = z.object({

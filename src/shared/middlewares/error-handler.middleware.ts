@@ -83,7 +83,7 @@ export function createErrorHandler(
     } else if (err instanceof ZodError) {
       statusCode = 400;
       message = "Validation failed";
-      details = err.errors.map((e) => ({
+      details = err.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));

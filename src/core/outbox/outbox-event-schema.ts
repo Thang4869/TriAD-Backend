@@ -23,7 +23,7 @@ const serializedDomainEventSchema = z
     occurredAt: z.union([z.string().min(1), z.date()]),
     version: z.number().int().nonnegative().optional(),
     sourceVersion: z.number().int().nonnegative().optional(),
-    metadata: z.record(z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 

@@ -16,14 +16,14 @@ export const getReviewsQuerySchema = z.object({
   query: z.object({
     page: z
       .string()
-      .optional()
+      .default("1")
       .transform(Number)
-      .pipe(z.number().int().min(1).default(1)),
+      .pipe(z.number().int().min(1)),
     limit: z
       .string()
-      .optional()
+      .default("10")
       .transform(Number)
-      .pipe(z.number().int().min(1).max(50).default(10)),
+      .pipe(z.number().int().min(1).max(50)),
   }),
   params: z.object({
     productId: z.string().uuid("Invalid product ID"),
@@ -40,13 +40,13 @@ export const adminGetAllReviewsQuerySchema = z.object({
   query: z.object({
     page: z
       .string()
-      .optional()
+      .default("1")
       .transform(Number)
-      .pipe(z.number().int().min(1).default(1)),
+      .pipe(z.number().int().min(1)),
     limit: z
       .string()
-      .optional()
+      .default("10")
       .transform(Number)
-      .pipe(z.number().int().min(1).max(50).default(10)),
+      .pipe(z.number().int().min(1).max(50)),
   }),
 });

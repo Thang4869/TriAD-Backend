@@ -1,5 +1,13 @@
 # I9 — PostgreSQL backup, restore and read-model rebuild
 
+**Portfolio decision (2026-10-24):** the owner chose entirely free demo hosting.
+[Local encrypted backup setup](PORTFOLIO_BACKUP.md) uses the owner's Windows PC,
+not a paid datastore or cloud artifact quota. Full production-runtime CI passed
+[run 40060645424](https://github.com/Thang4869/TriAD-Backend/actions/runs/40060645424)
+in PR #227 (4,433 ms recovery, 498 ms committed-marker fixture gap). Real hosted
+backup/restore and Windows scheduling remain pending owner execution. No
+production RTO/RPO or persistent Free Redis guarantee is claimed.
+
 **Status (2026-10-24):** #143 has been reopened because hosted recovery acceptance is incomplete. The existing snapshot evidence remains valid within its original scope.
 
 **Historical baseline (2026-10-18):** The isolated PostgreSQL drill is merged and passed on `main` in [CI run #39116584480](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480) ([restore-drill job](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480/job/117643501456)). This proves the CI fixture only; deployed recovery evidence for issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143), including RTO/RPO, remains **OPEN**.
@@ -134,8 +142,9 @@ Current provider references: [Free limitations](https://render.com/docs/free),
 **18** client tools for a dump of the hosted PostgreSQL 18 database; the old
 PostgreSQL 16 CI drill is not a hosted export procedure.
 
-**Owner decisions still needed:** supported hosting/durability model, backup
-cadence and retention, independent off-host destination, recoverable key custody,
-RTO/RPO targets and permission for a separate hosted restore/cutover exercise.
+**Owner decision:** free portfolio hosting accepted; see PORTFOLIO_BACKUP.md for
+the best-effort local daily backup and manual retention/key custody. First real
+backup/restore and schedule evidence are still pending. Production RTO/RPO and
+hosted cutover are outside this demo acceptance.
 No paid resource, schedule, secret, IP allowlist or live datastore has been
 changed by this candidate. Keep #143 open even if the full-runtime CI passes.

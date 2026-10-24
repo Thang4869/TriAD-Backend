@@ -6,8 +6,8 @@ const { pipeline } = require("node:stream/promises");
 const { Readable } = require("node:stream");
 const MAGIC = Buffer.from("TRIADBK1");
 
-// CI archive exercise only: secret storage/rotation and off-host retention are
-// deployment decisions, not properties supplied by this local helper.
+// Authenticated local format shared by CI and the portfolio backup.
+// Key custody/rotation and off-host retention belong to the calling workflow.
 async function archive(mode, input, output, keyFile) {
   if (!["encrypt", "decrypt"].includes(mode))
     throw new Error("Invalid archive mode");

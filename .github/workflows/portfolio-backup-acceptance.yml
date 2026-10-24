@@ -1,0 +1,110 @@
+name: Portfolio backup acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/portfolio-backup-acceptance.yml"
+      - "scripts/backup/**"
+      - "scripts/acceptance/recovery-archive.cjs"
+      - "tests/scripts/portfolio-backup.test.cjs"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows-launcher:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse the Windows PowerShell 5.1 launcher
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/scripts/backup/portfolio-backup.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw 'PowerShell parser rejected the launcher' }
+          $probe = ConvertTo-SecureString 'disposable-dpapi-fixture' -AsPlainText -Force
+          $roundtrip = ConvertTo-SecureString (ConvertFrom-SecureString $probe)
+          if ($roundtrip.Length -ne $probe.Length) { throw 'DPAPI roundtrip failed' }
+      - name: Exercise Setup with a private disposable Windows profile
+        shell: powershell
+        run: |
+          $original = $env:LOCALAPPDATA
+          $temporary = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString())
+          New-Item -ItemType Directory -Path $temporary | Out-Null
+          $env:LOCALAPPDATA = $temporary
+          function Read-Host {
+            param($Prompt, [switch]$AsSecureString)
+            if ($AsSecureString) { return (ConvertTo-SecureString 'postgresql://triad_staging:synthetic@dpg-dbcbq8ff3r2c739hbi3g-a.singapore-postgres.render.com/triad_staging' -AsPlainText -Force) }
+            return (Join-Path $env:LOCALAPPDATA 'archives')
+          }
+          try {
+            & ./scripts/backup/portfolio-backup.ps1 -Action Setup
+            $config = Get-Content (Join-Path $temporary 'TriAD-Backup/settings.json') -Raw | ConvertFrom-Json
+            if ($config.ProtectedUrl -match 'postgresql|synthetic') { throw 'Plaintext URL persisted' }
+            $secret = ConvertTo-SecureString $config.ProtectedUrl
+            if ($secret.Length -lt 20) { throw 'Protected URL not recoverable' }
+            if ((Get-Content $config.KeyPath -Raw) -notmatch '^[a-f0-9]{64}$') { throw 'Recovery key not generated' }
+            $refused = $false
+            try { & ./scripts/backup/portfolio-backup.ps1 -Action Setup } catch { $refused = $true }
+            if (-not $refused) { throw 'Setup overwrote existing configuration' }
+          } finally {
+            $env:LOCALAPPDATA = $original
+            Remove-Item -LiteralPath $temporary -Recurse -Force
+          }
+  disposable-roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test tests/scripts/portfolio-backup.test.cjs tests/scripts/recovery-archive.test.cjs
+      - name: Back up synthetic source, restore archive and reject tamper
+        env:
+          CI: "true"
+          PORTFOLIO_BACKUP_FIXTURE: "true"
+          PORTFOLIO_BACKUP_NETWORK: triad-portfolio-test
+          PORTFOLIO_BACKUP_DATABASE_URL: postgresql://test:test@triad-portfolio-source/triad_portfolio_fixture
+        run: |
+          set -euo pipefail
+          temporary="$(mktemp -d)"
+          cleanup() {
+            docker rm -fv triad-portfolio-source >/dev/null 2>&1 || true
+            docker network rm triad-portfolio-test >/dev/null 2>&1 || true
+            node -e 'require("node:fs").rmSync(process.argv[1],{recursive:true,force:true})' "$temporary"
+          }
+          trap cleanup EXIT
+          export PORTFOLIO_BACKUP_DIRECTORY="$temporary"
+          export PORTFOLIO_BACKUP_KEY_FILE="$temporary/recovery.key"
+          node -e 'require("node:fs").writeFileSync(process.argv[1],require("node:crypto").randomBytes(32).toString("hex"),{mode:384})' "$PORTFOLIO_BACKUP_KEY_FILE"
+          docker network create triad-portfolio-test
+          docker run -d --name triad-portfolio-source --network triad-portfolio-test -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=triad_portfolio_fixture postgres:18-alpine
+          for attempt in $(seq 1 30); do
+            if docker exec triad-portfolio-source pg_isready -h 127.0.0.1 -U test -d triad_portfolio_fixture; then break; fi
+            sleep 1
+          done
+          docker exec -i triad-portfolio-source psql -U test -d triad_portfolio_fixture -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE TABLE "_prisma_migrations" (id text);
+          INSERT INTO "_prisma_migrations" VALUES ('synthetic');
+          CREATE TABLE "User" (id text);
+          INSERT INTO "User" VALUES ('synthetic');
+          CREATE TABLE "Order" (id text);
+          CREATE TABLE "OutboxEvent" (id text);
+          SQL
+          node scripts/backup/portfolio-backup.cjs backup
+          export PORTFOLIO_BACKUP_ARCHIVE="$(find "$temporary" -maxdepth 1 -name '*.dump.enc' -print -quit)"
+          test -f "$PORTFOLIO_BACKUP_ARCHIVE.verified.json"
+          node scripts/backup/portfolio-backup.cjs verify
+          node -e 'const fs=require("node:fs"),p=process.env.PORTFOLIO_BACKUP_ARCHIVE,b=fs.readFileSync(p);b[b.length-1]^=1;fs.writeFileSync(p,b)'
+          if node scripts/backup/portfolio-backup.cjs verify; then echo 'Tamper was accepted'; exit 1; fi
+          test "$(docker exec triad-portfolio-source psql -U test -d triad_portfolio_fixture -Atc 'SELECT count(*) FROM "User"')" = '1'
+          # Deliberately no artifact upload: source, plaintext, key and ciphertext are disposable.

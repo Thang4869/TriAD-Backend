@@ -1,5 +1,15 @@
 # Operations Runbook
 
+## Free portfolio operating profile — 2026-10-24
+
+Owner chose no paid plans. Use [PORTFOLIO_BACKUP.md](PORTFOLIO_BACKUP.md) for
+Windows local encrypted PostgreSQL backups with disposable restore verification.
+This is prepared tooling, not an activated backup: external IP access, local
+setup, first real PASS, independent key copy and Task Scheduler evidence are
+pending. No plan/ACL/secret/live datastore change was made. Free Redis remains
+nonpersistent; no production RTO/RPO is promised. Full-runtime CI PR #227 passed;
+issue #143 remains open for the actual free-demo backup evidence.
+
 ## Acceptance — 2026-10-24
 
 Latest verified code: backend [#225](https://github.com/Thang4869/TriAD-Backend/pull/225), main `c1ff0af`; frontend [#37](https://github.com/Thang4869/TriAD-12/pull/37) plus mandatory regression [#38](https://github.com/Thang4869/TriAD-12/pull/38), main `ac87f6f`. Render workspace/service were confirmed before changes; only the existing `triad-api-staging` service was updated.

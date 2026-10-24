@@ -32,7 +32,7 @@ if ($Action -eq 'Setup') {
     $url = Read-Host 'Render External Database URL (hidden input)' -AsSecureString
     # Windows DPAPI: only this Windows user on this machine can decrypt the URL.
     $protectedUrl = ConvertFrom-SecureString -SecureString $url
-    & node -e 'require("node:fs").writeFileSync(process.argv[1],require("node:crypto").randomBytes(32).toString("hex"),{flag:"wx",mode:384})' $keyPath
+    & node -e "require('node:fs').writeFileSync(process.argv[1],require('node:crypto').randomBytes(32).toString('hex'),{flag:'wx',mode:384})" $keyPath
     if ($LASTEXITCODE -ne 0) { throw 'Recovery key creation failed.' }
     @{
         ProtectedUrl = $protectedUrl

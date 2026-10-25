@@ -2,7 +2,7 @@
 
 **An open-source e-commerce backend engineering case study**
 
-*TypeScript · Node.js · PostgreSQL · Redis · Clean Architecture · DDD · Reliability*
+_TypeScript · Node.js · PostgreSQL · Redis · Clean Architecture · DDD · Reliability_
 
 TriAD is an independently developed **backend-focused portfolio project**, shared under the **MIT License** for students, developers and contributors to explore how an e-commerce application is modeled, tested and operated beyond the UI. It is a working codebase with documented trade-offs and CI evidence—not a claim that every production deployment condition has been proven.
 
@@ -26,13 +26,13 @@ Frontend repository: [Thang4869/TriAD-12](https://github.com/Thang4869/TriAD-12)
 
 ## Engineering evidence at a glance
 
-| Engineering concern | What the repository implements | Where to verify |
-| --- | --- | --- |
-| Checkout consistency | Serializable PostgreSQL transaction, locked stock pricing and idempotent retry | [Checkout integration tests](tests/integration/checkout.recovery-consistency.test.ts), [ADR-0001](docs/adr/0001-transactional-checkout-outbox.md) |
-| Durable side effects | Transactional Outbox, handler tracker, lease recovery and dead letters | [Outbox recovery tests](tests/integration/auth.registration-process-crash.test.ts), [durability runbook](docs/EVENT_DURABILITY.md) |
-| Read-side consistency | CQRS read models, monotonic source versions and rebuild tools | [Projection ordering tests](tests/integration/projection.ordering.test.ts), [operations](docs/OPERATIONS.md) |
-| Recovery operations | Isolated PostgreSQL backup/restore and read-model rebuild job | [Recovery drill](docs/RECOVERY_DRILL.md), [CI workflow](.github/workflows/ci.yml) |
-| Delivery quality | Typecheck, lint, architecture, contract, coverage, image-runtime and full-stack CI | [GitHub Actions](https://github.com/Thang4869/TriAD-Backend/actions), [checklist](docs/TriAD-Backend-Improvement-Checklist.md) |
+| Engineering concern   | What the repository implements                                                     | Where to verify                                                                                                                                   |
+| --------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Checkout consistency  | Serializable PostgreSQL transaction, locked stock pricing and idempotent retry     | [Checkout integration tests](tests/integration/checkout.recovery-consistency.test.ts), [ADR-0001](docs/adr/0001-transactional-checkout-outbox.md) |
+| Durable side effects  | Transactional Outbox, handler tracker, lease recovery and dead letters             | [Outbox recovery tests](tests/integration/auth.registration-process-crash.test.ts), [durability runbook](docs/EVENT_DURABILITY.md)                |
+| Read-side consistency | CQRS read models, monotonic source versions and rebuild tools                      | [Projection ordering tests](tests/integration/projection.ordering.test.ts), [operations](docs/OPERATIONS.md)                                      |
+| Recovery operations   | Isolated PostgreSQL backup/restore and read-model rebuild job                      | [Recovery drill](docs/RECOVERY_DRILL.md), [CI workflow](.github/workflows/ci.yml)                                                                 |
+| Delivery quality      | Typecheck, lint, architecture, contract, coverage, image-runtime and full-stack CI | [GitHub Actions](https://github.com/Thang4869/TriAD-Backend/actions), [checklist](docs/TriAD-Backend-Improvement-Checklist.md)                    |
 
 **What this project does not claim:** independently certified production readiness, a measured production RTO/RPO or SLO, exactly-once SMTP delivery, or a live payment gateway. The repository tracks these as explicit engineering decisions and open validation gates rather than hiding them.
 
@@ -573,7 +573,6 @@ This project is an educational engineering reference and portfolio work, **not a
 > Code is written once, read and maintained many times.
 >
 > Domain purity, explicit boundaries, and operational reliability should be demonstrated by code and evidence, not by labels alone.
-
 
 ## Production-readiness acceptance gates
 

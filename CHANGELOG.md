@@ -5,10 +5,12 @@ Notable user-visible and engineering changes are recorded here. The project uses
 ## [Unreleased]
 
 ### Added
+
 - Evidence-based P0–P9 [remaining work checklist](docs/TriAD-Backend-Improvement-Checklist.md) and documentation of domain invariants.
 - Regression tests for invalid Product and Cart quantities.
 
 ### Changed
+
 - Product stock and Cart item quantity commands reject fractional, non-finite, and unsafe integer values, including overflow.
 
 ## Release procedure

@@ -150,19 +150,32 @@ describe("projection writer ordering", () => {
   });
 });
 
-
 describe("projection source version validation", () => {
-  const invalidVersions = [-1, 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1];
+  const invalidVersions = [
+    -1,
+    0.5,
+    NaN,
+    Infinity,
+    -Infinity,
+    Number.MAX_SAFE_INTEGER + 1,
+  ];
 
   it.each(invalidVersions)(
     "rejects invalid product source version %s before database write",
     async (version) => {
       const updateMany = vi.fn();
       const create = vi.fn();
-      const db = { productCatalogProjection: { updateMany, create, findUnique: vi.fn() } };
+      const db = {
+        productCatalogProjection: { updateMany, create, findUnique: vi.fn() },
+      };
       await expect(
-        writeProductCatalogProjection(db as never, productData(version, "invalid")),
-      ).rejects.toThrow("Projection source version must be a non-negative safe integer");
+        writeProductCatalogProjection(
+          db as never,
+          productData(version, "invalid"),
+        ),
+      ).rejects.toThrow(
+        "Projection source version must be a non-negative safe integer",
+      );
       expect(updateMany).not.toHaveBeenCalled();
       expect(create).not.toHaveBeenCalled();
     },
@@ -173,11 +186,18 @@ describe("projection source version validation", () => {
     async (version) => {
       const updateMany = vi.fn();
       const create = vi.fn();
-      const db = { orderHistoryProjection: { updateMany, create, findUnique: vi.fn() } };
-      await expect(writeOrderHistoryProjection(db as never, {
-        orderId: "order-1",
-        sourceVersion: version,
-      } as Prisma.OrderHistoryProjectionUncheckedCreateInput)).rejects.toThrow(
+      const db = {
+        orderHistoryProjection: { updateMany, create, findUnique: vi.fn() },
+      };
+      await expect(
+        writeOrderHistoryProjection(
+          db as never,
+          {
+            orderId: "order-1",
+            sourceVersion: version,
+          } as Prisma.OrderHistoryProjectionUncheckedCreateInput,
+        ),
+      ).rejects.toThrow(
         "Projection source version must be a non-negative safe integer",
       );
       expect(updateMany).not.toHaveBeenCalled();

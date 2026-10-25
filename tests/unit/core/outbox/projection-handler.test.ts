@@ -76,44 +76,78 @@ describe("ProjectionHandler", () => {
     expect(store.refreshDashboard).toHaveBeenCalledOnce();
   });
   it("records event age only after successful order projection", async () => {
-    const { projectionEventAgeSeconds } = await import("@core/metrics/metrics.registry");
+    const { projectionEventAgeSeconds } =
+      await import("@core/metrics/metrics.registry");
     projectionEventAgeSeconds.reset();
-    const event = new OrderPlacedEvent("lag-order", "lag-user", "LAG-ORDER",
-      "User", "u@example.com", "PENDING", 100, 0, 0, 100, []);
-    const fakeClock = vi.spyOn(Date, "now").mockReturnValue(event.occurredAt.getTime() + 2500);
+    const event = new OrderPlacedEvent(
+      "lag-order",
+      "lag-user",
+      "LAG-ORDER",
+      "User",
+      "u@example.com",
+      "PENDING",
+      100,
+      0,
+      0,
+      100,
+      [],
+    );
+    const fakeClock = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(event.occurredAt.getTime() + 2500);
     try {
       await new ProjectionHandler(store).handleOrderPlaced(event);
     } finally {
       fakeClock.mockRestore();
     }
     const samples = await projectionEventAgeSeconds.get();
-    expect(samples.values).toContainEqual(expect.objectContaining({
-      metricName: "triad_backend_projection_event_age_seconds_count",
-      labels: { projection: "order_history" },
-      value: 1,
-    }));
-    expect(samples.values).toContainEqual(expect.objectContaining({
-      metricName: "triad_backend_projection_event_age_seconds_sum",
-      labels: { projection: "order_history" },
-      value: 2.5,
-    }));
+    expect(samples.values).toContainEqual(
+      expect.objectContaining({
+        metricName: "triad_backend_projection_event_age_seconds_count",
+        labels: { projection: "order_history" },
+        value: 1,
+      }),
+    );
+    expect(samples.values).toContainEqual(
+      expect.objectContaining({
+        metricName: "triad_backend_projection_event_age_seconds_sum",
+        labels: { projection: "order_history" },
+        value: 2.5,
+      }),
+    );
     projectionEventAgeSeconds.reset();
   });
 
   it("does not count failed projection writes as successful age samples", async () => {
-    const { projectionEventAgeSeconds } = await import("@core/metrics/metrics.registry");
+    const { projectionEventAgeSeconds } =
+      await import("@core/metrics/metrics.registry");
     projectionEventAgeSeconds.reset();
-    vi.mocked(store.upsertOrderPlaced).mockRejectedValueOnce(new Error("DB unavailable"));
-    const event = new OrderPlacedEvent("failed-order", "user", "FAILED-ORDER",
-      "User", "u@example.com", "PENDING", 100, 0, 0, 100, []);
-    await expect(new ProjectionHandler(store).handleOrderPlaced(event))
-      .rejects.toThrow("DB unavailable");
+    vi.mocked(store.upsertOrderPlaced).mockRejectedValueOnce(
+      new Error("DB unavailable"),
+    );
+    const event = new OrderPlacedEvent(
+      "failed-order",
+      "user",
+      "FAILED-ORDER",
+      "User",
+      "u@example.com",
+      "PENDING",
+      100,
+      0,
+      0,
+      100,
+      [],
+    );
+    await expect(
+      new ProjectionHandler(store).handleOrderPlaced(event),
+    ).rejects.toThrow("DB unavailable");
     const samples = await projectionEventAgeSeconds.get();
-    expect(samples.values).not.toContainEqual(expect.objectContaining({
-      metricName: "triad_backend_projection_event_age_seconds_count",
-      labels: { projection: "order_history" },
-    }));
+    expect(samples.values).not.toContainEqual(
+      expect.objectContaining({
+        metricName: "triad_backend_projection_event_age_seconds_count",
+        labels: { projection: "order_history" },
+      }),
+    );
     projectionEventAgeSeconds.reset();
   });
-
 });

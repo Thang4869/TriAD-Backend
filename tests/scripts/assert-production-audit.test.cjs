@@ -14,7 +14,9 @@ function report(critical) {
 }
 
 test("permits a valid zero-critical report even when high findings remain", () => {
-  assert.doesNotThrow(() => assertNoCriticalProductionVulnerabilities(report(0)));
+  assert.doesNotThrow(() =>
+    assertNoCriticalProductionVulnerabilities(report(0)),
+  );
 });
 
 test("blocks any production critical advisory", () => {
@@ -25,6 +27,10 @@ test("blocks any production critical advisory", () => {
 });
 
 test("does not treat an incomplete/failed audit report as a clean scan", () => {
-  assert.throws(() => assertNoCriticalProductionVulnerabilities(report(undefined)));
-  assert.throws(() => assertNoCriticalProductionVulnerabilities({ error: "EAI_AGAIN" }));
+  assert.throws(() =>
+    assertNoCriticalProductionVulnerabilities(report(undefined)),
+  );
+  assert.throws(() =>
+    assertNoCriticalProductionVulnerabilities({ error: "EAI_AGAIN" }),
+  );
 });

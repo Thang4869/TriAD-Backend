@@ -189,7 +189,9 @@ export class Order extends AggregateRoot {
       const idx = this._items.indexOf(existing);
 
       if (!Number.isSafeInteger(existing.quantity + quantity)) {
-        throw new InvalidOrderItemError("Merged quantity exceeds safe integer range");
+        throw new InvalidOrderItemError(
+          "Merged quantity exceeds safe integer range",
+        );
       }
 
       this._items[idx] = new OrderItem(

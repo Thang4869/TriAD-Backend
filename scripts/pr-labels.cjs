@@ -5,13 +5,19 @@
 const TYPE_LABELS = Object.freeze({
   feat: { color: "0E8A16", description: "A new feature" },
   fix: { color: "06EE9B", description: "A bug fix" },
-  refactor: { color: "A2EEEF", description: "Code refactoring without a feature or bug fix" },
+  refactor: {
+    color: "A2EEEF",
+    description: "Code refactoring without a feature or bug fix",
+  },
   docs: { color: "5B4375", description: "Documentation changes" },
   test: { color: "903073", description: "Tests and test infrastructure" },
   ci: { color: "1D76DB", description: "CI/CD configuration and workflows" },
   build: { color: "BFD4F2", description: "Build system or dependency changes" },
   perf: { color: "FBCA04", description: "Performance improvements" },
-  style: { color: "C2E0C6", description: "Formatting and nonfunctional style changes" },
+  style: {
+    color: "C2E0C6",
+    description: "Formatting and nonfunctional style changes",
+  },
   chore: { color: "EDEDED", description: "Repository maintenance" },
   revert: { color: "B60205", description: "Reverting a previous change" },
   security: { color: "D93F0B", description: "Security hardening" },
@@ -55,7 +61,8 @@ function labelChanges(existing, desired) {
   return {
     add: desired.filter((name) => !existingNames.has(name.toLowerCase())),
     remove: existing.filter(
-      (name) => managedNames.has(name.toLowerCase()) && !wanted.has(name.toLowerCase()),
+      (name) =>
+        managedNames.has(name.toLowerCase()) && !wanted.has(name.toLowerCase()),
     ),
   };
 }
@@ -82,12 +89,19 @@ async function ensureLabelExists(github, owner, repo, name) {
 
 async function syncPullRequestLabels(github, { owner, repo, pull_number }) {
   // Refresh PR state in case this job starts after another draft/ready event.
-  const { data: pull } = await github.rest.pulls.get({ owner, repo, pull_number });
+  const { data: pull } = await github.rest.pulls.get({
+    owner,
+    repo,
+    pull_number,
+  });
   if (pull.state !== "open") return { skipped: true, reason: "PR is not open" };
 
   // github.paginate covers PRs with more than 100 commits.
   const commits = await github.paginate(github.rest.pulls.listCommits, {
-    owner, repo, pull_number, per_page: 100,
+    owner,
+    repo,
+    pull_number,
+    per_page: 100,
   });
   const desired = desiredLabels(
     commits.map((entry) => entry.commit && entry.commit.message),
@@ -95,22 +109,34 @@ async function syncPullRequestLabels(github, { owner, repo, pull_number }) {
   );
 
   const labels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
-    owner, repo, issue_number: pull_number, per_page: 100,
+    owner,
+    repo,
+    issue_number: pull_number,
+    per_page: 100,
   });
-  const changes = labelChanges(labels.map((item) => item.name), desired);
+  const changes = labelChanges(
+    labels.map((item) => item.name),
+    desired,
+  );
 
   for (const name of changes.add) {
     await ensureLabelExists(github, owner, repo, name);
   }
   if (changes.add.length > 0) {
     await github.rest.issues.addLabels({
-      owner, repo, issue_number: pull_number, labels: changes.add,
+      owner,
+      repo,
+      issue_number: pull_number,
+      labels: changes.add,
     });
   }
   for (const name of changes.remove) {
     try {
       await github.rest.issues.removeLabel({
-        owner, repo, issue_number: pull_number, name,
+        owner,
+        repo,
+        issue_number: pull_number,
+        name,
       });
     } catch (error) {
       // A concurrent change may have removed this already.

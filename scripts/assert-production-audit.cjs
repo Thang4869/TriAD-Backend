@@ -24,11 +24,15 @@ function assertNoCriticalProductionVulnerabilities(report) {
 if (require.main === module) {
   try {
     if (process.argv.length !== 3) {
-      throw new Error("Usage: node assert-production-audit.cjs <production-audit.json>");
+      throw new Error(
+        "Usage: node assert-production-audit.cjs <production-audit.json>",
+      );
     }
     const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
     assertNoCriticalProductionVulnerabilities(report);
-    process.stdout.write("Production dependency audit: zero critical advisories\n");
+    process.stdout.write(
+      "Production dependency audit: zero critical advisories\n",
+    );
   } catch (error) {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

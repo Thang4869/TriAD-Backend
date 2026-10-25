@@ -127,21 +127,38 @@ describe("rate-limit middleware", () => {
     ) => void;
     const status = vi.fn();
     const json = vi.fn();
-    const res = { status: vi.fn().mockReturnValue({ json }), json } as unknown as Response;
+    const res = {
+      status: vi.fn().mockReturnValue({ json }),
+      json,
+    } as unknown as Response;
     const metric = vi.spyOn(rateLimitDecisionsTotal, "inc");
 
     try {
       handler(
-        { ip: "192.0.2.7", body: { email: "private@example.invalid" } } as Request,
+        {
+          ip: "192.0.2.7",
+          body: { email: "private@example.invalid" },
+        } as Request,
         res,
         vi.fn(),
-        { statusCode: 429, message: { success: false, error: "Too many requests" } },
+        {
+          statusCode: 429,
+          message: { success: false, error: "Too many requests" },
+        },
       );
       expect(res.status).toHaveBeenCalledWith(429);
-      expect(json).toHaveBeenCalledWith({ success: false, error: "Too many requests" });
-      expect(metric).toHaveBeenCalledWith({ bucket: "auth_identity", outcome: "deny" });
+      expect(json).toHaveBeenCalledWith({
+        success: false,
+        error: "Too many requests",
+      });
+      expect(metric).toHaveBeenCalledWith({
+        bucket: "auth_identity",
+        outcome: "deny",
+      });
       expect(JSON.stringify(metric.mock.calls)).not.toContain("192.0.2.7");
-      expect(JSON.stringify(metric.mock.calls)).not.toContain("private@example.invalid");
+      expect(JSON.stringify(metric.mock.calls)).not.toContain(
+        "private@example.invalid",
+      );
       expect(status).not.toHaveBeenCalled();
     } finally {
       metric.mockRestore();
@@ -159,11 +176,16 @@ describe("rate-limit middleware", () => {
       options: { statusCode: number; message: unknown },
     ) => void;
     const json = vi.fn();
-    const res = { status: vi.fn().mockReturnValue({ json }) } as unknown as Response;
+    const res = {
+      status: vi.fn().mockReturnValue({ json }),
+    } as unknown as Response;
     const metric = vi.spyOn(rateLimitDecisionsTotal, "inc");
     try {
       handler({} as Request, res, vi.fn(), { statusCode: 429, message: {} });
-      expect(metric).toHaveBeenCalledWith({ bucket: "custom", outcome: "deny" });
+      expect(metric).toHaveBeenCalledWith({
+        bucket: "custom",
+        outcome: "deny",
+      });
     } finally {
       metric.mockRestore();
     }
@@ -290,9 +312,11 @@ describe("rate-limit middleware", () => {
 
 describe("auth and 2FA abuse rate-limit keys", () => {
   function optionForPrefix(prefix: string) {
-    const storeIndex = vi.mocked(RedisStore).mock.calls.findIndex(
-      ([options]) => (options as { prefix?: string }).prefix === prefix,
-    );
+    const storeIndex = vi
+      .mocked(RedisStore)
+      .mock.calls.findIndex(
+        ([options]) => (options as { prefix?: string }).prefix === prefix,
+      );
     // The mocked factory is called in the same order as RedisStore creation.
     return vi.mocked(rateLimit).mock.calls[storeIndex]?.[0];
   }
@@ -317,13 +341,15 @@ describe("auth and 2FA abuse rate-limit keys", () => {
 
   it("normalizes the email and does not expose it in Redis keys", () => {
     expect(authRateLimiter).toBeDefined();
-    const generate = optionForPrefix("ratelimit:auth:")?.keyGenerator as
-      (req: Request) => string;
-    const req = (email: string) => ({
-      ip: "192.0.2.20",
-      body: { email },
-      headers: { "x-forwarded-for": "198.51.100.1" },
-    }) as unknown as Request;
+    const generate = optionForPrefix("ratelimit:auth:")?.keyGenerator as (
+      req: Request,
+    ) => string;
+    const req = (email: string) =>
+      ({
+        ip: "192.0.2.20",
+        body: { email },
+        headers: { "x-forwarded-for": "198.51.100.1" },
+      }) as unknown as Request;
     const first = generate(req(" User@Example.COM "));
     expect(first).toBe(generate(req("user@example.com")));
     expect(first).not.toContain("user@example.com");
@@ -334,19 +360,25 @@ describe("auth and 2FA abuse rate-limit keys", () => {
 
   it("never includes raw preauth secrets in its Redis key", () => {
     expect(totpRateLimiter).toBeDefined();
-    const generate = optionForPrefix("ratelimit:totp:")?.keyGenerator as
-      (req: Request) => string;
+    const generate = optionForPrefix("ratelimit:totp:")?.keyGenerator as (
+      req: Request,
+    ) => string;
     const token = "SECRET.JWT.PREAUTH";
-    const key = generate({ ip: "192.0.2.11", body: { preAuthToken: token } } as Request);
+    const key = generate({
+      ip: "192.0.2.11",
+      body: { preAuthToken: token },
+    } as Request);
     expect(key).not.toContain(token);
     expect(key).toMatch(/^192\.0\.2\.11:[a-f0-9]{64}$/);
   });
 
   it("shares missing identity buckets rather than letting malformed input evade limits", () => {
-    const authGenerate = optionForPrefix("ratelimit:auth:")?.keyGenerator as
-      (req: Request) => string;
-    const totpGenerate = optionForPrefix("ratelimit:totp:")?.keyGenerator as
-      (req: Request) => string;
+    const authGenerate = optionForPrefix("ratelimit:auth:")?.keyGenerator as (
+      req: Request,
+    ) => string;
+    const totpGenerate = optionForPrefix("ratelimit:totp:")?.keyGenerator as (
+      req: Request,
+    ) => string;
     const req = { ip: "192.0.2.21", body: {} } as Request;
     expect(authGenerate(req)).toBe("192.0.2.21:missing");
     expect(totpGenerate(req)).toBe("192.0.2.21:missing");
@@ -395,14 +427,16 @@ describe("rate-limit Redis fail-closed policy", () => {
     const counter = vi.spyOn(rateLimitStoreFailuresTotal, "inc");
     client.status = "reconnecting";
     try {
-      await expect(sendCommand("INCR", "private-user-key")).rejects.toBeInstanceOf(
-        DependencyUnavailableError,
-      );
+      await expect(
+        sendCommand("INCR", "private-user-key"),
+      ).rejects.toBeInstanceOf(DependencyUnavailableError);
       expect(counter).toHaveBeenCalledWith({
         operation: "request",
         reason: "not_ready",
       });
-      expect(JSON.stringify(counter.mock.calls)).not.toContain("private-user-key");
+      expect(JSON.stringify(counter.mock.calls)).not.toContain(
+        "private-user-key",
+      );
     } finally {
       client.status = previous;
       counter.mockRestore();
@@ -419,7 +453,10 @@ describe("rate-limit Redis fail-closed policy", () => {
       client.status = "connecting";
       let complete!: (reply: unknown) => void;
       vi.mocked(redis.call).mockImplementationOnce(
-        () => new Promise((resolve) => { complete = resolve; }) as ReturnType<typeof redis.call>,
+        () =>
+          new Promise((resolve) => {
+            complete = resolve;
+          }) as ReturnType<typeof redis.call>,
       );
 
       // The upstream v4 store creates and awaits startup Lua SHA promises
@@ -435,9 +472,9 @@ describe("rate-limit Redis fail-closed policy", () => {
       complete("script-sha");
       await expect(pending).resolves.toBe("script-sha");
       vi.mocked(redis.call).mockResolvedValueOnce("sha-on-recovery");
-      await expect(
-        sendCommand("SCRIPT", "LOAD", "return 1"),
-      ).resolves.toBe("sha-on-recovery");
+      await expect(sendCommand("SCRIPT", "LOAD", "return 1")).resolves.toBe(
+        "sha-on-recovery",
+      );
     } finally {
       failures.mockRestore();
       client.status = originalStatus;
@@ -450,9 +487,9 @@ describe("rate-limit Redis fail-closed policy", () => {
     vi.mocked(redis.call).mockRejectedValueOnce(
       new Error("redis://private-host:6379 sensitive-key"),
     );
-    await expect(sendCommand("SCRIPT", "LOAD", "sensitive-lua")).rejects.toThrow(
-      "Rate limit store unavailable",
-    );
+    await expect(
+      sendCommand("SCRIPT", "LOAD", "sensitive-lua"),
+    ).rejects.toThrow("Rate limit store unavailable");
   });
 
   it("returns a 503-class dependency error immediately if Redis is disconnected", async () => {
@@ -473,7 +510,9 @@ describe("rate-limit Redis fail-closed policy", () => {
 
   it("maps Redis command rejections to dependency errors (not a rate-limit bypass)", async () => {
     const sendCommand = commandBridge();
-    vi.mocked(redis.call).mockRejectedValueOnce(new Error("secret redis endpoint"));
+    vi.mocked(redis.call).mockRejectedValueOnce(
+      new Error("secret redis endpoint"),
+    );
     await expect(sendCommand("INCR", "test-key")).rejects.toThrow(
       "Rate limit store unavailable",
     );
@@ -484,9 +523,9 @@ describe("rate-limit Redis fail-closed policy", () => {
     try {
       const sendCommand = commandBridge();
       vi.mocked(redis.call).mockImplementationOnce(() => new Promise(() => {}));
-      const pending = expect(sendCommand("INCR", "sensitive-token")).rejects.toThrow(
-        "Rate limit store timed out",
-      );
+      const pending = expect(
+        sendCommand("INCR", "sensitive-token"),
+      ).rejects.toThrow("Rate limit store timed out");
       await vi.advanceTimersByTimeAsync(1000);
       await pending;
     } finally {
@@ -522,12 +561,15 @@ describe("rate-limit Redis fail-closed policy", () => {
       client.status = "ready";
       let complete!: (value: unknown) => void;
       vi.mocked(redis.call).mockImplementationOnce(
-        () => new Promise((resolve) => { complete = resolve; }) as ReturnType<typeof redis.call>,
+        () =>
+          new Promise((resolve) => {
+            complete = resolve;
+          }) as ReturnType<typeof redis.call>,
       );
       vi.useFakeTimers();
-      const failed = expect(sendCommand("INCR", "stale-key")).rejects.toBeInstanceOf(
-        DependencyUnavailableError,
-      );
+      const failed = expect(
+        sendCommand("INCR", "stale-key"),
+      ).rejects.toBeInstanceOf(DependencyUnavailableError);
       await vi.advanceTimersByTimeAsync(1000);
       await failed;
       complete(1);
@@ -537,5 +579,4 @@ describe("rate-limit Redis fail-closed policy", () => {
       client.status = originalStatus;
     }
   });
-
 });

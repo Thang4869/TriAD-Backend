@@ -18,7 +18,8 @@ describe("Config validation", () => {
     process.env.JWT_ACCESS_SECRET = "test-access-secret-32charslongenough";
     process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32charslongenough";
     process.env.JWT_PREAUTH_SECRET = "test-preauth-secret-32charslongenough";
-    process.env.TOTP_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    process.env.TOTP_ENCRYPTION_KEY =
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     process.env.FRONTEND_URL = "http://localhost:3000";
     process.env.CORS_ORIGIN = "http://localhost:3000";
     process.env.SMTP_HOST = "smtp.test.com";
@@ -170,7 +171,9 @@ describe("Config validation", () => {
     delete process.env.JWT_REFRESH_SECRET;
     delete process.env.DATABASE_URL;
 
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("process.exit should not be called in test env");
     });
@@ -200,25 +203,28 @@ describe("Config validation", () => {
     ["JWT_REFRESH_SECRET", "JWT_REFRESH_SECRET"],
     ["JWT_PREAUTH_SECRET", "JWT_PREAUTH_SECRET"],
     ["TOTP_ENCRYPTION_KEY", "TOTP_ENCRYPTION_KEY"],
-  ] as const)("rejects missing %s in production without test fallbacks", async (key, field) => {
-    process.env.NODE_ENV = "production";
-    process.env.CLOUDINARY_CLOUD_NAME = "test-cloud";
-    process.env.CLOUDINARY_API_KEY = "test-key";
-    process.env.CLOUDINARY_API_SECRET = "test-secret";
-    delete process.env[key];
+  ] as const)(
+    "rejects missing %s in production without test fallbacks",
+    async (key, field) => {
+      process.env.NODE_ENV = "production";
+      process.env.CLOUDINARY_CLOUD_NAME = "test-cloud";
+      process.env.CLOUDINARY_API_KEY = "test-key";
+      process.env.CLOUDINARY_API_SECRET = "test-secret";
+      delete process.env[key];
 
-    const messages: string[] = [];
-    vi.spyOn(console, "error").mockImplementation((...parts: unknown[]) => {
-      messages.push(parts.map(String).join(" "));
-    });
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
-      throw new Error("process.exit called");
-    }) as never);
+      const messages: string[] = [];
+      vi.spyOn(console, "error").mockImplementation((...parts: unknown[]) => {
+        messages.push(parts.map(String).join(" "));
+      });
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+        throw new Error("process.exit called");
+      }) as never);
 
-    await expect(import("@config")).rejects.toThrow("process.exit called");
-    expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(messages.join("\\n")).toContain(field);
-  });
+      await expect(import("@config")).rejects.toThrow("process.exit called");
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(messages.join("\\n")).toContain(field);
+    },
+  );
 
   it("tách CORS_ORIGIN thành mảng khi biến môi trường được cung cấp", async () => {
     process.env.CORS_ORIGIN = "http://localhost:3000,http://localhost:4000";

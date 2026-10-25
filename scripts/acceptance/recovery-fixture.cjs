@@ -237,12 +237,16 @@ async function main(mode) {
         body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
         signal: AbortSignal.timeout(5000),
       });
-      console.error(JSON.stringify({ phase: "login", status: response.status }));
+      console.error(
+        JSON.stringify({ phase: "login", status: response.status }),
+      );
       assert.equal(response.status, 200);
       const cookie = response.headers
         .getSetCookie()
         .find((x) => x.startsWith("accessToken="));
-      console.error(JSON.stringify({ phase: "login-cookie", present: Boolean(cookie) }));
+      console.error(
+        JSON.stringify({ phase: "login-cookie", present: Boolean(cookie) }),
+      );
       assert.ok(cookie);
       const token = cookie.slice("accessToken=".length).split(";", 1)[0];
       const orders = await fetch(base + "/api/orders?page=1&limit=10", {
@@ -255,7 +259,9 @@ async function main(mode) {
       const products = await fetch(base + "/api/products", {
         signal: AbortSignal.timeout(5000),
       });
-      console.error(JSON.stringify({ phase: "products", status: products.status }));
+      console.error(
+        JSON.stringify({ phase: "products", status: products.status }),
+      );
       assert.equal(products.status, 200);
       assert.equal((await products.json()).data.products[0].id, IDS.product);
       return { authenticatedApi: true, catalog: true };

@@ -170,9 +170,12 @@ describe("email.job", () => {
   it("rejects missing verification URL", async () => {
     await expect(
       processEmail({
-        data: { to: "test@test.com", subject: "Verify", template: "verify-email" },
+        data: {
+          to: "test@test.com",
+          subject: "Verify",
+          template: "verify-email",
+        },
       }),
     ).rejects.toThrow("Verification URL must be an absolute HTTP(S) URL");
   });
-
 });

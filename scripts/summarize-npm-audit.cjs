@@ -69,13 +69,19 @@ function markdownSummary(production, all) {
       rows.push(`| ${entry.name} | ${entry.severity} | ${fix} |`);
     }
   }
-  rows.push("", "Do not use `npm audit fix --force` without regression testing.", "");
+  rows.push(
+    "",
+    "Do not use `npm audit fix --force` without regression testing.",
+    "",
+  );
   return rows.join("\n");
 }
 
 function main(paths) {
   if (paths.length !== 2) {
-    throw new Error("Usage: node summarize-npm-audit.cjs <production.json> <all.json>");
+    throw new Error(
+      "Usage: node summarize-npm-audit.cjs <production.json> <all.json>",
+    );
   }
   const [prod, all] = paths.map((file) =>
     summarizeReport(JSON.parse(fs.readFileSync(file, "utf8"))),

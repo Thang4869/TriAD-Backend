@@ -2,7 +2,11 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ hits: 0, unavailable: false, stalled: false }));
+const state = vi.hoisted(() => ({
+  hits: 0,
+  unavailable: false,
+  stalled: false,
+}));
 
 vi.mock("@core/redis/client", () => ({
   default: { status: "ready", call: vi.fn() },
@@ -11,7 +15,8 @@ vi.mock("@core/redis/client", () => ({
 // Keep express-rate-limit real and replace only the external Redis adapter.
 // This verifies HTTP middleware behavior, not Redis connectivity.
 vi.mock("rate-limit-redis", async () => {
-  const { DependencyUnavailableError } = await import("@shared/errors/application-error");
+  const { DependencyUnavailableError } =
+    await import("@shared/errors/application-error");
   return {
     RedisStore: class {
       async increment() {

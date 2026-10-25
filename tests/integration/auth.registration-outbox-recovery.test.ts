@@ -49,14 +49,16 @@ class RegistrationOnlyStore extends PrismaOutboxRelayStore {
     const row = await prisma.outboxEvent.findUniqueOrThrow({
       where: { id: this.eventId },
     });
-    return [{
-      id: row.id,
-      eventName: row.eventName,
-      aggregateId: row.aggregateId,
-      payload: row.payload,
-      attempts: row.attempts,
-      occurredAt: row.occurredAt,
-    }];
+    return [
+      {
+        id: row.id,
+        eventName: row.eventName,
+        aggregateId: row.aggregateId,
+        payload: row.payload,
+        attempts: row.attempts,
+        occurredAt: row.occurredAt,
+      },
+    ];
   }
 }
 
@@ -89,11 +91,7 @@ function setup(eventId: string) {
     emailService,
   );
   const bus = new EventBus();
-  bus.subscribe(
-    "UserRegistered",
-    handlerName,
-    handler.handle.bind(handler),
-  );
+  bus.subscribe("UserRegistered", handlerName, handler.handle.bind(handler));
   const tracker = new PrismaOutboxHandlerTracker();
   const relay = (owner: string) =>
     new OutboxRelay(new RegistrationOnlyStore(eventId), tracker, bus, {
@@ -237,7 +235,9 @@ describe("registration outbox recovery (real PostgreSQL)", () => {
   it("replays a dead-lettered verification event after an explicit operator action", async () => {
     const { user, event } = await newRegistration();
     const { emailService, relay } = setup(event.id);
-    vi.mocked(emailService.sendVerificationEmail).mockRejectedValue(new Error("SMTP queue unavailable"));
+    vi.mocked(emailService.sendVerificationEmail).mockRejectedValue(
+      new Error("SMTP queue unavailable"),
+    );
     // An event has exhausted nine previous durable attempts.
     await prisma.outboxEvent.update({
       where: { id: event.id },
@@ -246,23 +246,31 @@ describe("registration outbox recovery (real PostgreSQL)", () => {
 
     await relay("final-attempt").pollOnce();
     expect(await rowState(event.id)).toMatchObject({
-      publishedAt: null, attempts: 10, deadLetteredAt: expect.any(Date),
+      publishedAt: null,
+      attempts: 10,
+      deadLetteredAt: expect.any(Date),
     });
     expect(await trackedStatus(event.id)).toBe("FAILED");
     await relay("no-automatic-retry").pollOnce();
     expect((await rowState(event.id)).attempts).toBe(10);
 
-    const service = new OutboxMaintenanceService(new PrismaOutboxMaintenanceStore());
+    const service = new OutboxMaintenanceService(
+      new PrismaOutboxMaintenanceStore(),
+    );
     const replay = await service.replayDeadLetters([event.id]);
     expect(replay.replayedIds).toEqual([event.id]);
     expect(await rowState(event.id)).toMatchObject({
-      attempts: 0, deadLetteredAt: null, lastError: null,
+      attempts: 0,
+      deadLetteredAt: null,
+      lastError: null,
     });
 
     vi.mocked(emailService.sendVerificationEmail).mockResolvedValue(undefined);
     await relay("operator-replay").pollOnce();
     expect(await rowState(event.id)).toMatchObject({
-      attempts: 0, publishedAt: expect.any(Date), deadLetteredAt: null,
+      attempts: 0,
+      publishedAt: expect.any(Date),
+      deadLetteredAt: null,
     });
     expect(await trackedStatus(event.id)).toBe("SUCCESS");
     expect(emailService.sendVerificationEmail).toHaveBeenCalledWith(
@@ -271,5 +279,4 @@ describe("registration outbox recovery (real PostgreSQL)", () => {
       "registration-verification-" + user.id,
     );
   });
-
 });

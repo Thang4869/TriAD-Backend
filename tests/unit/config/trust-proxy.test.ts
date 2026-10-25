@@ -85,5 +85,4 @@ describe("TRUST_PROXY boundary (B10 / B7)", () => {
     expect(response.status).toBe(200);
     expect(response.body.ip).toBe("198.51.100.77");
   });
-
 });

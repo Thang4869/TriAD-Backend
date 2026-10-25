@@ -137,30 +137,34 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
         expect(flags.includes("Secure")).toBe(isProduction);
         expect(flags.includes("HttpOnly")).toBe(httpOnly);
         if (domain) expect(flags).toContain(`Domain=${domain}`);
-        else expect(flags.some((flag) => flag.startsWith("Domain="))).toBe(false);
+        else
+          expect(flags.some((flag) => flag.startsWith("Domain="))).toBe(false);
       }
-      expect(
-        cookies.find((value) => value.startsWith("csrfToken=")),
-      ).toContain(`csrfToken=${response.body.data.csrfToken};`);
+      expect(cookies.find((value) => value.startsWith("csrfToken="))).toContain(
+        `csrfToken=${response.body.data.csrfToken};`,
+      );
     },
   );
 
   it.each([
     ["email verification", "/api/auth/verify-email?token=fixture"],
     ["two-factor completion", "/api/auth/verify-totp"],
-  ])("issues session cookies after %s, without JWTs in JSON", async (_case, route) => {
-    const response = route.includes("?")
-      ? await request(app).get(route)
-      : await request(app)
-          .post(route)
-          .send({ preAuthToken: "test-preauth", token: "123456" });
+  ])(
+    "issues session cookies after %s, without JWTs in JSON",
+    async (_case, route) => {
+      const response = route.includes("?")
+        ? await request(app).get(route)
+        : await request(app)
+            .post(route)
+            .send({ preAuthToken: "test-preauth", token: "123456" });
 
-    expect(response.status).toBe(200);
-    expect(response.get("Set-Cookie")).toHaveLength(3);
-    expect(response.body.data.csrfToken).toMatch(/^[a-f0-9]{64}$/);
-    expect(response.body.data).not.toHaveProperty("accessToken");
-    expect(response.body.data).not.toHaveProperty("refreshToken");
-  });
+      expect(response.status).toBe(200);
+      expect(response.get("Set-Cookie")).toHaveLength(3);
+      expect(response.body.data.csrfToken).toMatch(/^[a-f0-9]{64}$/);
+      expect(response.body.data).not.toHaveProperty("accessToken");
+      expect(response.body.data).not.toHaveProperty("refreshToken");
+    },
+  );
 
   it("returns the same signed value in the JSON bootstrap and readable cookie, without JWT JSON", async () => {
     const response = await request(app)
@@ -233,7 +237,8 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
     "accepts a session-bound CSRF token for a protected %s request",
     async (method) => {
       const token = generateCsrfToken("session-1");
-      const response = await request(app)[method]("/api/cart/items")
+      const requestAgent = request(app);
+      const response = await requestAgent[method]("/api/cart/items")
         .set("Cookie", [
           `accessToken=${credentials.accessToken}`,
           `csrfToken=${token}`,
@@ -250,7 +255,9 @@ describe("CSRF issuance and authenticated write HTTP boundary", () => {
   const tamperedToken =
     (validToken[0] === "a" ? "b" : "a") + validToken.slice(1);
   const otherSessionToken = generateCsrfToken("session-2");
-  const rejectedTokens: Array<[string, string | undefined, string | undefined]> = [
+  const rejectedTokens: Array<
+    [string, string | undefined, string | undefined]
+  > = [
     ["missing CSRF cookie", undefined, validToken],
     ["missing CSRF header", validToken, undefined],
     ["mismatched header", validToken, otherSessionToken],

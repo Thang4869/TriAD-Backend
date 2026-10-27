@@ -741,7 +741,8 @@ describe("AuthService", () => {
 
       await service.verifyEmail("token");
 
-      const updateOrder = vi.mocked(repository.updateUser).mock.invocationCallOrder[0];
+      const updateOrder = vi.mocked(repository.updateUser).mock
+        .invocationCallOrder[0];
       const deleteOrder = tokenStore.delete.mock.invocationCallOrder[0];
       expect(updateOrder).toBeLessThan(deleteOrder);
     });

@@ -435,9 +435,11 @@ describe("OrdersService read-after-write fallback", () => {
       new PrismaOrderHistoryReadRepository(),
     );
 
-    expect(await prisma.orderHistoryProjection.findUnique({
-      where: { orderId: order.id },
-    })).toBeNull();
+    expect(
+      await prisma.orderHistoryProjection.findUnique({
+        where: { orderId: order.id },
+      }),
+    ).toBeNull();
 
     const result = await service.getOrderById(order.id, user.id);
     expect(result).toMatchObject({

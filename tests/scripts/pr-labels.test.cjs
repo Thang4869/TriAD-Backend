@@ -3,7 +3,10 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  commitType, desiredLabels, labelChanges, syncPullRequestLabels,
+  commitType,
+  desiredLabels,
+  labelChanges,
+  syncPullRequestLabels,
 } = require("../../scripts/pr-labels.cjs");
 
 test("parses scoped, breaking and case-insensitive Conventional Commit headers", () => {
@@ -16,23 +19,33 @@ test("parses scoped, breaking and case-insensitive Conventional Commit headers",
 
 test("ignores commit bodies, merge messages and unsupported types", () => {
   assert.equal(commitType("fix the application"), null);
-  assert.equal(commitType("Merge pull request #12\n\nfix(auth): not a header"), null);
+  assert.equal(
+    commitType("Merge pull request #12\n\nfix(auth): not a header"),
+    null,
+  );
   assert.equal(commitType("fix(scope):   "), null);
   assert.equal(commitType("unknown: something"), null);
   assert.equal(commitType(null), null);
 });
 
 test("deduplicates only matching types across ALL PR commits", () => {
-  const labels = desiredLabels([
-    "fix(auth): improve tokens",
-    "refactor(orders): reorganize domain",
-    "docs: explain decisions",
-    "fix(api): repair status",
-    "chore: format\n\nfeat: mentioned only in body",
-    "Merge branch 'main'",
-  ], false);
+  const labels = desiredLabels(
+    [
+      "fix(auth): improve tokens",
+      "refactor(orders): reorganize domain",
+      "docs: explain decisions",
+      "fix(api): repair status",
+      "chore: format\n\nfeat: mentioned only in body",
+      "Merge branch 'main'",
+    ],
+    false,
+  );
   assert.deepEqual(labels, [
-    "fix", "refactor", "docs", "chore", "needs-review",
+    "fix",
+    "refactor",
+    "docs",
+    "chore",
+    "needs-review",
   ]);
 });
 
@@ -41,39 +54,49 @@ test("draft PR has type labels but no needs-review", () => {
 });
 
 test("does not add type labels when there are no Conventional Commits", () => {
-  assert.deepEqual(desiredLabels(["Merge upstream", "Some random title"], false), [
-    "needs-review",
-  ]);
+  assert.deepEqual(
+    desiredLabels(["Merge upstream", "Some random title"], false),
+    ["needs-review"],
+  );
 });
 
 test("reconciliation removes stale types and preserves unrelated manual labels", () => {
   assert.deepEqual(
-    labelChanges(["fix", "refactor", "docs", "needs-review", "P0", "security-review"], [
-      "fix", "docs", "needs-review",
-    ]),
+    labelChanges(
+      ["fix", "refactor", "docs", "needs-review", "P0", "security-review"],
+      ["fix", "docs", "needs-review"],
+    ),
     { add: [], remove: ["refactor"] },
   );
-  assert.deepEqual(
-    labelChanges(["needs-review", "help wanted"], ["test"]),
-    { add: ["test"], remove: ["needs-review"] },
-  );
+  assert.deepEqual(labelChanges(["needs-review", "help wanted"], ["test"]), {
+    add: ["test"],
+    remove: ["needs-review"],
+  });
 });
 
 test("does not duplicate labels on repeated synchronize events", () => {
   const desired = ["fix", "docs", "needs-review"];
   assert.deepEqual(labelChanges(desired, desired), { add: [], remove: [] });
-  assert.deepEqual(
-    labelChanges(["Fix", "Docs", "needs-review"], desired),
-    { add: [], remove: [] },
-  );
+  assert.deepEqual(labelChanges(["Fix", "Docs", "needs-review"], desired), {
+    add: [],
+    remove: [],
+  });
 });
 
-function fakeGithub({ messages, current = [], draft = false, open = true, missing = [] }) {
+function fakeGithub({
+  messages,
+  current = [],
+  draft = false,
+  open = true,
+  missing = [],
+}) {
   const history = [];
   const labels = new Set(current);
-  const available = new Set([
-    "fix", "docs", "test", "refactor", "needs-review", "security",
-  ].filter((label) => !missing.includes(label)));
+  const available = new Set(
+    ["fix", "docs", "test", "refactor", "needs-review", "security"].filter(
+      (label) => !missing.includes(label),
+    ),
+  );
   const listCommits = Symbol("listCommits");
   const listLabelsOnIssue = Symbol("listLabelsOnIssue");
   const github = {
@@ -85,7 +108,8 @@ function fakeGithub({ messages, current = [], draft = false, open = true, missin
       issues: {
         listLabelsOnIssue,
         getLabel: async ({ name }) => {
-          if (!available.has(name)) throw Object.assign(new Error("Not found"), { status: 404 });
+          if (!available.has(name))
+            throw Object.assign(new Error("Not found"), { status: 404 });
         },
         createLabel: async ({ name }) => {
           history.push(["created", name]);
@@ -101,9 +125,10 @@ function fakeGithub({ messages, current = [], draft = false, open = true, missin
         },
       },
     },
-    paginate: async (method) => method === listCommits
-      ? messages.map((message) => ({ commit: { message } }))
-      : [...labels].map((name) => ({ name })),
+    paginate: async (method) =>
+      method === listCommits
+        ? messages.map((message) => ({ commit: { message } }))
+        : [...labels].map((name) => ({ name })),
   };
   return { github, history, labels };
 }
@@ -115,7 +140,9 @@ test("end-to-end reconciliation creates only missing type labels and removes sta
     missing: ["refactor"],
   });
   const result = await syncPullRequestLabels(github, {
-    owner: "owner", repo: "repo", pull_number: 42,
+    owner: "owner",
+    repo: "repo",
+    pull_number: 42,
   });
   assert.deepEqual(result.desired, ["fix", "refactor", "docs", "needs-review"]);
   assert.deepEqual(result.add, ["fix", "refactor", "docs"]);
@@ -126,16 +153,24 @@ test("end-to-end reconciliation creates only missing type labels and removes sta
     ["removed", "test"],
   ]);
   assert.deepEqual([...labels].sort(), [
-    "docs", "fix", "needs-review", "priority: P0", "refactor",
+    "docs",
+    "fix",
+    "needs-review",
+    "priority: P0",
+    "refactor",
   ]);
 });
 
 test("closed PRs are not modified", async () => {
   const { github, history } = fakeGithub({
-    messages: ["fix: issue"], current: [], open: false,
+    messages: ["fix: issue"],
+    current: [],
+    open: false,
   });
   const result = await syncPullRequestLabels(github, {
-    owner: "owner", repo: "repo", pull_number: 7,
+    owner: "owner",
+    repo: "repo",
+    pull_number: 7,
   });
   assert.equal(result.skipped, true);
   assert.deepEqual(history, []);

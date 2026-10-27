@@ -65,7 +65,10 @@ export class OrdersService implements IOrdersService {
     };
   }
 
-  async getOrderById(orderId: string, userId: string): Promise<OrderHistoryView> {
+  async getOrderById(
+    orderId: string,
+    userId: string,
+  ): Promise<OrderHistoryView> {
     const projected = await this.readPort.findByIdAndUser(orderId, userId);
     if (projected) {
       return projected;

@@ -24,7 +24,9 @@ export class RegistrationVerificationHandler {
     if (!user || user.isVerified) return;
 
     const token = createHmac("sha256", config.JWT_PREAUTH_SECRET)
-      .update(`registration-verification:v1:${event.aggregateId}:${event.occurredAt.toISOString()}`)
+      .update(
+        `registration-verification:v1:${event.aggregateId}:${event.occurredAt.toISOString()}`,
+      )
       .digest("hex");
 
     // Persist before enqueueing. Redis failure must propagate to outbox retry.

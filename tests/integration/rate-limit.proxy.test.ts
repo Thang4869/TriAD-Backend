@@ -62,7 +62,9 @@ describe("B7 real Redis rate-limit keying behind a reverse proxy", () => {
       .get("/api/example")
       .set("X-Forwarded-For", "198.51.100.11");
 
-    expect([first.status, second.status, limited.status]).toEqual([200, 200, 429]);
+    expect([first.status, second.status, limited.status]).toEqual([
+      200, 200, 429,
+    ]);
     expect(first.body.ip).toBe(second.body.ip);
     expect(first.body.ip).not.toBe("203.0.113.10");
   });
@@ -84,9 +86,12 @@ describe("B7 real Redis rate-limit keying behind a reverse proxy", () => {
       .get("/api/example")
       .set("X-Forwarded-For", "203.0.113.77, 198.51.100.21");
 
-    expect([one.status, spoof.status, limited.status, otherClient.status]).toEqual([
-      200, 200, 429, 200,
-    ]);
+    expect([
+      one.status,
+      spoof.status,
+      limited.status,
+      otherClient.status,
+    ]).toEqual([200, 200, 429, 200]);
     expect(one.body.ip).toBe("198.51.100.20");
     expect(spoof.body.ip).toBe("198.51.100.20");
     expect(otherClient.body.ip).toBe("198.51.100.21");

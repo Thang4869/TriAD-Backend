@@ -53,8 +53,12 @@ export const processEmail = async (job: { data: EmailJobData }) => {
     } catch {
       throw new Error("Verification URL must be an absolute HTTP(S) URL");
     }
-    if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname ||
-        parsed.username || parsed.password) {
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      !parsed.hostname ||
+      parsed.username ||
+      parsed.password
+    ) {
       throw new Error("Verification URL must be an absolute HTTP(S) URL");
     }
     verifyUrl = escapeHtml(data.verifyUrl);

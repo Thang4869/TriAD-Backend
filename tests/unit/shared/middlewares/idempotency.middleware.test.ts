@@ -141,7 +141,9 @@ describe("idempotencyMiddleware", () => {
     const middleware = idempotencyMiddleware();
     await middleware(req as Request, res as Response, next);
 
-    expect(JSON.parse(String(vi.mocked(redis.set).mock.calls.at(-1)?.[1]))).toMatchObject({ state: "IN_PROGRESS", ownerId: expect.any(String) });
+    expect(
+      JSON.parse(String(vi.mocked(redis.set).mock.calls.at(-1)?.[1])),
+    ).toMatchObject({ state: "IN_PROGRESS", ownerId: expect.any(String) });
     expect(redis.set).toHaveBeenCalledWith(
       "idempotency:anonymous:unknown:short-lived-claim",
       expect.stringContaining('"state":"IN_PROGRESS"'),
@@ -402,5 +404,4 @@ describe("idempotencyMiddleware", () => {
       vi.useRealTimers();
     }
   });
-
 });

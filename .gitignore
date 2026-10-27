@@ -61,3 +61,12 @@ uploads/
 tmp/
 temp/
 html
+# Environment backups (never commit - contains secrets)
+.env.backup-*
+.env.*.backup*
+*.env.backup*
+
+# Environment backups (never commit - contains secrets)
+.env.backup-*
+.env.*.backup*
+*.env.backup*

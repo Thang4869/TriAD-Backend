@@ -23,14 +23,22 @@ export class CartItem {
   }
 
   increase(amount: number): void {
-    if (!Number.isSafeInteger(amount) || amount <= 0 || !Number.isSafeInteger(this.quantity + amount))
-      throw new InvalidCartQuantityError("Amount must be a positive safe integer without overflow");
+    if (
+      !Number.isSafeInteger(amount) ||
+      amount <= 0 ||
+      !Number.isSafeInteger(this.quantity + amount)
+    )
+      throw new InvalidCartQuantityError(
+        "Amount must be a positive safe integer without overflow",
+      );
     this.quantity += amount;
   }
 
   decrease(amount: number): void {
     if (!Number.isSafeInteger(amount) || amount <= 0)
-      throw new InvalidCartQuantityError("Amount must be a positive safe integer");
+      throw new InvalidCartQuantityError(
+        "Amount must be a positive safe integer",
+      );
     if (this.quantity - amount < 0)
       throw new InvalidCartQuantityError("Quantity cannot be negative");
     this.quantity -= amount;
@@ -70,7 +78,9 @@ export class Cart extends AggregateRoot {
     quantity: number,
   ): void {
     if (!Number.isSafeInteger(quantity) || quantity <= 0)
-      throw new InvalidCartQuantityError("Quantity must be a positive safe integer");
+      throw new InvalidCartQuantityError(
+        "Quantity must be a positive safe integer",
+      );
     if (this._items.has(productId)) {
       const existing = this._items.get(productId)!;
       existing.increase(quantity);
@@ -87,7 +97,9 @@ export class Cart extends AggregateRoot {
 
   updateItemQuantity(productId: string, quantity: number): void {
     if (!Number.isSafeInteger(quantity) || quantity < 0)
-      throw new InvalidCartQuantityError("Quantity must be a non-negative safe integer");
+      throw new InvalidCartQuantityError(
+        "Quantity must be a non-negative safe integer",
+      );
     if (!this._items.has(productId)) {
       throw new CartItemNotFoundError(productId);
     }
@@ -126,7 +138,9 @@ export class Cart extends AggregateRoot {
     const cart = new Cart(data.id, data.userId);
     for (const item of data.items) {
       if (!Number.isSafeInteger(item.quantity) || item.quantity <= 0) {
-        throw new InvalidCartQuantityError("Persisted quantity must be a positive safe integer");
+        throw new InvalidCartQuantityError(
+          "Persisted quantity must be a positive safe integer",
+        );
       }
       cart._items.set(
         item.productId,

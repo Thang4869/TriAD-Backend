@@ -2,7 +2,10 @@
 
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { summarizeReport, markdownSummary } = require("../../scripts/summarize-npm-audit.cjs");
+const {
+  summarizeReport,
+  markdownSummary,
+} = require("../../scripts/summarize-npm-audit.cjs");
 
 function report(vulnerabilities, counts = {}) {
   return {
@@ -25,7 +28,11 @@ test("tracks direct versus transitive vulnerabilities", () => {
     report(
       {
         directPkg: { severity: "high", isDirect: true, fixAvailable: true },
-        transitivePkg: { severity: "moderate", isDirect: false, fixAvailable: false },
+        transitivePkg: {
+          severity: "moderate",
+          isDirect: false,
+          fixAvailable: false,
+        },
       },
       { high: 1, moderate: 1 },
     ),

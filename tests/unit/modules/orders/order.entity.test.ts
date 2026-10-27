@@ -303,7 +303,9 @@ describe("Order.place", () => {
     order.confirm();
 
     expect(() => order.place()).toThrow(OrderNotMutableError);
-    expect(order.domainEvents.some((event) => event.eventName === "OrderPlaced")).toBe(false);
+    expect(
+      order.domainEvents.some((event) => event.eventName === "OrderPlaced"),
+    ).toBe(false);
   });
 
   it("hydrate PENDING vẫn là đơn đã place, không được phát lại event", () => {
@@ -425,7 +427,6 @@ describe("Order.canTransition", () => {
       }
     }
   });
-
 });
 
 function hydrateData(
@@ -486,7 +487,9 @@ describe("Order safe quantity and placement invariants", () => {
     "rejects invalid line quantity %s without mutation or events",
     (quantity) => {
       const order = newOrder();
-      expect(() => order.addItem("p1", "Áo", quantity, new Money(0))).toThrow(InvalidOrderItemError);
+      expect(() => order.addItem("p1", "Áo", quantity, new Money(0))).toThrow(
+        InvalidOrderItemError,
+      );
       expect(order.items).toHaveLength(0);
       expect(order.domainEvents).toHaveLength(0);
     },
@@ -495,7 +498,9 @@ describe("Order safe quantity and placement invariants", () => {
   it("rejects merged quantity overflow before altering line items", () => {
     const order = newOrder();
     order.addItem("p1", "Áo", Number.MAX_SAFE_INTEGER, new Money(0));
-    expect(() => order.addItem("p1", "Áo", 1, new Money(0))).toThrow(InvalidOrderItemError);
+    expect(() => order.addItem("p1", "Áo", 1, new Money(0))).toThrow(
+      InvalidOrderItemError,
+    );
     expect(order.items[0].quantity).toBe(Number.MAX_SAFE_INTEGER);
     expect(order.domainEvents).toHaveLength(0);
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { swaggerSpec } from "@config/swagger";
-
+import { OrderStatus } from "@modules/orders/domain/order-status";
 describe("OpenAPI contract", () => {
   it("publishes stable contracts for critical frontend workflows", () => {
     const paths =
@@ -60,5 +60,60 @@ describe("OpenAPI contract", () => {
     expect(paths["/api/checkout/orders/{orderId}"]?.get?.deprecated).toBe(true);
     expect(paths["/api/orders"]?.get?.deprecated).not.toBe(true);
     expect(paths["/api/orders/{orderId}"]?.get?.deprecated).not.toBe(true);
+  });
+  it("keeps admin order list query status enum in sync with OrderStatus", () => {
+    const paths =
+      (
+        swaggerSpec as {
+          paths?: Record<
+            string,
+            {
+              get?: {
+                parameters?: Array<{
+                  name?: string;
+                  schema?: { enum?: unknown };
+                }>;
+              };
+            }
+          >;
+        }
+      ).paths ?? {};
+
+    const parameters = paths["/api/orders/admin/all"]?.get?.parameters ?? [];
+    const statusParam = parameters.find((param) => param.name === "status");
+
+    expect(statusParam?.schema?.enum).toEqual(Object.values(OrderStatus));
+  });
+
+  it("keeps admin order status update body status enum in sync with OrderStatus", () => {
+    const paths =
+      (
+        swaggerSpec as {
+          paths?: Record<
+            string,
+            {
+              patch?: {
+                requestBody?: {
+                  content?: {
+                    "application/json"?: {
+                      schema?: {
+                        properties?: {
+                          status?: { enum?: unknown };
+                        };
+                      };
+                    };
+                  };
+                };
+              };
+            }
+          >;
+        }
+      ).paths ?? {};
+
+    const statusSchema =
+      paths["/api/orders/admin/{orderId}/status"]?.patch?.requestBody
+        ?.content?.["application/json"]?.schema?.properties?.status;
+
+    expect(statusSchema?.enum).toEqual(Object.values(OrderStatus));
   });
 });

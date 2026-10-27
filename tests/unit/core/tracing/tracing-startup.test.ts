@@ -18,7 +18,7 @@ describe("OpenTelemetry NodeSDK startup and shutdown (B10)", () => {
           [
             'const { shutdownTracing } = require("./src/core/tracing/tracing");',
             'shutdownTracing().then(() => process.stdout.write("OTEL_SHUTDOWN_OK\\n"))',
-            '.catch((error) => { console.error(error); process.exitCode = 1; });',
+            ".catch((error) => { console.error(error); process.exitCode = 1; });",
           ].join(""),
         ],
         {

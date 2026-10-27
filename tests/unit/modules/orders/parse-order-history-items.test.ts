@@ -3,9 +3,16 @@ import { parseOrderHistoryItems } from "@modules/orders/infrastructure/repositor
 
 describe("parseOrderHistoryItems", () => {
   it("accepts a valid persisted item snapshot", () => {
-    expect(parseOrderHistoryItems([
-      { productId: "p-1", productName: "Product", quantity: 2, unitPrice: 120 },
-    ])).toEqual([
+    expect(
+      parseOrderHistoryItems([
+        {
+          productId: "p-1",
+          productName: "Product",
+          quantity: 2,
+          unitPrice: 120,
+        },
+      ]),
+    ).toEqual([
       { productId: "p-1", productName: "Product", quantity: 2, unitPrice: 120 },
     ]);
   });
@@ -20,9 +27,12 @@ describe("parseOrderHistoryItems", () => {
     [{ productId: "p-1", productName: "Product", quantity: 0, unitPrice: 10 }],
     [{ productId: "p-1", productName: "Product", quantity: 1, unitPrice: -5 }],
     [{ productId: "p-1", quantity: 1, unitPrice: 50 }],
-  ])("rejects corrupt projection JSON instead of returning an unsafe view", (value) => {
-    expect(() => parseOrderHistoryItems(value)).toThrow(
-      "Invalid order history projection items",
-    );
-  });
+  ])(
+    "rejects corrupt projection JSON instead of returning an unsafe view",
+    (value) => {
+      expect(() => parseOrderHistoryItems(value)).toThrow(
+        "Invalid order history projection items",
+      );
+    },
+  );
 });

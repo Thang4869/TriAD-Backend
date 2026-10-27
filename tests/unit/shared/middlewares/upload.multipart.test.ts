@@ -1,4 +1,8 @@
-import express, { type NextFunction, type Request, type Response } from "express";
+import express, {
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 import request from "supertest";
 import sharp from "sharp";
 import multer from "multer";
@@ -17,15 +21,17 @@ function uploadApp() {
     }
     res.status(200).json({ size: req.file.size });
   });
-  app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    if (error instanceof multer.MulterError) {
-      res.status(400).json({ code: error.code });
-      return;
-    }
-    res.status(400).json({
-      error: error instanceof Error ? error.message : "Unknown upload error",
-    });
-  });
+  app.use(
+    (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+      if (error instanceof multer.MulterError) {
+        res.status(400).json({ code: error.code });
+        return;
+      }
+      res.status(400).json({
+        error: error instanceof Error ? error.message : "Unknown upload error",
+      });
+    },
+  );
   return app;
 }
 
@@ -33,17 +39,21 @@ describe("upload middleware with real Multer and Sharp", () => {
   it.each(["jpeg", "png", "webp"] as const)(
     "accepts a real %s image within limits",
     async (format) => {
-      const image = await sharp({
+      const sharpInstance = sharp({
         create: {
           width: 8,
           height: 8,
           channels: 3,
           background: { r: 255, g: 255, b: 255 },
         },
-      })[format]().toBuffer();
+      });
+      const image = await sharpInstance[format]().toBuffer();
       const response = await request(uploadApp())
         .post("/upload")
-        .attach("image", image, { filename: `valid.${format}`, contentType: `image/${format}` });
+        .attach("image", image, {
+          filename: `valid.${format}`,
+          contentType: `image/${format}`,
+        });
       expect(response.status).toBe(200);
       expect(response.body.size).toBe(image.byteLength);
     },
@@ -92,6 +102,8 @@ describe("upload middleware with real Multer and Sharp", () => {
         contentType: "image/png",
       });
     expect(response.status).toBe(400);
-    expect(["LIMIT_FIELD_COUNT", "LIMIT_PART_COUNT"]).toContain(response.body.code);
+    expect(["LIMIT_FIELD_COUNT", "LIMIT_PART_COUNT"]).toContain(
+      response.body.code,
+    );
   });
 });

@@ -14,11 +14,7 @@ function fileFilter(
   cb: multer.FileFilterCallback,
 ) {
   if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-    return cb(
-      new ValidationError(
-        "Only JPEG, PNG or WEBP images are allowed",
-      ),
-    );
+    return cb(new ValidationError("Only JPEG, PNG or WEBP images are allowed"));
   }
   cb(null, true);
 }

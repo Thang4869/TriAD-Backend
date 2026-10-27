@@ -36,7 +36,9 @@ function storeFailure(
 ): DependencyUnavailableError {
   rateLimitStoreFailuresTotal.inc({ operation, reason });
   return new DependencyUnavailableError(
-    reason === "timeout" ? "Rate limit store timed out" : "Rate limit store unavailable",
+    reason === "timeout"
+      ? "Rate limit store timed out"
+      : "Rate limit store unavailable",
   );
 }
 

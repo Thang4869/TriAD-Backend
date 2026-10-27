@@ -213,7 +213,10 @@ describe("OrdersService.getOrderById", () => {
       "user-1",
     );
 
-    expect(repository.findByIdAndUser).toHaveBeenCalledWith("order-1", "user-1");
+    expect(repository.findByIdAndUser).toHaveBeenCalledWith(
+      "order-1",
+      "user-1",
+    );
     expect(result).toEqual({
       ...ORDER_HISTORY,
       items: [
@@ -239,7 +242,10 @@ describe("OrdersService.getOrderById", () => {
       createService(repository, readPort).getOrderById("order-1", "user-2"),
     ).rejects.toThrow(new ResourceNotFoundError("Order not found"));
 
-    expect(repository.findByIdAndUser).toHaveBeenCalledWith("order-1", "user-2");
+    expect(repository.findByIdAndUser).toHaveBeenCalledWith(
+      "order-1",
+      "user-2",
+    );
   });
 });
 

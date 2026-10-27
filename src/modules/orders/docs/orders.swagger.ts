@@ -57,7 +57,7 @@
  *         schema: { type: integer, default: 10 }
  *       - in: query
  *         name: status
- *         schema: { type: string, enum: [PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED] }
+ *         schema: { type: string, enum: [PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED] }
  *       - in: query
  *         name: userId
  *         schema: { type: string, format: uuid }
@@ -85,7 +85,7 @@
  *             type: object
  *             required: [status]
  *             properties:
- *               status: { type: string, enum: [PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED] }
+ *               status: { type: string, enum: [PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED] }
  *     responses:
  *       200:
  *         description: Trạng thái đã được cập nhật

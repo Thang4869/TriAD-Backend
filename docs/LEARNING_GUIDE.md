@@ -4,14 +4,14 @@ TriAD is a **small independent engineering project**, not a tutorial framework o
 
 ## A suggested technical journey
 
-| Stage | Follow these files | Engineering question to answer |
-| --- | --- | --- |
-| 1. HTTP boundary | [app.ts](../src/app.ts), [checkout routes](../src/modules/checkout/checkout.routes.ts) | Which inputs are validated and what happens before the domain layer? |
-| 2. Application and domain | [CheckoutService](../src/modules/checkout/checkout.service.ts), [Order aggregate](../src/modules/orders/domain/order.entity.ts) | Where do business rules live, and where is an idempotency retry resolved? |
-| 3. Transaction and inventory | [Prisma unit of work](../src/modules/checkout/infrastructure/prisma-checkout-unit-of-work.ts), [StockReservationService](../src/modules/checkout/services/stock-reservation.service.ts) | How does Serializable isolation prevent double spending of stock? |
-| 4. Durable asynchronous work | [OutboxRelay](../src/core/outbox/outbox-relay.ts), [Event durability](EVENT_DURABILITY.md) | What survives a crash between database commit and email enqueue? |
-| 5. Read models | [ProjectionHandler](../src/core/outbox/projection-handler.ts), [projection tests](../tests/integration/projection.ordering.test.ts) | Why can a list lag after checkout, and why should stale events not win? |
-| 6. Operations and security | [Restore drill](RECOVERY_DRILL.md), [Threat model](THREAT_MODEL.md), [Security policy](../SECURITY.md) | Which failures are covered by CI, and which still need real staging evidence? |
+| Stage                        | Follow these files                                                                                                                                                                      | Engineering question to answer                                                |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 1. HTTP boundary             | [app.ts](../src/app.ts), [checkout routes](../src/modules/checkout/checkout.routes.ts)                                                                                                  | Which inputs are validated and what happens before the domain layer?          |
+| 2. Application and domain    | [CheckoutService](../src/modules/checkout/checkout.service.ts), [Order aggregate](../src/modules/orders/domain/order.entity.ts)                                                         | Where do business rules live, and where is an idempotency retry resolved?     |
+| 3. Transaction and inventory | [Prisma unit of work](../src/modules/checkout/infrastructure/prisma-checkout-unit-of-work.ts), [StockReservationService](../src/modules/checkout/services/stock-reservation.service.ts) | How does Serializable isolation prevent double spending of stock?             |
+| 4. Durable asynchronous work | [OutboxRelay](../src/core/outbox/outbox-relay.ts), [Event durability](EVENT_DURABILITY.md)                                                                                              | What survives a crash between database commit and email enqueue?              |
+| 5. Read models               | [ProjectionHandler](../src/core/outbox/projection-handler.ts), [projection tests](../tests/integration/projection.ordering.test.ts)                                                     | Why can a list lag after checkout, and why should stale events not win?       |
+| 6. Operations and security   | [Restore drill](RECOVERY_DRILL.md), [Threat model](THREAT_MODEL.md), [Security policy](../SECURITY.md)                                                                                  | Which failures are covered by CI, and which still need real staging evidence? |
 
 ## Reproduce evidence before changing code
 

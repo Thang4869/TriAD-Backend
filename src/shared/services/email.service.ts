@@ -68,12 +68,16 @@ export class EmailService {
     verifyUrl: string,
     idempotencyKey?: string,
   ): Promise<void> {
-    await this.enqueueWithRetry("verify-email", {
-      to: user.email,
-      subject: "Xác thực tài khoản TriAD của bạn",
-      template: "verify-email",
-      data: { name: user.firstName, verifyUrl },
-    }, idempotencyKey);
+    await this.enqueueWithRetry(
+      "verify-email",
+      {
+        to: user.email,
+        subject: "Xác thực tài khoản TriAD của bạn",
+        template: "verify-email",
+        data: { name: user.firstName, verifyUrl },
+      },
+      idempotencyKey,
+    );
   }
 
   private async enqueueWithRetry(

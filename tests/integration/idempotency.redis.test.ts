@@ -169,7 +169,12 @@ describe("idempotencyMiddleware with real Redis", () => {
 
     const failed = createResponse(500);
     await idempotencyMiddleware()(
-      createRequest(`${idempotencyKey}-failure`, { amount: 100 }, userId, route) as Request,
+      createRequest(
+        `${idempotencyKey}-failure`,
+        { amount: 100 },
+        userId,
+        route,
+      ) as Request,
       failed.response,
       vi.fn(),
     );
@@ -182,7 +187,6 @@ describe("idempotencyMiddleware with real Redis", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(await redis.get(failedKey)).toBe(replacement);
   });
-
 });
 
 function createRequest(

@@ -94,7 +94,9 @@ export function wireDomainEvents(container: Container): void {
   eventBus.subscribe(
     UserRegisteredEvent.eventName,
     "RegistrationVerificationHandler",
-    registrationVerificationHandler.handle.bind(registrationVerificationHandler),
+    registrationVerificationHandler.handle.bind(
+      registrationVerificationHandler,
+    ),
   );
 
   // Dashboard projection.

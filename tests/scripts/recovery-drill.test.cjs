@@ -18,12 +18,18 @@ function protectedCheck(url, mode, environment = "test", enabled = "true") {
   }
 }
 test("allows only explicitly enabled ephemeral source and target databases", () => {
-  assert.doesNotThrow(() => protectedCheck(
-    "postgresql://test:test@127.0.0.1:5432/triad_recovery_source", "seed",
-  ));
-  assert.doesNotThrow(() => protectedCheck(
-    "postgresql://test:test@127.0.0.1:5432/triad_recovery_target", "verify",
-  ));
+  assert.doesNotThrow(() =>
+    protectedCheck(
+      "postgresql://test:test@127.0.0.1:5432/triad_recovery_source",
+      "seed",
+    ),
+  );
+  assert.doesNotThrow(() =>
+    protectedCheck(
+      "postgresql://test:test@127.0.0.1:5432/triad_recovery_target",
+      "verify",
+    ),
+  );
 });
 test("refuses a production database or accidental wrong phase", () => {
   assert.throws(
@@ -31,26 +37,48 @@ test("refuses a production database or accidental wrong phase", () => {
     /Refusing recovery drill/,
   );
   assert.throws(
-    () => protectedCheck("postgresql://test:test@host/triad_recovery_source", "verify"),
+    () =>
+      protectedCheck(
+        "postgresql://test:test@host/triad_recovery_source",
+        "verify",
+      ),
     /Refusing recovery drill/,
   );
 });
 test("refuses non-CI host or credentials even with an approved DB name", () => {
   assert.throws(
-    () => protectedCheck("postgresql://test:test@production.example.com:5432/triad_recovery_source", "seed"),
+    () =>
+      protectedCheck(
+        "postgresql://test:test@production.example.com:5432/triad_recovery_source",
+        "seed",
+      ),
     /Refusing recovery drill/,
   );
   assert.throws(
-    () => protectedCheck("postgresql://admin:password@127.0.0.1:5432/triad_recovery_target", "verify"),
+    () =>
+      protectedCheck(
+        "postgresql://admin:password@127.0.0.1:5432/triad_recovery_target",
+        "verify",
+      ),
     /Refusing recovery drill/,
   );
 });
 
 test("refuses the drill unless NODE_ENV=test and explicitly enabled", () => {
-  assert.throws(() => protectedCheck(
-    "postgresql://test:test@host/triad_recovery_source", "seed", "production", "true",
-  ));
-  assert.throws(() => protectedCheck(
-    "postgresql://test:test@host/triad_recovery_source", "seed", "test", "false",
-  ));
+  assert.throws(() =>
+    protectedCheck(
+      "postgresql://test:test@host/triad_recovery_source",
+      "seed",
+      "production",
+      "true",
+    ),
+  );
+  assert.throws(() =>
+    protectedCheck(
+      "postgresql://test:test@host/triad_recovery_source",
+      "seed",
+      "test",
+      "false",
+    ),
+  );
 });

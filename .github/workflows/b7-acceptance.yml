@@ -35,6 +35,7 @@ jobs:
       JWT_PREAUTH_SECRET: "b7-ci-disposable-preauth-secret-long-enough"
       TOTP_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
       LOG_LEVEL: error
+      FRONTEND_URL: "http://localhost:3000"
     steps:
       - uses: actions/checkout@v4
         with:

@@ -423,4 +423,25 @@ describe("OrdersService.updateOrderStatus", () => {
       }),
     ]);
   });
+
+  it("PENDING → PENDING trả ORDER.INVALID_TRANSITION và không update repository", async () => {
+    const repository = createRepository({
+      findById: vi.fn().mockResolvedValue({
+        ...ORDER,
+        status: OrderStatus.PENDING,
+      }),
+    });
+
+    await expect(
+      createService(repository).updateOrderStatus(
+        "order-1",
+        OrderStatus.PENDING,
+      ),
+    ).rejects.toMatchObject({
+      code: "ORDER.INVALID_TRANSITION",
+    });
+
+    expect(repository.updateStatusWithEvents).not.toHaveBeenCalled();
+    expect(eventBus.publish).not.toHaveBeenCalled();
+  });
 });

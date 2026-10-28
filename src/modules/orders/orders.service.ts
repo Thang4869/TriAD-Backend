@@ -11,6 +11,7 @@ import {
   OrderHistoryReadPort,
   OrderHistoryView,
 } from "./application/order-history-read.port";
+import { InvalidOrderTransitionError } from "@shared/domain/errors/domain-error";
 
 export interface IOrdersService {
   getOrders(
@@ -166,9 +167,7 @@ export class OrdersService implements IOrdersService {
         order.cancel();
         break;
       default:
-        throw new Error(
-          `Unsupported order status transition target: ${status}`,
-        );
+        throw new InvalidOrderTransitionError(order.status, status);
     }
 
     return this.repository.updateStatusWithEvents(

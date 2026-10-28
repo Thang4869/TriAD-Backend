@@ -93,5 +93,7 @@
  *         description: Không có quyền admin
  *       404:
  *         description: Không tìm thấy đơn hàng
+ *       409:
+ *         description: Trạng thái chuyển đổi không hợp lệ
  */
 export {};

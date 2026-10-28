@@ -116,4 +116,26 @@ describe("OpenAPI contract", () => {
 
     expect(statusSchema?.enum).toEqual(Object.values(OrderStatus));
   });
+
+  it("documents HTTP 409 for invalid admin order status transitions", () => {
+    const paths =
+      (
+        swaggerSpec as {
+          paths?: Record<
+            string,
+            {
+              patch?: {
+                responses?: Record<string, unknown>;
+              };
+            }
+          >;
+        }
+      ).paths ?? {};
+
+    expect(
+      paths["/api/orders/admin/{orderId}/status"]?.patch?.responses?.["409"],
+    ).toMatchObject({
+      description: "Trạng thái chuyển đổi không hợp lệ",
+    });
+  });
 });

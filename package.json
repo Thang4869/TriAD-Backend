@@ -131,6 +131,8 @@
     ]
   },
   "overrides": {
-    "proxy-addr": "2.0.8"
+    "proxy-addr": "2.0.8",
+    "qs": "6.17.1",
+    "systeminformation": "5.33.18"
   }
 }

@@ -4,19 +4,24 @@ const fs = require("node:fs");
 const { summarizeReport } = require("./summarize-npm-audit.cjs");
 
 /**
- * Only critical production vulnerabilities block this first rollout.
- * Higher severities remain visible in the separate non-blocking summary
- * and still need explicit review/remediation.
+ * High and critical production vulnerabilities block CI.
+ * Moderate and low findings remain visible in the risk summary for tracking.
  */
-function assertNoCriticalProductionVulnerabilities(report) {
+function assertNoHighOrCriticalProductionVulnerabilities(report) {
   summarizeReport(report);
-  const critical = report.metadata.vulnerabilities.critical;
+  const { high, critical } = report.metadata.vulnerabilities;
+
+  if (!Number.isSafeInteger(high) || high < 0) {
+    throw new Error("Production audit is missing a valid high count");
+  }
+
   if (!Number.isSafeInteger(critical) || critical < 0) {
     throw new Error("Production audit is missing a valid critical count");
   }
-  if (critical !== 0) {
+
+  if (high > 0 || critical > 0) {
     throw new Error(
-      `Production npm audit reports ${critical} critical vulnerabilities`,
+      `Production npm audit reports ${high} high and ${critical} critical vulnerabilities`,
     );
   }
 }
@@ -29,9 +34,9 @@ if (require.main === module) {
       );
     }
     const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-    assertNoCriticalProductionVulnerabilities(report);
+    assertNoHighOrCriticalProductionVulnerabilities(report);
     process.stdout.write(
-      "Production dependency audit: zero critical advisories\n",
+      "Production dependency audit: zero high and critical advisories\n",
     );
   } catch (error) {
     process.stderr.write(`${error.message}\n`);
@@ -39,4 +44,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { assertNoCriticalProductionVulnerabilities };
+module.exports = { assertNoHighOrCriticalProductionVulnerabilities };

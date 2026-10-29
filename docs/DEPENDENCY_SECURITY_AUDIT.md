@@ -19,8 +19,11 @@ Before this batch, [CI 40082483595](https://github.com/Thang4869/TriAD-Backend/a
 reported production **0 critical / 3 high / 2 moderate** and full graph
 **0 critical / 11 high / 11 moderate**. The table above is the local scan of this
 change; GitHub Actions publishes independent production/full JSON artifacts on
-the PR head. The existing CI audit policy still blocks critical production
-advisories only; a green gate by itself does not mean zero other severities.
+the PR head. The CI audit policy blocks any production dependency report containing one or
+more high or critical advisories. Moderate and low advisories remain visible in
+the risk summary for tracking but do not block CI under this gate. Production
+and full dependency graphs are audited separately. Audit execution or registry
+errors must fail CI rather than be interpreted as a clean vulnerability report.
 
 ## Remediation in this batch
 
@@ -54,6 +57,16 @@ telemetry script was blocked; Prisma generation was then run explicitly. A clean
 `npm ci --ignore-scripts` verifies manifest/lockfile consistency.
 
 ## Verification and remaining acceptance
+
+### CI dependency-audit gate
+
+- **Blocking:** production High > 0 or Critical > 0.
+- **Reported, non-blocking:** production Moderate and Low findings.
+- **Scope:** `npm audit --omit=dev` determines the production gate; `npm audit`
+  supplies the full dependency-graph report.
+- **Failure handling:** invalid audit JSON, missing or invalid High/Critical
+  counts, and audit execution errors must fail the gate. A generated JSON file
+  alone does not establish a successful scan.
 
 Local checks: clean install, Prisma generation, unit tests (including real
 Multer/Sharp, SMTP sink and migration contracts), typecheck, lint, architecture

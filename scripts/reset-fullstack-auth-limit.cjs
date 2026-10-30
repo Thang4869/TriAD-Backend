@@ -28,12 +28,24 @@ async function main() {
   }
 
   const envPath = path.resolve(__dirname, "../.env");
-  const env = dotenv.parse(fs.readFileSync(envPath));
+  const fileEnv = fs.existsSync(envPath)
+    ? dotenv.parse(fs.readFileSync(envPath))
+    : {};
 
-  const secret = env.JWT_ACCESS_SECRET;
+  const secret = process.env.JWT_ACCESS_SECRET || fileEnv.JWT_ACCESS_SECRET;
+
   if (!secret || secret.length < 32) {
     throw new Error("Backend JWT secret is missing or invalid");
   }
+
+  const redisUrl = process.env.REDIS_URL || fileEnv.REDIS_URL;
+
+  if (!redisUrl) {
+    throw new Error("Redis URL is missing");
+  }
+
+  const parsedRedisUrl = new URL(redisUrl);
+  parsedRedisUrl.pathname = `/${REDIS_DB}`;
 
   const digest = createHmac("sha256", secret)
     .update(`triad:rate-limit:v1:email:${EMAIL}`)
@@ -41,10 +53,7 @@ async function main() {
 
   const key = `ratelimit:auth:${REQUEST_IP}:${digest}`;
 
-  const redis = new Redis({
-    host: "127.0.0.1",
-    port: 6379,
-    db: REDIS_DB,
+  const redis = new Redis(parsedRedisUrl.toString(), {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
     connectTimeout: 3000,
@@ -53,17 +62,21 @@ async function main() {
   try {
     await redis.connect();
 
-    if (await redis.ping() !== "PONG") {
+    if ((await redis.ping()) !== "PONG") {
       throw new Error("Redis health check failed");
     }
 
     const type = await redis.type(key);
+
     if (type !== "string" && type !== "none") {
       throw new Error("Unexpected Redis key type; refusing deletion");
     }
 
     const deleted = await redis.del(key);
-    console.log(`E2E auth bucket reset: ${deleted === 1 ? "deleted" : "already clean"}`);
+
+    console.log(
+      `E2E auth bucket reset: ${deleted === 1 ? "deleted" : "already clean"}`,
+    );
   } finally {
     await redis.quit();
   }

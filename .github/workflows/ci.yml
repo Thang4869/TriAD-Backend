@@ -309,6 +309,11 @@ jobs:
 
       - name: Run full Frontend ↔ Backend journey
         working-directory: frontend
+        env:
+          TRIAD_BACKEND_PATH: ${{ github.workspace }}
+          FULLSTACK_E2E_CONFIRM: triad_fullstack_e2e
+          FULLSTACK_E2E_REDIS_DB: "15"
+          FULLSTACK_E2E_BACKEND_TARGET: test:triad_fullstack_e2e:redis15
         run: npm run test:e2e:fullstack
 
       - name: Show backend logs on failure

@@ -68,9 +68,7 @@ describe("assertNoHighOrCriticalProductionVulnerabilities", () => {
   });
 
   it("rejects a report missing vulnerability metadata", () => {
-    assert.throws(() =>
-      assertNoHighOrCriticalProductionVulnerabilities({}),
-    );
+    assert.throws(() => assertNoHighOrCriticalProductionVulnerabilities({}));
   });
 
   const invalidCounts = [
@@ -85,9 +83,7 @@ describe("assertNoHighOrCriticalProductionVulnerabilities", () => {
   for (const [description, overrides] of invalidCounts) {
     it(`rejects ${description}`, () => {
       assert.throws(() =>
-        assertNoHighOrCriticalProductionVulnerabilities(
-          makeReport(overrides),
-        ),
+        assertNoHighOrCriticalProductionVulnerabilities(makeReport(overrides)),
       );
     });
   }

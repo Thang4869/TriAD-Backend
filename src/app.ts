@@ -65,7 +65,16 @@ app.use(
       if (!origin) return callback(null, true);
 
       if (config.isDevelopment) {
-        return callback(null, true);
+        try {
+          const hostname = new URL(origin).hostname;
+          if (["localhost", "127.0.0.1", "::1"].includes(hostname)) {
+            return callback(null, true);
+          }
+        } catch {
+          return callback(new AuthorizationError("Origin not allowed"), false);
+        }
+
+        return callback(new AuthorizationError("Origin not allowed"), false);
       }
 
       const allowedOrigins = config.CORS_ORIGIN;

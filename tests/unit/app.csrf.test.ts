@@ -89,6 +89,48 @@ describe("production authentication origin boundary", () => {
   });
 });
 
+describe("development CORS origin boundary", () => {
+  const original = {
+    isDevelopment: config.isDevelopment,
+    isProduction: config.isProduction,
+    CORS_ORIGIN: config.CORS_ORIGIN,
+  };
+
+  beforeEach(() =>
+    Object.assign(config, {
+      isDevelopment: true,
+      isProduction: false,
+      CORS_ORIGIN: [],
+    }),
+  );
+
+  afterEach(() => {
+    Object.assign(config, original);
+  });
+
+  it.each(["http://localhost:5173", "http://127.0.0.1:4173"])(
+    "allows the development origin %s",
+    async (origin) => {
+      const response = await request(app).get("/health").set("Origin", origin);
+
+      expect(response.status).toBe(200);
+      expect(response.headers["access-control-allow-origin"]).toBe(origin);
+      expect(response.headers["access-control-allow-credentials"]).toBe("true");
+    },
+  );
+
+  it.each([
+    "http://192.168.1.10:5173",
+    "https://evil.example",
+    "not-an-origin",
+  ])("rejects the development origin %s", async (origin) => {
+    const response = await request(app).get("/health").set("Origin", origin);
+
+    expect(response.status).toBe(403);
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+});
+
 describe("global CSRF protection", () => {
   it("rejects an unsafe cookie-authenticated write without CSRF", async () => {
     const response = await request(app)

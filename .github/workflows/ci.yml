@@ -225,7 +225,7 @@ jobs:
 
       # Container jobs reach Actions services by hostname, not localhost.
       DATABASE_URL: postgresql://test:test@postgres:5432/triad_e2e
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis:6379/15
 
       JWT_ACCESS_SECRET: ci-fullstack-access-secret-32charslong-enough
       JWT_REFRESH_SECRET: ci-fullstack-refresh-secret-32chars-long-enough

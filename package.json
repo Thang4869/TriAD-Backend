@@ -15,6 +15,7 @@
     "dev": "cross-env TS_NODE_BASEURL=./ kill-port 5000 && cross-env TS_NODE_BASEURL=./ TS_NODE_FILES=true nodemon --exec ts-node -r tsconfig-paths/register src/server.ts",
     "kill-port": "kill-port 5000",
     "test:coverage": "vitest run --config vitest.workspace.mts --coverage",
+    "test:mutation": "stryker run stryker.config.mjs",
     "test:unit": "vitest run --config vitest.workspace.mts --project unit",
     "test:unit:coverage": "vitest run --config vitest.workspace.mts --project unit --coverage",
     "test:unit:watch": "vitest --config vitest.workspace.mts --project unit",
@@ -79,6 +80,8 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
     "@testcontainers/postgresql": "^12.2.1",
     "@testcontainers/redis": "^12.2.1",
     "@types/async-retry": "^1.4.9",

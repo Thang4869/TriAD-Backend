@@ -35,6 +35,7 @@ pnpm-debug.log*
 # Testing & Coverage
 coverage/
 .nyc_output/
+reports/mutation/
 
 # IDE
 .vscode/

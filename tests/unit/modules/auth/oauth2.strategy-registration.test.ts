@@ -32,6 +32,49 @@ describe("registerOAuthStrategies", () => {
     expect(useSpy).not.toHaveBeenCalled();
   });
 
+  it("delegates OAuth state verification to the state store", async () => {
+    process.env.GOOGLE_CLIENT_ID = "google-id";
+    process.env.GOOGLE_CLIENT_SECRET = "google-secret";
+    const { auth, state } = dependencies();
+    registerOAuthStrategies(auth, state);
+
+    const strategy = passport._strategy("google") as unknown as {
+      _stateStore: {
+        store: (...args: unknown[]) => void;
+        verify: (...args: unknown[]) => Promise<void>;
+      };
+    };
+    const storeCallback = vi.fn();
+    strategy._stateStore.store({}, storeCallback);
+    expect(storeCallback).toHaveBeenCalledWith(null);
+
+    const validCallback = vi.fn();
+    await strategy._stateStore.verify({}, "valid-state", {}, validCallback);
+    expect(state.consume).toHaveBeenCalledWith("GOOGLE", "valid-state");
+    expect(validCallback).toHaveBeenCalledWith(null, true, undefined);
+  });
+
+  it("rejects invalid OAuth state and forwards state-store errors", async () => {
+    process.env.GOOGLE_CLIENT_ID = "google-id";
+    process.env.GOOGLE_CLIENT_SECRET = "google-secret";
+    const { auth, state } = dependencies();
+    registerOAuthStrategies(auth, state);
+    const strategy = passport._strategy("google") as unknown as {
+      _stateStore: { verify: (...args: unknown[]) => Promise<void> };
+    };
+
+    vi.mocked(state.consume).mockResolvedValueOnce(false);
+    const invalidCallback = vi.fn();
+    await strategy._stateStore.verify({}, "invalid-state", {}, invalidCallback);
+    expect(invalidCallback).toHaveBeenCalledWith(null, false, "oauth_state_invalid");
+
+    const failure = new Error("state store unavailable");
+    vi.mocked(state.consume).mockRejectedValueOnce(failure);
+    const errorCallback = vi.fn();
+    await strategy._stateStore.verify({}, "state", {}, errorCallback);
+    expect(errorCallback).toHaveBeenCalledWith(failure, false);
+  });
+
   it("registers Google and Facebook only when each credential pair is present", () => {
     process.env.GOOGLE_CLIENT_ID = "google-id";
     process.env.GOOGLE_CLIENT_SECRET = "google-secret";

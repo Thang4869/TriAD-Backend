@@ -66,6 +66,36 @@ describe("PrismaOutboxRelayStore", () => {
     });
   });
 
+  it("does not issue a renewal query for an empty id list", async () => {
+    await expect(store.renewClaims("worker-1", [], 60)).resolves.toEqual([]);
+    expect(mockedPrisma.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it("renews only the ids returned by the database", async () => {
+    mockedPrisma.$queryRaw.mockResolvedValue([{ id: "outbox-1" }, { id: "outbox-3" }]);
+
+    await expect(store.renewClaims("worker-1", ["outbox-1", "outbox-2", "outbox-3"], 60))
+      .resolves.toEqual(["outbox-1", "outbox-3"]);
+    expect(mockedPrisma.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns false when the claim is no longer owned or active", async () => {
+    mockedPrisma.outboxEvent.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(store.updateClaimed("outbox-1", "other-worker", {
+      attempts: { increment: 1 },
+    })).resolves.toBe(false);
+  });
+
+  it("normalizes an empty observability result", async () => {
+    mockedPrisma.$queryRaw.mockResolvedValue([]);
+
+    await expect(store.getObservabilitySnapshot()).resolves.toEqual({
+      oldestPendingOccurredAt: null,
+      deadLetteredCount: 0,
+    });
+  });
+
   it("updates only an event claimed by the same owner", async () => {
     mockedPrisma.outboxEvent.updateMany.mockResolvedValue({ count: 1 });
 

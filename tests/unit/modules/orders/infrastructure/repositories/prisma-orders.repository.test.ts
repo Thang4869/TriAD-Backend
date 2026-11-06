@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import prisma from "@core/database/prisma";
 import { PrismaOrdersRepository } from "@modules/orders/infrastructure/repositories/prisma-orders.repository";
 import { ConflictError } from "@shared/errors/application-error";
 

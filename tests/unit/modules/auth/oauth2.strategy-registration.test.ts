@@ -41,8 +41,10 @@ describe("registerOAuthStrategies", () => {
     const useSpy = vi.spyOn(passport, "use");
     registerOAuthStrategies(auth, state);
     expect(useSpy).toHaveBeenCalledTimes(2);
-    expect(useSpy.mock.calls.map(([strategy]) => strategy.name)).toEqual(
-      expect.arrayContaining(["google", "facebook"]),
-    );
+    expect(
+      useSpy.mock.calls.map(([nameOrStrategy]) =>
+        typeof nameOrStrategy === "string" ? nameOrStrategy : nameOrStrategy.name,
+      ),
+    ).toEqual(expect.arrayContaining(["google", "facebook"]));
   });
 });

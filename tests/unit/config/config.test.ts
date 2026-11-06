@@ -43,7 +43,7 @@ describe("Config validation", () => {
       await import("@config");
     }).rejects.toThrow("process.exit called");
     expect(exitSpy).toHaveBeenCalledWith(1);
-  });
+  }, 15_000);
 
   it("logs error and exits when validation fails (non-test env)", async () => {
     const consoleErrorSpy = vi

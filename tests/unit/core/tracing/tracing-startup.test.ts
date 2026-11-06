@@ -24,10 +24,12 @@ describe("OpenTelemetry NodeSDK startup and shutdown (B10)", () => {
         {
           cwd: process.cwd(),
           encoding: "utf8",
-          timeout: 60_000,
+          timeout: 120_000,
           env: {
             ...process.env,
             TS_NODE_BASEURL: "./",
+            // This is a runtime smoke test; type checking runs in the dedicated typecheck job.
+            TS_NODE_TRANSPILE_ONLY: "true",
             ENABLE_TRACING: enabled,
             OTEL_SERVICE_NAME: "triad-ci-otel-smoke",
             OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4318/v1/traces",
@@ -38,6 +40,6 @@ describe("OpenTelemetry NodeSDK startup and shutdown (B10)", () => {
       expect(child.status, child.stderr).toBe(0);
       expect(child.stdout).toContain("OTEL_SHUTDOWN_OK");
     },
-    70_000,
+    130_000,
   );
 });

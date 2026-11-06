@@ -29,8 +29,10 @@ describe("DashboardController", () => {
     const controller = new DashboardController(service);
     const next = vi.fn();
 
-    await controller.getStats({} as Request, {} as Response, next);
+    controller.getStats({} as Request, {} as Response, next);
 
-    expect(next).toHaveBeenCalledWith(error);
+    await vi.waitFor(() => {
+      expect(next).toHaveBeenCalledWith(error);
+    });
   });
 });

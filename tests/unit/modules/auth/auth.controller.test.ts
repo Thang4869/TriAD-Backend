@@ -39,8 +39,12 @@ describe("AuthController", () => {
   it("rejects an unexpected login service result", async () => {
     const service = { login: vi.fn().mockResolvedValue({ unexpected: true }) } as unknown as AuthService;
     const next = vi.fn();
-    await new AuthController(service).login(request(), response(), next);
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: "Unexpected result from login" }));
+    new AuthController(service).login(request(), response(), next);
+    await vi.waitFor(() => {
+      expect(next).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "Unexpected result from login" }),
+      );
+    });
   });
 
   it("requires refresh token before calling service", async () => {

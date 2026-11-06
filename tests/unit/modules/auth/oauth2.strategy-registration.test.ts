@@ -27,9 +27,9 @@ describe("registerOAuthStrategies", () => {
     delete process.env.FACEBOOK_APP_ID;
     process.env.FACEBOOK_APP_SECRET = "secret";
     const { auth, state } = dependencies();
+    const useSpy = vi.spyOn(passport, "use");
     registerOAuthStrategies(auth, state);
-    expect(passport._strategy("google")).toBeFalsy();
-    expect(passport._strategy("facebook")).toBeFalsy();
+    expect(useSpy).not.toHaveBeenCalled();
   });
 
   it("registers Google and Facebook only when each credential pair is present", () => {
@@ -38,8 +38,11 @@ describe("registerOAuthStrategies", () => {
     process.env.FACEBOOK_APP_ID = "facebook-id";
     process.env.FACEBOOK_APP_SECRET = "facebook-secret";
     const { auth, state } = dependencies();
+    const useSpy = vi.spyOn(passport, "use");
     registerOAuthStrategies(auth, state);
-    expect(passport._strategy("google")).toBeTruthy();
-    expect(passport._strategy("facebook")).toBeTruthy();
+    expect(useSpy).toHaveBeenCalledTimes(2);
+    expect(useSpy.mock.calls.map(([strategy]) => strategy.name)).toEqual(
+      expect.arrayContaining(["google", "facebook"]),
+    );
   });
 });

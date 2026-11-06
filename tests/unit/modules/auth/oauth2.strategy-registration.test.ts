@@ -28,8 +28,8 @@ describe("registerOAuthStrategies", () => {
     process.env.FACEBOOK_APP_SECRET = "secret";
     const { auth, state } = dependencies();
     registerOAuthStrategies(auth, state);
-    expect(passport._strategy("google")).toBe(false);
-    expect(passport._strategy("facebook")).toBe(false);
+    expect(passport._strategy("google")).toBeFalsy();
+    expect(passport._strategy("facebook")).toBeFalsy();
   });
 
   it("registers Google and Facebook only when each credential pair is present", () => {

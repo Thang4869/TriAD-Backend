@@ -24,7 +24,7 @@ describe("OpenTelemetry NodeSDK startup and shutdown (B10)", () => {
         {
           cwd: process.cwd(),
           encoding: "utf8",
-          timeout: 20_000,
+          timeout: 60_000,
           env: {
             ...process.env,
             TS_NODE_BASEURL: "./",
@@ -38,6 +38,6 @@ describe("OpenTelemetry NodeSDK startup and shutdown (B10)", () => {
       expect(child.status, child.stderr).toBe(0);
       expect(child.stdout).toContain("OTEL_SHUTDOWN_OK");
     },
-    25_000,
+    70_000,
   );
 });

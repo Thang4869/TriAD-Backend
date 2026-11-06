@@ -12,12 +12,26 @@ afterEach(() => {
   }
   passport.unuse("google");
   passport.unuse("facebook");
+  vi.restoreAllMocks();
 });
 
 function dependencies() {
   const auth = { resolveOAuthIdentity: vi.fn(), generateTokens: vi.fn() } as unknown as AuthService;
   const state = { consume: vi.fn().mockResolvedValue(true) } as unknown as OAuthStateStorePort;
   return { auth, state };
+}
+
+function getRegisteredStrategy(name: string) {
+  return (
+    passport as unknown as {
+      _strategy: (strategyName: string) => {
+        _stateStore: {
+          store: (...args: unknown[]) => void;
+          verify: (...args: unknown[]) => Promise<void>;
+        };
+      };
+    }
+  )._strategy(name);
 }
 
 describe("registerOAuthStrategies", () => {
@@ -38,12 +52,7 @@ describe("registerOAuthStrategies", () => {
     const { auth, state } = dependencies();
     registerOAuthStrategies(auth, state);
 
-    const strategy = passport._strategy("google") as unknown as {
-      _stateStore: {
-        store: (...args: unknown[]) => void;
-        verify: (...args: unknown[]) => Promise<void>;
-      };
-    };
+    const strategy = getRegisteredStrategy("google");
     const storeCallback = vi.fn();
     strategy._stateStore.store({}, storeCallback);
     expect(storeCallback).toHaveBeenCalledWith(null);
@@ -59,9 +68,7 @@ describe("registerOAuthStrategies", () => {
     process.env.GOOGLE_CLIENT_SECRET = "google-secret";
     const { auth, state } = dependencies();
     registerOAuthStrategies(auth, state);
-    const strategy = passport._strategy("google") as unknown as {
-      _stateStore: { verify: (...args: unknown[]) => Promise<void> };
-    };
+    const strategy = getRegisteredStrategy("google");
 
     vi.mocked(state.consume).mockResolvedValueOnce(false);
     const invalidCallback = vi.fn();
@@ -83,7 +90,6 @@ describe("registerOAuthStrategies", () => {
     const { auth, state } = dependencies();
     const useSpy = vi.spyOn(passport, "use");
     registerOAuthStrategies(auth, state);
-    expect(useSpy).toHaveBeenCalledTimes(2);
     expect(useSpy).toHaveBeenCalledTimes(2);
   });
 });

@@ -41,14 +41,14 @@ jobs:
       CLOUDINARY_API_KEY: acceptance
       CLOUDINARY_API_SECRET: acceptance
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Exercise the actual production Compose with disposable dependencies
         run: bash scripts/acceptance/production-compose.sh
       - name: Upload sanitized acceptance evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: production-compose-evidence
           path: production-compose-evidence.json

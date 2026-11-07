@@ -18,17 +18,17 @@ jobs:
     env:
       HOSTED_INGRESS_ACCEPTANCE: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Verify bounded hosted 429 and spoof-resistant client budget
         run: node scripts/acceptance/hosted-ingress-429.cjs
       - name: Upload address-free acceptance evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hosted-ingress-429-evidence
           path: hosted-ingress-429-evidence.json

@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import prisma from "@core/database/prisma";
 import { CheckoutService } from "@modules/checkout/checkout.service";
+import { OrdersService } from "@modules/orders/orders.service";
+import { PrismaOrdersRepository } from "@modules/orders/infrastructure/repositories/prisma-orders.repository";
+import { PrismaOrderHistoryReadRepository } from "@modules/orders/infrastructure/repositories/prisma-order-history-read.repository";
 import { PrismaCheckoutRepository } from "@modules/checkout/infrastructure/repositories/prisma-checkout.repository";
 import { PrismaCheckoutUnitOfWork } from "@modules/checkout/infrastructure/prisma-checkout-unit-of-work";
 import { PricingService } from "@modules/checkout/services/pricing.service";
@@ -148,6 +151,52 @@ describe("Checkout recovery and pricing consistency (real PostgreSQL, T2)", () =
     expect(productAfter.stock).toBe(4);
     expect(productAfter.version).toBe(1);
     expect(remainingCartItems).toBe(0);
+  });
+
+  it("serves committed order details before the history projection catches up", async () => {
+    const { user, product } = await seededCart();
+
+    const placed = await checkoutService(
+      new PrismaCheckoutRepository(),
+    ).checkout(user.id, {
+      idempotencyKey: `t2-projection-lag-${randomUUID()}`,
+      paymentMethod: "COD",
+      address: "Test address",
+      phone: "0123456789",
+    });
+
+    const readRepository = new PrismaOrderHistoryReadRepository();
+
+    await expect(
+      readRepository.findByIdAndUser(placed.order.id, user.id),
+    ).resolves.toBeNull();
+
+    const detail = await new OrdersService(
+      new PrismaOrdersRepository(),
+      readRepository,
+    ).getOrderById(placed.order.id, user.id);
+
+    expect(detail).toMatchObject({
+      orderId: placed.order.id,
+      userId: user.id,
+      orderNumber: placed.order.orderNumber,
+      total: placed.order.total,
+      items: [
+        {
+          productId: product.id,
+          productName: product.name,
+          quantity: 1,
+          unitPrice: 1000,
+        },
+      ],
+    });
+
+    await expect(
+      new OrdersService(
+        new PrismaOrdersRepository(),
+        readRepository,
+      ).getOrderById(placed.order.id, randomUUID()),
+    ).rejects.toThrow("Order not found");
   });
 
   it("charges the locked database price rather than a stale cart snapshot", async () => {

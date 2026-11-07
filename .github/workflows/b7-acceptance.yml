@@ -37,10 +37,10 @@ jobs:
       LOG_LEVEL: error
       FRONTEND_URL: "http://localhost:3000"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -63,7 +63,7 @@ jobs:
         run: node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/acceptance/b7-isolated-proxy-redis.cjs
       - name: Upload sanitized drill evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: b7-isolated-evidence
           path: b7-isolated-evidence.json

@@ -24,10 +24,10 @@ jobs:
     env:
       RECOVERY_RUNTIME_ENABLED: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -39,7 +39,7 @@ jobs:
         run: bash scripts/acceptance/recovery-runtime.sh
       - name: Publish sanitized timing and recovery evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: recovery-runtime-evidence
           path: recovery-runtime-evidence.json

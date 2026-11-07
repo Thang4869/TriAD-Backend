@@ -35,6 +35,21 @@ Do not production-wire a distributed payment/refund Saga until real
 external provider adapters, settlement/refund transitions and durable
 compensation behavior are tested.
 
+## Order-history consistency
+
+- The successful checkout response is the immediate confirmation of the committed
+  order and is returned from the write transaction; it does not wait for the
+  asynchronous history projection.
+- Order detail reads prefer `OrderHistoryProjection`. If the requested row is
+  not present yet, `OrdersService.getOrderById` falls back to the authoritative
+  write repository, scoped by both `orderId` and `userId`.
+- Order-list reads continue to use the projection and are therefore eventually
+  consistent. The system does not promise a fixed projection-lag SLA until
+  production lag is measured and an explicit SLO is adopted.
+- Projection query errors propagate to the caller. They must not be treated as
+  a cache miss or silently converted into a 404; the write-side fallback is
+  only for a successful projection lookup that returns no row.
+
 ## Consequences and trade-offs
 
 - **Benefits:** enforceable single-database invariants, fewer partial-write

@@ -29,6 +29,7 @@ function getRegisteredStrategy(name: string) {
           store: (...args: unknown[]) => void;
           verify: (...args: unknown[]) => Promise<void>;
         };
+        _verify: (...args: unknown[]) => Promise<void>;
       };
     }
   )._strategy(name);

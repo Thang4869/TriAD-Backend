@@ -93,4 +93,102 @@ describe("registerOAuthStrategies", () => {
     registerOAuthStrategies(auth, state);
     expect(useSpy).toHaveBeenCalledTimes(2);
   });
+
+  it("runs the Google profile callback and returns generated tokens", async () => {
+    process.env.GOOGLE_CLIENT_ID = "google-id";
+    process.env.GOOGLE_CLIENT_SECRET = "google-secret";
+    const { auth, state } = dependencies();
+    const user = { id: "google-user" };
+    const tokens = { accessToken: "access", refreshToken: "refresh" };
+    vi.mocked(auth.resolveOAuthIdentity).mockResolvedValue(user as never);
+    vi.mocked(auth.generateTokens).mockResolvedValue(tokens as never);
+    registerOAuthStrategies(auth, state);
+
+    const done = vi.fn();
+    await getRegisteredStrategy("google")._verify(
+      "access",
+      "refresh",
+      {
+        id: "google-subject",
+        emails: [{ value: "USER@example.com", verified: true }],
+        name: { givenName: "Ada", familyName: "Lovelace" },
+      },
+      done,
+    );
+
+    expect(auth.resolveOAuthIdentity).toHaveBeenCalledWith({
+      provider: "GOOGLE",
+      subject: "google-subject",
+      email: "user@example.com",
+      emailVerified: true,
+      firstName: "Ada",
+      lastName: "Lovelace",
+    });
+    expect(auth.generateTokens).toHaveBeenCalledWith(user);
+    expect(done).toHaveBeenCalledWith(null, { user, tokens });
+  });
+
+  it("runs the Facebook profile callback and returns generated tokens", async () => {
+    process.env.FACEBOOK_APP_ID = "facebook-id";
+    process.env.FACEBOOK_APP_SECRET = "facebook-secret";
+    const { auth, state } = dependencies();
+    const user = { id: "facebook-user" };
+    const tokens = { accessToken: "access", refreshToken: "refresh" };
+    vi.mocked(auth.resolveOAuthIdentity).mockResolvedValue(user as never);
+    vi.mocked(auth.generateTokens).mockResolvedValue(tokens as never);
+    registerOAuthStrategies(auth, state);
+
+    const done = vi.fn();
+    await getRegisteredStrategy("facebook")._verify(
+      "access",
+      "refresh",
+      {
+        id: "facebook-subject",
+        emails: [{ value: "USER@example.com" }],
+        name: { givenName: "Grace", familyName: "Hopper" },
+      },
+      done,
+    );
+
+    expect(auth.resolveOAuthIdentity).toHaveBeenCalledWith({
+      provider: "FACEBOOK",
+      subject: "facebook-subject",
+      email: "user@example.com",
+      emailVerified: false,
+      firstName: "Grace",
+      lastName: "Hopper",
+    });
+    expect(auth.generateTokens).toHaveBeenCalledWith(user);
+    expect(done).toHaveBeenCalledWith(null, { user, tokens });
+  });
+
+  it.each(["google", "facebook"])(
+    "forwards %s profile callback failures to Passport",
+    async (provider) => {
+      if (provider === "google") {
+        process.env.GOOGLE_CLIENT_ID = "google-id";
+        process.env.GOOGLE_CLIENT_SECRET = "google-secret";
+      } else {
+        process.env.FACEBOOK_APP_ID = "facebook-id";
+        process.env.FACEBOOK_APP_SECRET = "facebook-secret";
+      }
+      const { auth, state } = dependencies();
+      const failure = new Error("identity resolution failed");
+      vi.mocked(auth.resolveOAuthIdentity).mockRejectedValue(failure);
+      registerOAuthStrategies(auth, state);
+
+      const done = vi.fn();
+      await getRegisteredStrategy(provider)._verify(
+        "access",
+        "refresh",
+        provider === "google"
+          ? { id: "subject", emails: [{ value: "user@example.com", verified: true }] }
+          : { id: "subject", emails: [{ value: "user@example.com" }] },
+        done,
+      );
+
+      expect(done).toHaveBeenCalledWith(failure, undefined);
+    },
+  );
+
 });

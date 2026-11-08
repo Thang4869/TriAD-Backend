@@ -8,6 +8,83 @@ const { archive } = require("../acceptance/recovery-archive.cjs");
 
 const HOST = "dpg-dbcbq8ff3r2c739hbi3g-a.singapore-postgres.render.com";
 const IMAGE = "postgres:18-alpine";
+const LOG_RETENTION = 14;
+
+function executionId() {
+  return crypto.randomUUID();
+}
+
+function redact(value) {
+  return String(value)
+    .replace(/postgres(?:ql)?:\/\/[^\s"'`]+/gi, "[REDACTED_DATABASE_URL]")
+    .replace(
+      /(PGPASSWORD|PASSWORD|RECOVERY_KEY|DATABASE_URL)=([^\r\n\s]+)/gi,
+      "$1=[REDACTED]",
+    )
+    .replace(/\b[a-f0-9]{64}\b/gi, "[REDACTED_KEY]");
+}
+
+function classifyError(error) {
+  const message = String(error && error.message ? error.message : error);
+  if (
+    /connection to server|ssl connection|network|dns|host|timeout|timedout|econn|enotfound|no response/i.test(
+      message,
+    )
+  )
+    return "network";
+  if (/docker executable|docker daemon|container|image/i.test(message))
+    return "docker";
+  if (/enoent|eacces|enospc|filesystem|directory|file/i.test(message))
+    return "filesystem";
+  if (/password|auth|role .* does not exist/i.test(message))
+    return "authentication";
+  if (/archive|cipher|decrypt|encrypt|key|integrity/i.test(message))
+    return "encryption";
+  if (/restore|schema|migration|pg_restore/i.test(message)) return "restore";
+  return "unknown";
+}
+
+function createLogger(env = process.env, id = executionId()) {
+  const directory = path.join(
+    env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"),
+    "TriAD-Backup",
+    "logs",
+  );
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const logPath = path.join(directory, "backup-" + id + ".log");
+  const stream = fs.createWriteStream(logPath, { flags: "wx", mode: 0o600 });
+  const write = (level, stage, message, details) => {
+    const record = {
+      timestamp: new Date().toISOString(),
+      executionId: id,
+      level,
+      stage,
+      message: redact(message),
+    };
+    if (details) record.details = redact(details);
+    stream.write(JSON.stringify(record) + "\n");
+  };
+  const close = () =>
+    new Promise((resolve) => {
+      stream.end(resolve);
+    });
+  try {
+    const files = fs
+      .readdirSync(directory)
+      .filter((name) => /^backup-[a-f0-9-]+\.log$/.test(name))
+      .map((name) => ({
+        name,
+        time: fs.statSync(path.join(directory, name)).mtimeMs,
+      }))
+      .sort((a, b) => b.time - a.time);
+    for (const file of files.slice(LOG_RETENTION))
+      fs.rmSync(path.join(directory, file.name), { force: true });
+  } catch (error) {
+    write("WARN", "configuration", "Log rotation failed", error.message);
+  }
+  return { id, path: logPath, write, close };
+}
+
 function sourceEnvironment(value, fixture = false) {
   const url = new URL(value);
   const expected = fixture
@@ -50,8 +127,14 @@ function docker(args, options = {}) {
     timeout: 180000,
     ...options,
   });
-  if (result.error || result.status !== 0)
-    throw new Error("Docker backup/restore step failed");
+  if (result.error)
+    throw new Error("Docker executable unavailable: " + result.error.code);
+  if (result.status !== 0) {
+    const detail = result.stderr ? result.stderr.toString().trim() : "";
+    throw new Error(
+      "Docker backup/restore step failed" + (detail ? ": " + detail : ""),
+    );
+  }
   return result.stdout;
 }
 function existingOutsideRepo(value) {
@@ -79,18 +162,34 @@ function localBackupFile(value) {
   return file;
 }
 async function run(mode, env = process.env) {
-  if (!["backup", "verify"].includes(mode))
-    throw new Error("Choose backup or verify");
-  const key = existingOutsideRepo(env.PORTFOLIO_BACKUP_KEY_FILE);
-  if (!/^[a-f0-9]{64}$/.test(fs.readFileSync(key, "utf8").trim()))
-    throw new Error("Invalid recovery key");
-  const fixture = env.PORTFOLIO_BACKUP_FIXTURE === "true";
-  if (
-    fixture &&
-    (env.CI !== "true" ||
-      env.PORTFOLIO_BACKUP_NETWORK !== "triad-portfolio-test")
-  )
-    throw new Error("Fixture mode is CI-only");
+  const logger = createLogger(env);
+  let currentStage = "configuration";
+  const stage = (name, message) => {
+    currentStage = name;
+    logger.write("INFO", name, message);
+  };
+  stage("configuration", "Backup execution started");
+  let key;
+  let fixture;
+  try {
+    if (!["backup", "verify"].includes(mode))
+      throw new Error("Choose backup or verify");
+    key = existingOutsideRepo(env.PORTFOLIO_BACKUP_KEY_FILE);
+    if (!/^[a-f0-9]{64}$/.test(fs.readFileSync(key, "utf8").trim()))
+      throw new Error("Invalid recovery key");
+    fixture = env.PORTFOLIO_BACKUP_FIXTURE === "true";
+    if (
+      fixture &&
+      (env.CI !== "true" ||
+        env.PORTFOLIO_BACKUP_NETWORK !== "triad-portfolio-test")
+    )
+      throw new Error("Fixture mode is CI-only");
+    stage("configuration", "Configuration loaded");
+  } catch (error) {
+    logger.write("ERROR", currentStage, error.message, classifyError(error));
+    await logger.close();
+    throw error;
+  }
   const network = fixture ? ["--network", "triad-portfolio-test"] : [];
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "triad-portfolio-"));
   fs.chmodSync(temporary, 0o700);
@@ -102,6 +201,7 @@ async function run(mode, env = process.env) {
   try {
     let encrypted;
     if (mode === "backup") {
+      stage("source-validation", "Validating configured backup source");
       const source = sourceEnvironment(
         env.PORTFOLIO_BACKUP_DATABASE_URL,
         fixture,
@@ -109,6 +209,7 @@ async function run(mode, env = process.env) {
       const directory = existingOutsideRepo(env.PORTFOLIO_BACKUP_DIRECTORY);
       if (!fs.statSync(directory).isDirectory())
         throw new Error("Select a backup directory");
+      stage("source-validation", "Backup source validated");
       const envFile = path.join(temporary, "source.env");
       fs.writeFileSync(
         envFile,
@@ -120,6 +221,8 @@ async function run(mode, env = process.env) {
       const dump = path.join(temporary, "source.dump");
       const fd = fs.openSync(dump, "wx", 0o600);
       try {
+        stage("docker-startup", "Starting disposable dump container");
+        stage("postgres-dump", "Creating read-only PostgreSQL custom dump");
         docker(
           [
             "run",
@@ -151,12 +254,16 @@ async function run(mode, env = process.env) {
           crypto.randomBytes(4).toString("hex") +
           ".dump.enc",
       );
+      stage("encryption", "Encrypting PostgreSQL dump");
       await archive("encrypt", dump, encrypted, key);
       // Never prune old backups automatically. The owner keeps known-good copies.
       console.log("Encrypted backup saved: " + encrypted);
+      stage("encryption", "Encrypted archive published");
     } else {
       encrypted = localBackupFile(env.PORTFOLIO_BACKUP_ARCHIVE);
+      stage("source-validation", "Selected local archive for verification");
     }
+    stage("archive-verification", "Decrypting and verifying archive integrity");
     fs.rmSync(encrypted + ".verified.json", { force: true });
     const restored = path.join(temporary, "restored.dump");
     await archive("decrypt", encrypted, restored, key);
@@ -171,6 +278,10 @@ async function run(mode, env = process.env) {
       { mode: 0o600 },
     );
     targetStarted = true;
+    stage(
+      "docker-startup",
+      "Starting isolated PostgreSQL 18 restore container",
+    );
     docker([
       "run",
       "-d",
@@ -207,6 +318,7 @@ async function run(mode, env = process.env) {
     }
     if (!ready)
       throw new Error("Disposable restore database did not become ready");
+    stage("disposable-restore", "Restoring archive into disposable database");
     const fd = fs.openSync(restored, "r");
     try {
       docker(
@@ -244,6 +356,7 @@ async function run(mode, env = process.env) {
     ]);
     if (verified.toString().trim() !== "t")
       throw new Error("Restored schema verification failed");
+    stage("schema-verification", "Required schema verified");
     const evidence = {
       result: "PASS",
       verifiedAt: new Date().toISOString(),
@@ -265,8 +378,18 @@ async function run(mode, env = process.env) {
     console.log(
       "PASS: encrypted archive restored into a disposable PostgreSQL 18 container",
     );
+    stage("cleanup", "Backup verification completed successfully");
     return { encrypted, evidence };
+  } catch (error) {
+    logger.write(
+      "ERROR",
+      currentStage,
+      error.message,
+      "category=" + classifyError(error),
+    );
+    throw error;
   } finally {
+    stage("cleanup", "Removing disposable containers and temporary files");
     spawnSync("docker", ["rm", "--force", "--volumes", dumper], {
       stdio: "ignore",
       timeout: 15000,
@@ -277,13 +400,27 @@ async function run(mode, env = process.env) {
         timeout: 15000,
       });
     fs.rmSync(temporary, { recursive: true, force: true });
+    await logger.close();
   }
 }
 if (require.main === module)
-  run(process.argv[2]).catch(() => {
+  run(process.argv[2]).catch((error) => {
     console.error(
-      "Backup/verification FAILED. Check Docker, source access, key and free disk space. No hosted restore was attempted.",
+      "Backup/verification FAILED [" +
+        classifyError(error) +
+        "]: " +
+        redact(error.message),
+    );
+    console.error(
+      "See the per-execution log under %LOCALAPPDATA%\\TriAD-Backup\\logs.",
     );
     process.exitCode = 1;
   });
-module.exports = { sourceEnvironment, localBackupFile, run };
+module.exports = {
+  sourceEnvironment,
+  localBackupFile,
+  run,
+  classifyError,
+  redact,
+  createLogger,
+};

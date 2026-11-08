@@ -11,6 +11,27 @@ $configPath = Join-Path $stateDirectory 'settings.json'
 $scriptPath = $PSCommandPath
 $nodeScript = Join-Path $PSScriptRoot 'portfolio-backup.cjs'
 $taskName = 'TriAD Portfolio Backup'
+$logDirectory = Join-Path $stateDirectory 'logs'
+$executionId = [guid]::NewGuid().ToString()
+
+function Write-BackupLog {
+    param([string]$Level, [string]$Stage, [string]$Message)
+    try {
+        New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
+        $record = [ordered]@{
+            timestamp = [DateTime]::UtcNow.ToString('o')
+            executionId = $executionId
+            level = $Level
+            stage = $Stage
+            message = ($Message -replace '(?i)postgres(?:ql)?://[^\s''"`]+', '[REDACTED_DATABASE_URL]' -replace '(?i)(PASSWORD|DATABASE_URL|RECOVERY_KEY)=[^\s]+', '$1=[REDACTED]')
+        }
+        ($record | ConvertTo-Json -Compress) | Add-Content -LiteralPath (Join-Path $logDirectory 'launcher.log') -Encoding UTF8
+    } catch {
+        [Console]::Error.WriteLine('Backup launcher log unavailable; see the Node execution log if the process started.')
+    }
+}
+
+Write-BackupLog 'INFO' 'configuration' 'Backup launcher started.'
 
 if ($Action -eq 'RemoveTask') {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
@@ -52,7 +73,7 @@ if ($Action -eq 'InstallTask') {
     }
     # Interactive principal: no account password saved, runs only while logged on.
     $taskAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
-        -Argument ('-NoProfile -File "' + $scriptPath + '" -Action Backup')
+        -Argument ('-NoProfile -File "' + $scriptPath + '" -Action Backup') -WorkingDirectory $PSScriptRoot
     $trigger = New-ScheduledTaskTrigger -Daily -At '20:30'
     $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
@@ -63,7 +84,10 @@ if ($Action -eq 'InstallTask') {
 $names = @('PORTFOLIO_BACKUP_DATABASE_URL', 'PORTFOLIO_BACKUP_KEY_FILE', 'PORTFOLIO_BACKUP_DIRECTORY', 'PORTFOLIO_BACKUP_ARCHIVE', 'PORTFOLIO_BACKUP_FIXTURE', 'PORTFOLIO_BACKUP_NETWORK')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+$nodeExitCode = 0
 try {
+    Write-BackupLog 'INFO' 'configuration' 'Loading backup configuration.'
+    $nodeCommand = (Get-Command node -ErrorAction Stop).Source
     $env:PORTFOLIO_BACKUP_FIXTURE = $null
     $env:PORTFOLIO_BACKUP_NETWORK = $null
     $env:PORTFOLIO_BACKUP_KEY_FILE = $config.KeyPath
@@ -73,14 +97,22 @@ try {
         $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
         try { $env:PORTFOLIO_BACKUP_DATABASE_URL = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) }
         finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }
-        & node $nodeScript backup
+        Write-BackupLog 'INFO' 'execution' 'Starting Node backup process.'
+        & $nodeCommand $nodeScript backup
     } else {
         if (-not $Archive) { throw 'Provide -Archive with the full encrypted backup path.' }
         $env:PORTFOLIO_BACKUP_DATABASE_URL = $null
         $env:PORTFOLIO_BACKUP_ARCHIVE = $Archive
-        & node $nodeScript verify
+        Write-BackupLog 'INFO' 'execution' 'Starting Node verification process.'
+        & $nodeCommand $nodeScript verify
     }
-    if ($LASTEXITCODE -ne 0) { throw 'Backup/verification failed. Earlier backups were retained.' }
+    $nodeExitCode = $LASTEXITCODE
+    Write-BackupLog $(if ($nodeExitCode -eq 0) { 'INFO' } else { 'ERROR' }) 'execution' ('Node process exited with code ' + $nodeExitCode + '.')
 } finally {
     foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
 }
+if ($nodeExitCode -ne 0) {
+    Write-BackupLog 'ERROR' 'cleanup' 'Backup failed; earlier archives and recovery key were retained.'
+    exit $nodeExitCode
+}
+Write-BackupLog 'INFO' 'cleanup' 'Backup launcher completed successfully.'

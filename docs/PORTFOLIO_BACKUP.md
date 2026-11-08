@@ -131,6 +131,30 @@ acceptance is separately covered by `recovery-runtime-acceptance.yml`; this loca
 check does not prove a hosted application cutover. A real disaster still needs a
 reviewed hosted restore and service connection update, avoiding blind email replay.
 
+## Logging and troubleshooting
+
+Every Node execution writes a JSON-lines log outside the repository at
+`%LOCALAPPDATA%\TriAD-Backup\logs\backup-<execution-id>.log`. Each record includes
+UTC timestamp, execution ID, severity and stage: configuration, source validation,
+Docker startup, PostgreSQL dump, encryption, archive verification, disposable
+restore, schema verification and cleanup. The launcher also writes a small
+`launcher.log` in the same directory. Logs are permission-restricted to the
+current Windows user and Node keeps the newest 14 execution logs.
+
+Logs never contain database URLs, passwords, recovery keys, environment-file
+contents or command lines with credentials. The console/Task Scheduler result
+reports a classified failure (`docker`, `network`, `authentication`,
+`filesystem`, `encryption`, `restore` or `unknown`) and preserves Node's exit
+code. For `LastTaskResult = 1`, inspect the newest execution log first, then
+confirm Docker Desktop is running, the task is running as the intended logged-in
+user, and the Render allowlist still permits that machine. Do not paste the log
+or configuration into an issue if it contains unexpected local paths or data.
+
+The task action uses the checkout as its working directory and resolves the
+user's Node executable at runtime. It remains an interactive, best-effort task:
+the user must be logged in, Docker Desktop must be ready, and network access must
+be available. A failed run never prunes archives or replaces the recovery key.
+
 To remove only the schedule and keep archives/keys:
 
 ```powershell

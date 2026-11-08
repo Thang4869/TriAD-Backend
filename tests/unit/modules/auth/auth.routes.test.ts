@@ -80,7 +80,7 @@ describe("authRoutes OAuth start handlers", () => {
   it.each([
     ["/google", "GOOGLE"],
     ["/facebook", "FACEBOOK"],
-  ] as const)("redirects %s when provider credentials are unavailable", async (path) => {
+  ] as const)("redirects %s when provider credentials are unavailable", async (path, _provider) => {
     const redirect = vi.fn();
     await routeHandler(path)({} as Request, { redirect } as unknown as Response, vi.fn());
 

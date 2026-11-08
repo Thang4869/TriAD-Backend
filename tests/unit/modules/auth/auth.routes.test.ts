@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
     FACEBOOK_APP_SECRET: undefined as string | undefined,
   },
   issue: vi.fn(),
-  authenticate: vi.fn(),
+  authenticate: vi.fn(() => vi.fn()),
   authController: {
     register: vi.fn(),
     verifyEmail: vi.fn(),

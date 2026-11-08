@@ -230,6 +230,27 @@ describe("OrdersService.getOrderById", () => {
     });
   });
 
+  it("propagates projection failures without falling back to write model", async () => {
+    const projectionError = new Error(
+      "Order history projection unavailable",
+    );
+
+    const repository = createRepository();
+
+    const readPort = createReadPort({
+      findByIdAndUser: vi.fn().mockRejectedValue(projectionError),
+    });
+
+    await expect(
+      createService(repository, readPort).getOrderById(
+        "order-1",
+        "user-1",
+      ),
+    ).rejects.toBe(projectionError);
+
+    expect(repository.findByIdAndUser).not.toHaveBeenCalled();
+  });
+
   it("không tìm thấy trên cả projection và write model → 404", async () => {
     const repository = createRepository({
       findByIdAndUser: vi.fn().mockResolvedValue(null),

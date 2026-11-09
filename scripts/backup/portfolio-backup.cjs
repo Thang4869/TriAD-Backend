@@ -7,6 +7,7 @@ const { spawnSync } = require("node:child_process");
 const { archive } = require("../acceptance/recovery-archive.cjs");
 
 const HOST = "dpg-dbcbq8ff3r2c739hbi3g-a.singapore-postgres.render.com";
+const NEON_HOST = /^[a-z0-9-]+\.neon\.tech$/i;
 const IMAGE = "postgres:18-alpine";
 const LOG_RETENTION = 14;
 
@@ -85,7 +86,11 @@ function createLogger(env = process.env, id = executionId()) {
   return { id, path: logPath, write, close };
 }
 
-function sourceEnvironment(value, fixture = false) {
+function sourceEnvironment(value, sourceName = "render", fixture = false) {
+  if (typeof sourceName === "boolean") {
+    fixture = sourceName;
+    sourceName = "render";
+  }
   const url = new URL(value);
   const expected = fixture
     ? {
@@ -93,22 +98,40 @@ function sourceEnvironment(value, fixture = false) {
         database: "triad_portfolio_fixture",
         user: "test",
       }
-    : { host: HOST, database: "triad_staging", user: "triad_staging" };
+    : sourceName === "render"
+      ? { host: HOST, database: "triad_staging", user: "triad_staging" }
+      : sourceName === "neon"
+        ? {
+            host: NEON_HOST,
+            database: "triad_staging",
+            user: "triad_staging_owner",
+          }
+        : null;
+  if (!expected) throw new Error("Unexpected backup source selection");
+  const queryKeys = [...url.searchParams.keys()];
+  const sslMode = url.searchParams.get("sslmode");
+  const channelBinding = url.searchParams.get("channel_binding");
   if (
     !["postgres:", "postgresql:"].includes(url.protocol) ||
-    url.hostname !== expected.host ||
+    (expected.host instanceof RegExp
+      ? !expected.host.test(url.hostname)
+      : url.hostname !== expected.host) ||
     (url.port && url.port !== "5432") ||
     url.pathname !== "/" + expected.database ||
     decodeURIComponent(url.username) !== expected.user ||
     !url.password ||
     url.hash ||
-    [...url.searchParams.keys()].some((x) => x !== "sslmode") ||
-    (url.search && url.search !== "?sslmode=require")
+    queryKeys.some((x) => !["sslmode", "channel_binding"].includes(x)) ||
+    (sslMode && sslMode !== "require") ||
+    (channelBinding &&
+      !["require", "prefer", "disable"].includes(channelBinding))
   )
     throw new Error("Unexpected backup source");
+  if (!fixture && sslMode !== "require")
+    throw new Error("Remote backup source requires sslmode=require");
   const env = {
     PGHOST: url.hostname,
-    PGPORT: "5432",
+    PGPORT: url.port || "5432",
     PGDATABASE: expected.database,
     PGUSER: expected.user,
     PGPASSWORD: decodeURIComponent(url.password),
@@ -117,6 +140,7 @@ function sourceEnvironment(value, fixture = false) {
     PGOPTIONS:
       "-c default_transaction_read_only=on -c statement_timeout=120000",
   };
+  if (channelBinding) env.PGCHANNELBINDING = channelBinding;
   if (Object.values(env).some((x) => /[\r\n\0]/.test(x)))
     throw new Error("Invalid environment value");
   return env;
@@ -171,6 +195,7 @@ async function run(mode, env = process.env) {
   stage("configuration", "Backup execution started");
   let key;
   let fixture;
+  const sourceName = env.PORTFOLIO_BACKUP_SOURCE || "render";
   try {
     if (!["backup", "verify"].includes(mode))
       throw new Error("Choose backup or verify");
@@ -204,6 +229,7 @@ async function run(mode, env = process.env) {
       stage("source-validation", "Validating configured backup source");
       const source = sourceEnvironment(
         env.PORTFOLIO_BACKUP_DATABASE_URL,
+        sourceName,
         fixture,
       );
       const directory = existingOutsideRepo(env.PORTFOLIO_BACKUP_DIRECTORY);
@@ -359,6 +385,8 @@ async function run(mode, env = process.env) {
     stage("schema-verification", "Required schema verified");
     const evidence = {
       result: "PASS",
+      source: mode === "backup" ? sourceName : "archive",
+      database: "triad_staging",
       verifiedAt: new Date().toISOString(),
       postgresMajor: 18,
       sha256: crypto

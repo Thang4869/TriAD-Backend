@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Setup', 'Backup', 'Verify', 'InstallTask', 'RemoveTask')]
+    [ValidateSet('Setup', 'SetupNeon', 'Backup', 'BackupNeon', 'Verify', 'InstallTask', 'RemoveTask')]
     [string]$Action,
     [string]$Archive
 )
@@ -66,6 +66,19 @@ if ($Action -eq 'Setup') {
 }
 if (-not (Test-Path -LiteralPath $configPath)) { throw 'Run Setup first.' }
 $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+if ($Action -eq 'SetupNeon') {
+    $url = Read-Host 'Neon connection URI (hidden input)' -AsSecureString
+    $protectedNeonUrl = ConvertFrom-SecureString -SecureString $url
+    $settings = [ordered]@{
+        ProtectedUrl = $config.ProtectedUrl
+        ProtectedNeonUrl = $protectedNeonUrl
+        KeyPath = $config.KeyPath
+        BackupDirectory = $config.BackupDirectory
+    }
+    $settings | ConvertTo-Json | Set-Content -LiteralPath $configPath -Encoding UTF8
+    Write-Host 'Neon settings saved without replacing the Render configuration.'
+    return
+}
 if ($Action -eq 'InstallTask') {
     if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) { throw 'Task exists; inspect it instead of overwriting it.' }
     if (-not (Get-ChildItem -LiteralPath $config.BackupDirectory -Filter '*.dump.enc.verified.json' -File)) {
@@ -81,7 +94,7 @@ if ($Action -eq 'InstallTask') {
     Write-Host 'Daily 20:30 LOCAL time. Requires logged-in user, running Docker and network access. This is best effort.'
     return
 }
-$names = @('PORTFOLIO_BACKUP_DATABASE_URL', 'PORTFOLIO_BACKUP_KEY_FILE', 'PORTFOLIO_BACKUP_DIRECTORY', 'PORTFOLIO_BACKUP_ARCHIVE', 'PORTFOLIO_BACKUP_FIXTURE', 'PORTFOLIO_BACKUP_NETWORK')
+$names = @('PORTFOLIO_BACKUP_DATABASE_URL', 'PORTFOLIO_BACKUP_SOURCE', 'PORTFOLIO_BACKUP_KEY_FILE', 'PORTFOLIO_BACKUP_DIRECTORY', 'PORTFOLIO_BACKUP_ARCHIVE', 'PORTFOLIO_BACKUP_FIXTURE', 'PORTFOLIO_BACKUP_NETWORK')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $nodeExitCode = 0
@@ -92,8 +105,11 @@ try {
     $env:PORTFOLIO_BACKUP_NETWORK = $null
     $env:PORTFOLIO_BACKUP_KEY_FILE = $config.KeyPath
     $env:PORTFOLIO_BACKUP_DIRECTORY = $config.BackupDirectory
-    if ($Action -eq 'Backup') {
-        $secret = ConvertTo-SecureString $config.ProtectedUrl
+    if ($Action -in @('Backup', 'BackupNeon')) {
+        $sourceConfig = if ($Action -eq 'BackupNeon') { 'ProtectedNeonUrl' } else { 'ProtectedUrl' }
+        if (-not $config.$sourceConfig) { throw ('Run SetupNeon first for ' + $Action + '.') }
+        $env:PORTFOLIO_BACKUP_SOURCE = if ($Action -eq 'BackupNeon') { 'neon' } else { 'render' }
+        $secret = ConvertTo-SecureString $config.$sourceConfig
         $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
         try { $env:PORTFOLIO_BACKUP_DATABASE_URL = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) }
         finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }

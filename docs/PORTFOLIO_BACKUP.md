@@ -14,6 +14,10 @@ Linux containers. No npm installation is needed for these backup scripts.
 - Source is restricted to the current PostgreSQL 18 staging external host,
   database and user. Transactions are read-only, TLS is required. A replacement
   Free instance needs a reviewed guard change.
+- Render and Neon are independent sources. Render remains the scheduled-task
+  source; Neon is configured separately and selected explicitly with
+  `BackupNeon`. Remote hosts, database names, roles, port 5432 and TLS query
+  parameters are allowlisted. The Neon guard accepts only `*.neon.tech`.
 - The source URL is entered with hidden input, encrypted with Windows DPAPI and
   stored outside git. Only the same Windows user/machine can decrypt this URL.
 - Custom-format pg_dump is encrypted using authenticated AES-256-GCM. A separate
@@ -62,7 +66,20 @@ syncing. This is a best-effort PC schedule, not managed cloud backup.
    stored USB. Do not keep the only key copy with the only archive copy. The
    archive can be decrypted with `recovery-archive.cjs` and the key if the original
    Windows account is lost; DPAPI protects only the source URL.
-4. Create the first real backup and require **PASS** plus its verification receipt:
+4. Configure Neon without replacing the Render URL:
+
+   ```powershell
+   .\scripts\backup\portfolio-backup.ps1 -Action SetupNeon
+   .\scripts\backup\portfolio-backup.ps1 -Action BackupNeon
+   ```
+
+   The Neon URI is entered through hidden input and stored as a second DPAPI
+   value (`ProtectedNeonUrl`) in the local settings file. The Render scheduled
+   task is unchanged and continues to use `ProtectedUrl`. A Neon backup is
+   encrypted with the same recovery key, independently verified in PostgreSQL
+   18, and never restores into either hosted database.
+
+5. Create the first real backup and require **PASS** plus its verification receipt:
 
    ```powershell
    .\scripts\backup\portfolio-backup.ps1 -Action Backup
@@ -71,7 +88,7 @@ syncing. This is a best-effort PC schedule, not managed cloud backup.
    Earlier backups remain untouched on failure. The first real hosted backup is
    **not proven** by the synthetic CI test.
 
-5. After the first PASS, install the daily **20:30 local time** task:
+6. After the first PASS, install the daily **20:30 local time** task:
 
    ```powershell
    .\scripts\backup\portfolio-backup.ps1 -Action InstallTask
@@ -130,6 +147,38 @@ checksum/time, not records or credentials. Full application worker/relay/rollbac
 acceptance is separately covered by `recovery-runtime-acceptance.yml`; this local
 check does not prove a hosted application cutover. A real disaster still needs a
 reviewed hosted restore and service connection update, avoiding blind email replay.
+
+## Render/Neon comparison and rollback
+
+The comparison script is read-only and validates both URI identities before
+passing credentials to an ephemeral `postgres:18-alpine` container:
+
+```powershell
+.\scripts\backup\compare-render-neon.ps1
+```
+
+It compares public table lists, row counts, deterministic content fingerprints
+and reports non-zero on query failure or data mismatch. Differences after
+cutover must be explained by an approved write window; the script never edits
+either database. Omitted ports default to 5432, while non-5432 ports and
+unapproved query parameters are rejected.
+
+Rollback is not an automatic URL flip. If a serious Neon incident occurs:
+
+1. Declare the incident and freeze application writes.
+2. Create and PASS-verify a latest Neon backup and disposable restore.
+3. Determine whether Neon writes can be synchronized to Render with a tested,
+   schema-compatible, read-only migration procedure.
+4. If reverse synchronization is not proven, keep the maintenance window and
+   restore a verified archive into a separately validated target; do not point
+   the application at an older Render copy containing stale data.
+5. Only after consistency checks and explicit approval, change the deployment
+   connection, deploy, verify health/migrations/readiness, and re-enable writes.
+6. Compare representative data, monitor errors and retain both databases until
+   the rollback decision is closed.
+
+No automatic destructive rollback, database deletion, or allowlist change is
+performed by these scripts. PITR and a guaranteed RTO/RPO are not provided.
 
 ## Logging and troubleshooting
 

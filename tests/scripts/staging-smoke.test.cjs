@@ -72,9 +72,17 @@ test("rejects insecure remote URLs, credentials and misleading API paths", () =>
   }
 });
 
+test("requires a separate frontend origin for trusted-edge API checks", async (t) => {
+  const { origin } = await fixture(t);
+  await assert.rejects(
+    runStagingSmoke(origin),
+    /STAGING_FRONTEND_URL must be an HTTPS origin/,
+  );
+});
+
 test("checks public health/API and protected routes using GET only", async (t) => {
   const { origin, requests } = await fixture(t);
-  const result = await runStagingSmoke(origin);
+  const result = await runStagingSmoke(origin, { frontendUrl: origin });
   assert.equal(result.origin, origin);
   assert.equal(result.checks.length, 5);
   assert.ok(!Number.isNaN(Date.parse(result.checkedAt)));
@@ -92,7 +100,7 @@ test("rejects readiness that omits a dependency despite HTTP 200", async (t) => 
     "/health/ready": (_req, res) => res.end(JSON.stringify({ status: "up" })),
   });
   await assert.rejects(
-    runStagingSmoke(origin),
+    runStagingSmoke(origin, { frontendUrl: origin }),
     /\/health\/ready: response did not satisfy/,
   );
 });
@@ -112,7 +120,7 @@ test("rejects an unhealthy queue despite aggregate readiness reporting up", asyn
       ),
   });
   await assert.rejects(
-    runStagingSmoke(origin),
+    runStagingSmoke(origin, { frontendUrl: origin }),
     /\/health\/ready: response did not satisfy/,
   );
 });
@@ -122,7 +130,7 @@ test("rejects service-unavailable readiness", async (t) => {
     "/health/ready": (_req, res) => res.writeHead(503).end(),
   });
   await assert.rejects(
-    runStagingSmoke(origin),
+    runStagingSmoke(origin, { frontendUrl: origin }),
     /expected HTTP 200, received 503/,
   );
 });
@@ -132,7 +140,7 @@ test("rejects an HTML login page returned with HTTP 200", async (t) => {
     "/api/products": (_req, res) => res.end("<html>Sign in</html>"),
   });
   await assert.rejects(
-    runStagingSmoke(origin),
+    runStagingSmoke(origin, { frontendUrl: origin }),
     /\/api\/products: expected a JSON response/,
   );
 });
@@ -142,7 +150,7 @@ test("rejects an unsuccessful public API response", async (t) => {
     "/api/products": (_req, res) => res.end(JSON.stringify({ success: false })),
   });
   await assert.rejects(
-    runStagingSmoke(origin),
+    runStagingSmoke(origin, { frontendUrl: origin }),
     /\/api\/products: response did not satisfy/,
   );
 });
@@ -152,7 +160,7 @@ test("detects accidentally exposed production metrics", async (t) => {
     "/metrics": (_req, res) => res.end("exposed"),
   });
   await assert.rejects(
-    runStagingSmoke(origin),
+    runStagingSmoke(origin, { frontendUrl: origin }),
     /expected HTTP 404, received 200/,
   );
 });
@@ -163,7 +171,7 @@ test("does not follow redirects to a login page or another deployment", async (t
       res.writeHead(302, { Location: "/login" }).end(),
   });
   await assert.rejects(
-    runStagingSmoke(origin),
+    runStagingSmoke(origin, { frontendUrl: origin }),
     /\/health\/live: request failed/,
   );
   assert.equal(requests.length, 1);
@@ -171,14 +179,14 @@ test("does not follow redirects to a login page or another deployment", async (t
 
 test("bounds requests to an unresponsive deployment", async (t) => {
   const { origin } = await fixture(t, { "/health/live": () => {} });
-  await assert.rejects(runStagingSmoke(origin, { timeoutMs: 50 }), /timed out/);
+  await assert.rejects(runStagingSmoke(origin, { frontendUrl: origin, timeoutMs: 50 }), /timed out/);
 });
 
 test("rejects invalid timeout configuration before making requests", async (t) => {
   const { origin, requests } = await fixture(t);
   for (const timeoutMs of [0, -1, 1.5, NaN, Infinity, 120_001]) {
     await assert.rejects(
-      runStagingSmoke(origin, { timeoutMs }),
+      runStagingSmoke(origin, { frontendUrl: origin, timeoutMs }),
       /Smoke timeout/,
     );
   }

@@ -26,6 +26,7 @@
  *             type: object
  *             required: [paymentMethod, address, phone]
  *             properties:
+ *               idempotencyKey: { type: string, minLength: 1, maxLength: 128 }
  *               paymentMethod: { type: string, enum: [COD], example: COD }
  *               address: { type: string, minLength: 5 }
  *               phone: { type: string, pattern: '^[0-9]{10,11}$' }
@@ -43,8 +44,9 @@
  *           application/json:
  *             schema:
  *               type: object
+ *               required: [success, data]
  *               properties:
- *                 success: { type: boolean }
+ *                 success: { type: boolean, enum: [true] }
  *                 data:
  *                   type: object
  *                   properties:
@@ -61,8 +63,19 @@
  *                     idempotent: { type: boolean, description: "true nếu đây là kết quả trả về từ 1 request trùng key trước đó" }
  *       400:
  *         description: Giỏ hàng trống, dữ liệu không hợp lệ hoặc tổng tiền đã thay đổi
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  *       409:
  *         description: Hết hàng tồn kho khi giữ chỗ (stock reservation) thất bại
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       422:
+ *         description: Idempotency-Key đã được dùng cho request khác
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  *
  * /api/checkout/quote:
  *   get:

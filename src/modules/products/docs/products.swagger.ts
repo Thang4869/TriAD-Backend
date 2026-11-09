@@ -146,6 +146,7 @@
  *         description: Danh sách sản phẩm (admin view)
  *       403:
  *         description: Không có quyền admin
+ * /api/products/admin:
  *   post:
  *     summary: "[Admin] Tạo sản phẩm mới"
  *     tags: [Products]
@@ -160,7 +161,7 @@
  *             properties:
  *               name: { type: string, maxLength: 255 }
  *               description: { type: string }
- *               price: { type: number, minimum: 0.01 }
+ *               price: { type: number, minimum: 0, exclusiveMinimum: true }
  *               stock: { type: integer, minimum: 0 }
  *               category: { type: string }
  *               images: { type: array, items: { type: string, format: uri }, minItems: 1 }
@@ -168,8 +169,19 @@
  *     responses:
  *       201:
  *         description: Sản phẩm đã được tạo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [success, data]
+ *               properties:
+ *                 success: { type: boolean, enum: [true] }
+ *                 data: { $ref: '#/components/schemas/Product' }
  *       400:
  *         description: Dữ liệu không hợp lệ
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  *       403:
  *         description: Không có quyền admin
  *
@@ -189,10 +201,27 @@
  *         application/json:
  *           schema:
  *             type: object
- *             description: "Bất kỳ field nào của sản phẩm, tối thiểu 1 field"
+ *             minProperties: 1
+ *             properties:
+ *               name: { type: string, minLength: 1, maxLength: 255 }
+ *               description: { type: string, minLength: 1 }
+ *               price: { type: number, minimum: 0, exclusiveMinimum: true }
+ *               stock: { type: integer, minimum: 0 }
+ *               category: { type: string, minLength: 1 }
+ *               images: { type: array, minItems: 1, items: { type: string, format: uri } }
+ *               slug: { type: string, minLength: 1, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }
+ *               isActive: { type: boolean }
  *     responses:
  *       200:
  *         description: Sản phẩm đã được cập nhật
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [success, data]
+ *               properties:
+ *                 success: { type: boolean, enum: [true] }
+ *                 data: { $ref: '#/components/schemas/Product' }
  *       404:
  *         description: Không tìm thấy sản phẩm
  *   delete:

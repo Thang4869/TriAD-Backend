@@ -89,11 +89,30 @@
  *     responses:
  *       200:
  *         description: Trạng thái đã được cập nhật
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [success, data]
+ *               properties:
+ *                 success: { type: boolean, enum: [true] }
+ *                 data: { type: object }
+ *       400:
+ *         description: Trạng thái không hợp lệ
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  *       403:
  *         description: Không có quyền admin
  *       404:
  *         description: Không tìm thấy đơn hàng
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  *       409:
  *         description: Trạng thái chuyển đổi không hợp lệ
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  */
 export {};

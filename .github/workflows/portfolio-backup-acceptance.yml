@@ -93,8 +93,22 @@ jobs:
             sleep 1
           done
           docker exec -i triad-portfolio-source psql -U test -d triad_portfolio_fixture -v ON_ERROR_STOP=1 <<'SQL'
-          CREATE TABLE "_prisma_migrations" (id text);
-          INSERT INTO "_prisma_migrations" VALUES ('synthetic');
+          CREATE TABLE "_prisma_migrations" (
+            id text,
+            finished_at timestamptz,
+            rolled_back_at timestamptz
+          );
+
+          INSERT INTO "_prisma_migrations" (
+            id,
+            finished_at,
+            rolled_back_at
+          )
+          VALUES (
+            'synthetic',
+            NOW(),
+            NULL
+          );
           CREATE TABLE users (id text);
           INSERT INTO users VALUES ('synthetic');
           CREATE TABLE orders (id text);
@@ -104,6 +118,23 @@ jobs:
           export PORTFOLIO_BACKUP_ARCHIVE="$(find "$temporary" -maxdepth 1 -name '*.dump.enc' -print -quit)"
           test -f "$PORTFOLIO_BACKUP_ARCHIVE.verified.json"
           node scripts/backup/portfolio-backup.cjs verify
+          # Reject an incomplete Prisma migration in a fresh backup, not an older snapshot.
+          valid_archive="$PORTFOLIO_BACKUP_ARCHIVE"
+          docker exec triad-portfolio-source psql -U test -d triad_portfolio_fixture -v ON_ERROR_STOP=1 -c "INSERT INTO \"_prisma_migrations\" (id, finished_at, rolled_back_at) VALUES ('incomplete', NULL, NULL)"
+          incomplete_directory="$temporary/incomplete"
+          mkdir -p "$incomplete_directory"
+          export PORTFOLIO_BACKUP_DIRECTORY="$incomplete_directory"
+          unset PORTFOLIO_BACKUP_ARCHIVE
+          if node scripts/backup/portfolio-backup.cjs backup; then
+            echo 'Incomplete Prisma migration was accepted'
+            exit 1
+          fi
+          incomplete_archive="$(find "$incomplete_directory" -maxdepth 1 -name '*.dump.enc' -print -quit)"
+          test -n "$incomplete_archive"
+          test ! -f "$incomplete_archive.verified.json"
+          # Keep tamper verification scoped to the original valid archive.
+          export PORTFOLIO_BACKUP_DIRECTORY="$temporary"
+          export PORTFOLIO_BACKUP_ARCHIVE="$valid_archive"
           node -e 'const fs=require("node:fs"),p=process.env.PORTFOLIO_BACKUP_ARCHIVE,b=fs.readFileSync(p);b[b.length-1]^=1;fs.writeFileSync(p,b)'
           if node scripts/backup/portfolio-backup.cjs verify; then echo 'Tamper was accepted'; exit 1; fi
           test "$(docker exec triad-portfolio-source psql -U test -d triad_portfolio_fixture -Atc 'SELECT count(*) FROM users')" = '1'

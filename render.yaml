@@ -86,4 +86,8 @@ projects:
             region: singapore
             databaseName: triad_staging
             user: triad_staging
-            ipAllowList: []
+            ipAllowList:
+              - source: 117.5.142.94/32
+                description: My Local PC
+              - source: 14.191.194.50/32
+                description: My Local PC - Docker Backup

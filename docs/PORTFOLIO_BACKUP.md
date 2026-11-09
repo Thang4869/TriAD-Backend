@@ -238,3 +238,102 @@ hosted recovery are not guaranteed; paid production targets are not imposed.
 
 References: [Render external access](https://render.com/docs/postgresql-creating-connecting#restricting-external-access),
 [Free hosting limits](https://render.com/docs/free).
+
+## Issue #143 acceptance audit — 2026-11-10 04:04 ICT
+
+This section records only evidence observed during the current audit. Earlier
+issue comments remain historical evidence and are not silently reclassified as
+new verification.
+
+| Criterion | Status | Evidence and verification | Remaining work |
+| --- | --- | --- | --- |
+| Backup source separation and TLS guards | PASS | `node --test tests/scripts/portfolio-backup.test.cjs tests/scripts/recovery-archive.test.cjs` passed 6/6 at 2026-11-10 03:59 ICT. Tests reject Render/Neon substitution, unsupported hosts, non-5432 ports, unsafe query parameters and missing `sslmode=require`. | None for the implemented guards. |
+| AES-GCM archive integrity and key format | PASS | Same test command passed empty and 100,000-byte round trips, wrong-key rejection, tamper rejection, truncated-input rejection and no plaintext publication. Local key metadata is 64 bytes; key contents were not read or displayed. | Independent offline key custody still requires owner verification. |
+| Render scheduled task | PASS | `Get-ScheduledTaskInfo -TaskName 'TriAD Portfolio Backup'`: task `Ready`, daily 20:30 ICT, `UserId=giaph`, `Interactive`, `Limited`, last result `0` at 2026-11-10 03:51 ICT. | Continue observing daily runs. |
+| Neon scheduled task | PASS | `Get-ScheduledTaskInfo -TaskName 'TriAD Portfolio Backup Neon'`: task `Ready`, daily 21:00 ICT, `UserId=giaph`, `Interactive`, `Limited`, last result `0` at 2026-11-09 21:00 ICT. | Continue observing daily runs. |
+| Current local Render backup | PASS | Receipt-backed archive `triad-portfolio-20261109T205053260Z-3b2464c7.dump.enc`; receipt `result=PASS`, `postgresMajor=18`, `disposableRestore=true`, verification `2026-11-09T20:50:56.859Z`; SHA-256 `46f7586ebd6de32960bfb8f09146f2d5a8934e2515e83008e605f3ef17d8d89e`. | Keep archive and receipt; do not overwrite. |
+| Current local Neon backup | PASS | Receipt-backed archive `triad-portfolio-20261109T054531236Z-a3a5eedc.dump.enc`; receipt `source=neon`, `result=PASS`, `postgresMajor=18`, `disposableRestore=true`, verification `2026-11-09T05:45:34.664Z`; SHA-256 `4ba75b817842bf4a5d0bc737a741a42805f9776ba9e4522ab68042ac09894695`. | Keep archive and receipt; do not overwrite. |
+| Offline archive and key custody | BLOCKED | The configured archive directory is `E:\TriAD-Backups` and the DPAPI settings/key are outside the repository. No independent USB/off-host device was available for inspection in this session, so physical independence and offline decryption were not claimed. | Owner must perform the offline-copy verification and disposable restore without the original backup directory. |
+| Seven consecutive Render days | WAITING | Verified local receipt dates currently include 2026-10-24, 2026-10-25 and 2026-11-09; there is no uninterrupted seven-calendar-day Render sequence. | Continue the existing 20:30 task. Earliest possible seven-day sequence from the current run is 2026-11-09 through 2026-11-15, with no missed or failed date. |
+| Seven consecutive Neon days | WAITING | Verified Neon receipts currently exist on 2026-11-09 only; there is no seven-calendar-day Neon sequence. | Continue the existing 21:00 task. Earliest possible seven-day sequence from the current run is 2026-11-09 through 2026-11-15, with no missed or failed date. |
+| CI quality gates | PASS | Owner-provided exact-head GitHub Actions evidence: [portfolio backup acceptance](https://github.com/Thang4869/TriAD-Backend/actions/runs/42534823645), [quality gates](https://github.com/Thang4869/TriAD-Backend/actions/runs/42534823632), [CI](https://github.com/Thang4869/TriAD-Backend/actions/runs/42534823586), and [mutation testing](https://github.com/Thang4869/TriAD-Backend/actions/runs/42534823687) all completed successfully on 2026-11-08/09 UTC. | These CI runs validate the committed synthetic/offline guards, not seven hosted days. |
+
+## Render PostgreSQL 18 replacement runbook
+
+The current Render Free PostgreSQL 18 expiration is **2026-11-20 13:24:50
+UTC (20:24:50 ICT)**. This runbook is preparation only. It does not delete the
+old database, change production environment variables, redeploy services, or
+interrupt traffic.
+
+### Owner approval gates and expected downtime
+
+Obtain explicit owner approval before each destructive or production step:
+
+1. Approve a maintenance window and confirm the old database remains available.
+2. Provision the replacement Free PostgreSQL 18 database in the same Singapore
+   workspace, accounting for the one-active-Free-PostgreSQL limitation.
+3. Keep the old database and all encrypted archives until post-cutover checks
+   pass and the owner approves retirement.
+4. Expect downtime for write quiescence, final dump, restore, migrations,
+   environment rotation, deploy and smoke checks. Free-tier sleep and provider
+   maintenance can extend the window; no zero-downtime guarantee is assumed.
+
+### Pre-cutover checklist
+
+- Confirm the expiration timestamp and maintenance window.
+- Confirm connected Render services and Vercel consumers from provider consoles;
+  do not paste URLs or credentials into logs or issues.
+- Run `npx prisma migrate status` against the old database and record only the
+  migration count/status.
+- Run a fresh `Backup` and `Verify`; record the archive, receipt and SHA-256.
+- Confirm the latest independent Neon receipt and offline archive/key copies.
+- Record schema/table inventory and critical counts using a sanitized report.
+- Quiesce outbox/worker processes and block new writes before the final dump.
+
+### Final backup, restore and validation
+
+Use the existing hidden-input launcher and keep the destination empty:
+
+```powershell
+.\scripts\backup\portfolio-backup.ps1 -Action Backup
+.\scripts\backup\portfolio-backup.ps1 -Action Verify -Archive 'E:\TriAD-Backups\<final-archive>.dump.enc'
+```
+
+For a manually controlled PostgreSQL 18 target, use TLS-protected connection
+environment variables supplied only by the owner and restore with:
+
+```powershell
+pg_restore --no-owner --no-acl --exit-on-error `
+  --dbname="$env:NEW_DATABASE_URL" `
+  'E:\TriAD-Backups\<final-archive>.dump'
+```
+
+The target must be a new, empty PostgreSQL 18 database. Do not restore into the
+old Render database or a non-empty target. The built-in `Verify` path is safer
+for routine rehearsal because it decrypts and restores into a random,
+network-isolated `postgres:18-alpine` container and removes it afterward.
+
+After restore, verify only through approved private channels:
+
+- TLS connectivity and PostgreSQL major version 18.
+- Prisma migration status and absence of incomplete migrations.
+- Required tables and sanitized critical row counts.
+- Authentication/login, catalog, cart, checkout and order creation.
+- Outbox persistence, worker execution and application readiness.
+- Vercel/Render service connectivity and health checks.
+
+### Cutover, rollback and retirement
+
+During the approved window, stop new writes, quiesce workers, rotate the
+database URL through the provider secret manager, deploy deliberately, run
+health/smoke checks, then re-enable writes. Never dual-write or replay an
+outbox blindly. If validation fails, keep maintenance mode enabled, preserve
+the old database, restore a verified archive into a separately validated target,
+and roll back only after owner approval and consistency checks. Retire the old
+database only after the replacement has passed the full acceptance checklist
+and the owner explicitly approves deletion.
+
+Free-tier PostgreSQL provides no PITR or guaranteed RTO/RPO here. Redis
+persistence remains disabled, so Redis queues, cache and ephemeral auth state
+are not covered by this PostgreSQL backup. Cloudinary objects, provider
+configuration, OAuth settings and secrets require separate recovery procedures.

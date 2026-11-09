@@ -16,7 +16,7 @@ test("only backs up the selected external portfolio database over required TLS",
   assert.equal(env.PGSSLMODE, "require");
   assert.equal(env.PGDATABASE, "triad_staging");
   assert.match(env.PGOPTIONS, /default_transaction_read_only=on/);
-  assert.equal(sourceEnvironment(url).PGSSLMODE, "require");
+  assert.throws(() => sourceEnvironment(url));
 });
 test("rejects source substitution and environment-file injection", () => {
   for (const value of [
@@ -30,6 +30,29 @@ test("rejects source substitution and environment-file injection", () => {
     url.replace(".com/", ".com:5433/"),
   ])
     assert.throws(() => sourceEnvironment(value));
+});
+
+test("validates the independent Neon source without weakening Render guards", () => {
+  const neon =
+    "postgresql://triad_staging_owner:secret@triad-zero-cost-test.neon.tech/triad_staging?sslmode=require&channel_binding=require";
+  const env = sourceEnvironment(neon, "neon");
+  assert.equal(env.PGHOST, "triad-zero-cost-test.neon.tech");
+  assert.equal(env.PGUSER, "triad_staging_owner");
+  assert.equal(env.PGPORT, "5432");
+  assert.equal(env.PGSSLMODE, "require");
+  assert.equal(env.PGCHANNELBINDING, "require");
+  for (const value of [
+    neon.replace("triad-zero-cost-test.neon.tech", "evil.example"),
+    neon.replace("triad_staging_owner", "triad_staging"),
+    neon.replace("/triad_staging?", "/other?"),
+    neon.replace("sslmode=require", "sslmode=disable"),
+    neon.replace("&channel_binding=require", "&options=unsafe"),
+    neon.replace(".tech/", ".tech:5433/"),
+  ])
+    assert.throws(() => sourceEnvironment(value, "neon"));
+  assert.throws(() =>
+    sourceEnvironment(neon.replace("?sslmode=require", ""), "neon"),
+  );
 });
 
 test("classifies operational failures and redacts credentials", async () => {

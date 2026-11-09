@@ -1,19 +1,19 @@
 "use strict";
 
 const CHECKS = [
-  { path: "/health/live", status: 200, kind: "live" },
-  { path: "/health/ready", status: 200, kind: "ready" },
-  { path: "/api/products", status: 200, kind: "products" },
-  { path: "/metrics", status: 404 },
-  { path: "/api/docs", status: 404 },
+  { target: "api", path: "/health/live", status: 200, kind: "live" },
+  { target: "api", path: "/health/ready", status: 200, kind: "ready" },
+  { target: "frontend", path: "/api/products", status: 200, kind: "products" },
+  { target: "api", path: "/metrics", status: 404 },
+  { target: "frontend", path: "/api/docs", status: 404 },
 ];
 
-function stagingOrigin(value) {
+function stagingOrigin(value, name = "STAGING_BASE_URL") {
   let url;
   try {
     url = new URL(value);
   } catch {
-    throw new Error("STAGING_BASE_URL must be an HTTPS origin");
+    throw new Error(name + " must be an HTTPS origin");
   }
 
   const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
@@ -26,15 +26,21 @@ function stagingOrigin(value) {
     url.hash
   ) {
     throw new Error(
-      "STAGING_BASE_URL must be an HTTPS origin without credentials, path or query",
+      name + " must be an HTTPS origin without credentials, path or query",
     );
   }
 
   return url.origin;
 }
 
-async function runStagingSmoke(baseUrl, { timeoutMs = 10_000 } = {}) {
-  const origin = stagingOrigin(baseUrl);
+async function runStagingSmoke(
+  baseUrl,
+  { frontendUrl = process.env.STAGING_FRONTEND_URL, timeoutMs = 10_000 } = {},
+) {
+  const origins = {
+    api: stagingOrigin(baseUrl),
+    frontend: stagingOrigin(frontendUrl, "STAGING_FRONTEND_URL"),
+  };
   if (
     !Number.isSafeInteger(timeoutMs) ||
     timeoutMs < 1 ||
@@ -47,20 +53,20 @@ async function runStagingSmoke(baseUrl, { timeoutMs = 10_000 } = {}) {
   for (const check of CHECKS) {
     let response;
     try {
-      response = await fetch(new URL(check.path, origin), {
+      response = await fetch(new URL(check.path, origins[check.target]), {
         method: "GET",
         redirect: "error",
         cache: "no-store",
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
-      throw new Error(`${check.path}: request failed or timed out`);
+      throw new Error(check.path + ": request failed or timed out");
     }
 
     if (response.status !== check.status) {
       await response.body?.cancel();
       throw new Error(
-        `${check.path}: expected HTTP ${check.status}, received ${response.status}`,
+        check.path + ": expected HTTP " + check.status + ", received " + response.status,
       );
     }
 
@@ -69,7 +75,7 @@ async function runStagingSmoke(baseUrl, { timeoutMs = 10_000 } = {}) {
       try {
         body = await response.json();
       } catch {
-        throw new Error(`${check.path}: expected a JSON response`);
+        throw new Error(check.path + ": expected a JSON response");
       }
 
       const valid =
@@ -82,17 +88,22 @@ async function runStagingSmoke(baseUrl, { timeoutMs = 10_000 } = {}) {
               ));
       if (!valid) {
         throw new Error(
-          `${check.path}: response did not satisfy readiness contract`,
+          check.path + ": response did not satisfy readiness contract",
         );
       }
     } else {
       await response.body?.cancel();
     }
 
-    checks.push({ path: check.path, status: response.status });
+    checks.push({ target: check.target, path: check.path, status: response.status });
   }
 
-  return { checkedAt: new Date().toISOString(), origin, checks };
+  return {
+    checkedAt: new Date().toISOString(),
+    origin: origins.api,
+    frontendOrigin: origins.frontend,
+    checks,
+  };
 }
 
 if (require.main === module) {
@@ -103,7 +114,7 @@ if (require.main === module) {
   runStagingSmoke(process.env.STAGING_BASE_URL, { timeoutMs }).then(
     (report) => console.log(JSON.stringify(report, null, 2)),
     (error) => {
-      console.error(`Staging smoke failed: ${error.message}`);
+      console.error("Staging smoke failed: " + error.message);
       process.exitCode = 1;
     },
   );

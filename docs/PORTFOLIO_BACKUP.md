@@ -24,8 +24,12 @@ Linux containers. No npm installation is needed for these backup scripts.
   random recovery key is stored outside git. Keep an independent offline copy.
 - Each backup is decrypted and restored into a fresh random local PostgreSQL 18
   container with **no network and no published ports**. No target URL, application,
-  worker, relay or email is started. Restore must succeed and schema/migrations
-  must pass before a `.verified.json` receipt is written.
+  worker, relay or email is started. Restore must succeed, required application
+  tables must exist, and Prisma migration state must be valid before a
+  `.verified.json` receipt is written. At least one migration must be completed
+  (`finished_at IS NOT NULL`), and no migration may remain incomplete
+  (`finished_at IS NULL` and `rolled_back_at IS NULL`). Rolled-back migrations
+  are allowed.
 - Temporary plaintext, environment files and restore containers are removed on
   normal success/failure. Power loss can interrupt cleanup; use a private Windows
   account and normal disk encryption where available.

@@ -378,7 +378,21 @@ async function run(mode, env = process.env) {
       "-v",
       "ON_ERROR_STOP=1",
       "-c",
-      "SELECT (SELECT count(*) > 0 FROM \"_prisma_migrations\") AND to_regclass('public.users') IS NOT NULL AND to_regclass('public.orders') IS NOT NULL AND to_regclass('public.outbox_events') IS NOT NULL;",
+      `SELECT
+        EXISTS (
+          SELECT 1
+          FROM "_prisma_migrations"
+          WHERE finished_at IS NOT NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "_prisma_migrations"
+          WHERE finished_at IS NULL
+            AND rolled_back_at IS NULL
+        )
+        AND to_regclass('public.users') IS NOT NULL
+        AND to_regclass('public.orders') IS NOT NULL
+        AND to_regclass('public.outbox_events') IS NOT NULL;`,
     ]);
     if (verified.toString().trim() !== "t")
       throw new Error("Restored schema verification failed");

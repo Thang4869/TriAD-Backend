@@ -34,20 +34,30 @@ test("rejects source substitution and environment-file injection", () => {
 
 test("validates the independent Neon source without weakening Render guards", () => {
   const neon =
-    "postgresql://triad_staging_owner:secret@triad-zero-cost-test.neon.tech/triad_staging?sslmode=require&channel_binding=require";
+    "postgresql://triad_staging_owner:secret@ep-calm-band-aoiy16yn.c-2.ap-southeast-1.aws.neon.tech/triad_staging?sslmode=require&channel_binding=require";
   const env = sourceEnvironment(neon, "neon");
-  assert.equal(env.PGHOST, "triad-zero-cost-test.neon.tech");
+  assert.equal(
+    env.PGHOST,
+    "ep-calm-band-aoiy16yn.c-2.ap-southeast-1.aws.neon.tech",
+  );
   assert.equal(env.PGUSER, "triad_staging_owner");
   assert.equal(env.PGPORT, "5432");
   assert.equal(env.PGSSLMODE, "require");
   assert.equal(env.PGCHANNELBINDING, "require");
   for (const value of [
-    neon.replace("triad-zero-cost-test.neon.tech", "evil.example"),
+    neon.replace(
+      "ep-calm-band-aoiy16yn.c-2.ap-southeast-1.aws.neon.tech",
+      "evil.example",
+    ),
     neon.replace("triad_staging_owner", "triad_staging"),
     neon.replace("/triad_staging?", "/other?"),
     neon.replace("sslmode=require", "sslmode=disable"),
     neon.replace("&channel_binding=require", "&options=unsafe"),
     neon.replace(".tech/", ".tech:5433/"),
+    neon.replace(
+      "ep-calm-band-aoiy16yn.c-2.ap-southeast-1.aws.neon.tech",
+      "neon.tech.evil.com",
+    ),
   ])
     assert.throws(() => sourceEnvironment(value, "neon"));
   assert.throws(() =>

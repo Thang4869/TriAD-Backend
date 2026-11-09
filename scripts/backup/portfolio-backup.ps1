@@ -67,8 +67,26 @@ if ($Action -eq 'Setup') {
 if (-not (Test-Path -LiteralPath $configPath)) { throw 'Run Setup first.' }
 $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
 if ($Action -eq 'SetupNeon') {
+    . (Join-Path $PSScriptRoot 'neon-connection.ps1')
     $url = Read-Host 'Neon connection URI (hidden input)' -AsSecureString
-    $protectedNeonUrl = ConvertFrom-SecureString -SecureString $url
+    $pointer = [IntPtr]::Zero
+    $plainUrl = $null
+
+    try {
+        $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($url)
+        $plainUrl = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+
+        Test-NeonConnectionUri -ConnectionUri $plainUrl | Out-Null
+
+        $protectedNeonUrl = ConvertFrom-SecureString -SecureString $url
+    }
+    finally {
+        if ($pointer -ne [IntPtr]::Zero) {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+        }
+        $plainUrl = $null
+        $url.Dispose()
+    }
     $settings = [ordered]@{
         ProtectedUrl = $config.ProtectedUrl
         ProtectedNeonUrl = $protectedNeonUrl

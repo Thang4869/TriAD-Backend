@@ -7,7 +7,7 @@ const { spawnSync } = require("node:child_process");
 const { archive } = require("../acceptance/recovery-archive.cjs");
 
 const HOST = "dpg-dbcbq8ff3r2c739hbi3g-a.singapore-postgres.render.com";
-const NEON_HOST = /^[a-z0-9-]+\.neon\.tech$/i;
+const NEON_HOST = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+neon\.tech$/i;
 const IMAGE = "postgres:18-alpine";
 const LOG_RETENTION = 14;
 

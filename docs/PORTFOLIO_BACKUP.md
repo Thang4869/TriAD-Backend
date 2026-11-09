@@ -232,9 +232,12 @@ To remove only the schedule and keep archives/keys:
 CI tests a synthetic PostgreSQL source and the Windows parser/DPAPI without live
 credentials. No archive/key/plaintext is uploaded. The initial **real** backup
 and user-triggered scheduled run were separately accepted on the owner's PC
-(see dated evidence above). Issue #143 remains open for offline key custody and
-the Free PostgreSQL replacement/export plan. Unattended daily reliability and
-hosted recovery are not guaranteed; paid production targets are not imposed.
+(see dated evidence above). Offline archive/key recovery is now verified for the
+Render archive using the independently held iPhone copy. Issue #143 remains open
+for seven consecutive successful daily backup/restore days from both Render and
+Neon, plus completion of the Free PostgreSQL replacement/export plan.
+Unattended daily reliability and hosted recovery are not guaranteed; paid
+production targets are not imposed.
 
 References: [Render external access](https://render.com/docs/postgresql-creating-connecting#restricting-external-access),
 [Free hosting limits](https://render.com/docs/free).
@@ -253,10 +256,20 @@ new verification.
 | Neon scheduled task | PASS | `Get-ScheduledTaskInfo -TaskName 'TriAD Portfolio Backup Neon'`: task `Ready`, daily 21:00 ICT, `UserId=giaph`, `Interactive`, `Limited`, last result `0` at 2026-11-09 21:00 ICT. | Continue observing daily runs. |
 | Current local Render backup | PASS | Receipt-backed archive `triad-portfolio-20261109T205053260Z-3b2464c7.dump.enc`; receipt `result=PASS`, `postgresMajor=18`, `disposableRestore=true`, verification `2026-11-09T20:50:56.859Z`; SHA-256 `46f7586ebd6de32960bfb8f09146f2d5a8934e2515e83008e605f3ef17d8d89e`. | Keep archive and receipt; do not overwrite. |
 | Current local Neon backup | PASS | Receipt-backed archive `triad-portfolio-20261109T054531236Z-a3a5eedc.dump.enc`; receipt `source=neon`, `result=PASS`, `postgresMajor=18`, `disposableRestore=true`, verification `2026-11-09T05:45:34.664Z`; SHA-256 `4ba75b817842bf4a5d0bc737a741a42805f9776ba9e4522ab68042ac09894695`. | Keep archive and receipt; do not overwrite. |
-| Offline archive and key custody | BLOCKED | The configured archive directory is `E:\TriAD-Backups` and the DPAPI settings/key are outside the repository. No independent USB/off-host device was available for inspection in this session, so physical independence and offline decryption were not claimed. | Owner must perform the offline-copy verification and disposable restore without the original backup directory. |
+| Offline archive and key custody | PASS | On 2026-11-10 06:29 ICT, owner confirmed the encrypted Render and Neon archives were accessible on the iPhone in airplane mode. Both archives were transferred back to `E:\TriAD-Backups`; their SHA-256 values matched the originals in `E:\TriAD-Backups` (2/2). The iPhone recovery key was entered locally into a temporary key file (contents never shared) and successfully decrypted/restored the iPhone-transferred Render archive `triad-portfolio-20261109T205053260Z-3b2464c7.dump.enc` into a disposable PostgreSQL 18 container. Output: `PASS: encrypted archive restored into a disposable PostgreSQL 18 container`. | Preserve the offline copies and periodically re-test. The Neon archive copy was hash-verified but was not separately restored with the iPhone key in this test. |
 | Seven consecutive Render days | WAITING | Verified local receipt dates currently include 2026-10-24, 2026-10-25 and 2026-11-09; there is no uninterrupted seven-calendar-day Render sequence. | Continue the existing 20:30 task. Earliest possible seven-day sequence from the current run is 2026-11-09 through 2026-11-15, with no missed or failed date. |
 | Seven consecutive Neon days | WAITING | Verified Neon receipts currently exist on 2026-11-09 only; there is no seven-calendar-day Neon sequence. | Continue the existing 21:00 task. Earliest possible seven-day sequence from the current run is 2026-11-09 through 2026-11-15, with no missed or failed date. |
 | CI quality gates | PASS | Owner-provided exact-head GitHub Actions evidence: [portfolio backup acceptance](https://github.com/Thang4869/TriAD-Backend/actions/runs/42534823645), [quality gates](https://github.com/Thang4869/TriAD-Backend/actions/runs/42534823632), [CI](https://github.com/Thang4869/TriAD-Backend/actions/runs/42534823586), and [mutation testing](https://github.com/Thang4869/TriAD-Backend/actions/runs/42534823687) all completed successfully on 2026-11-08/09 UTC. | These CI runs validate the committed synthetic/offline guards, not seven hosted days. |
+
+
+### Offline recovery verification addendum — 2026-11-10 06:29 ICT
+
+- The owner confirmed the iPhone could access the encrypted archives and recovery-key note with network connectivity disabled.
+- The iPhone-transferred Render archive and Neon archive were located in `E:\Downloads`. Both files matched their counterparts in `E:\TriAD-Backups` by SHA-256.
+- The recovery key was entered locally from the iPhone into a temporary file under `%TEMP%`; the key value was not disclosed or committed.
+- The iPhone-transferred Render archive `triad-portfolio-20261109T205053260Z-3b2464c7.dump.enc` successfully decrypted and restored into a disposable PostgreSQL 18 container using that temporary key. The command returned `PASS: encrypted archive restored into a disposable PostgreSQL 18 container`.
+- This verifies independent offline recovery for the Render archive. The Neon archive copy was hash-verified, but a separate Neon restore using the iPhone key was not performed.
+- The temporary key file is outside the repository and must be securely removed after verification. No source backup configuration or original recovery key was changed.
 
 ## Render PostgreSQL 18 replacement runbook
 

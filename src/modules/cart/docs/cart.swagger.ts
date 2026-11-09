@@ -10,7 +10,7 @@
  *       type: object
  *       properties:
  *         id: { type: string, format: uuid }
- *         productId: { type: string, format: uuid }
+ *         productId: { type: string, description: UUID or legacy CUID }
  *         quantity: { type: integer, example: 2 }
  *         product:
  *           type: object
@@ -63,15 +63,32 @@
  *             type: object
  *             required: [productId, quantity]
  *             properties:
- *               productId: { type: string, format: uuid }
+ *               productId:
+ *                 oneOf:
+ *                   - { type: string, format: uuid }
+ *                   - { type: string, pattern: '^c[a-z0-9]{24}$' }
  *               quantity: { type: integer, minimum: 1, example: 1 }
  *     responses:
- *       200:
+ *       201:
  *         description: Item đã được thêm/gộp vào giỏ hàng
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [success, data]
+ *               properties:
+ *                 success: { type: boolean, enum: [true] }
+ *                 data: { $ref: '#/components/schemas/CartItem' }
  *       400:
  *         description: Dữ liệu không hợp lệ (productId sai định dạng, quantity <= 0)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  *       404:
  *         description: Sản phẩm không tồn tại
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  *
  * /api/cart/items/{productId}:
  *   put:
@@ -82,7 +99,10 @@
  *       - in: path
  *         name: productId
  *         required: true
- *         schema: { type: string, format: uuid }
+ *         schema:
+ *           oneOf:
+ *             - { type: string, format: uuid }
+ *             - { type: string, pattern: '^c[a-z0-9]{24}$' }
  *     requestBody:
  *       required: true
  *       content:
@@ -95,8 +115,19 @@
  *     responses:
  *       200:
  *         description: Số lượng đã được cập nhật
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [success, data]
+ *               properties:
+ *                 success: { type: boolean, enum: [true] }
+ *                 data: { $ref: '#/components/schemas/CartItem' }
  *       404:
  *         description: Item không tồn tại trong giỏ hàng
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  *   delete:
  *     summary: Xoá 1 sản phẩm khỏi giỏ hàng
  *     tags: [Cart]

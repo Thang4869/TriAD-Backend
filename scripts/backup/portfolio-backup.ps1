@@ -128,9 +128,18 @@ try {
         if (-not $config.$sourceConfig) { throw ('Run SetupNeon first for ' + $Action + '.') }
         $env:PORTFOLIO_BACKUP_SOURCE = if ($Action -eq 'BackupNeon') { 'neon' } else { 'render' }
         $secret = ConvertTo-SecureString $config.$sourceConfig
-        $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
-        try { $env:PORTFOLIO_BACKUP_DATABASE_URL = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) }
-        finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }
+        $pointer = [IntPtr]::Zero
+
+        try {
+            $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
+            $env:PORTFOLIO_BACKUP_DATABASE_URL = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+        }
+        finally {
+            if ($pointer -ne [IntPtr]::Zero) {
+                [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+            }
+            $secret.Dispose()
+        }
         Write-BackupLog 'INFO' 'execution' 'Starting Node backup process.'
         & $nodeCommand $nodeScript backup
     } else {

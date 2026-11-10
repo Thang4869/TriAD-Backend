@@ -32,9 +32,20 @@ function readContentionMetrics(baseUrl) {
 
 export function setupCheckout() {
   const baseUrl = requiredEnv("K6_BASE_URL").replace(/\/+$/, "");
-  const parsedUrl = new URL(baseUrl);
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsedUrl.hostname);
-  if (parsedUrl.protocol !== "https:" && !(parsedUrl.protocol === "http:" && loopback)) {
+  // k6 does not expose the browser URL global. Parse only the authority needed
+  // for target validation, without weakening the loopback/HTTPS restrictions.
+  const target = baseUrl.match(/^([a-z][a-z0-9+.-]*):\/\/(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::(\d+))?(?:[/?#]|$)/i);
+  if (!target) {
+    throw new Error("K6_BASE_URL must be a valid absolute HTTP(S) URL");
+  }
+  const protocol = target[1].toLowerCase() + ":";
+  const hostname = target[2].toLowerCase();
+  const port = target[3] ? Number(target[3]) : null;
+  if (port !== null && (port < 1 || port > 65535)) {
+    throw new Error("K6_BASE_URL must use a valid TCP port");
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(hostname);
+  if (protocol !== "https:" && !(protocol === "http:" && loopback)) {
     throw new Error("K6_BASE_URL must use HTTPS, or HTTP on loopback only");
   }
   if (!loopback && __ENV.K6_ALLOW_REMOTE !== "true") {

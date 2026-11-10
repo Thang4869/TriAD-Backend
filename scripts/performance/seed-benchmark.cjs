@@ -48,17 +48,16 @@ async function seedBenchmarkFixtures(db, env = process.env) {
   const passwordHash = await bcrypt.hash(password, 12);
   const productIds = [];
   const emails = [];
-  const hotProductId = randomUUID();
 
   await db.$transaction(async (tx) => {
-    const [database] = await tx.$queryRaw\`SELECT current_database() AS name\`;
-    if (database?.name !== DATABASE_NAME) {
+    const rows = await tx.$queryRawUnsafe("SELECT current_database() AS name");
+    if (rows[0]?.name !== DATABASE_NAME) {
       throw new Error("Refusing to seed: connected database must be triad_perf.");
     }
 
     const products = [];
     for (let index = 0; index < userCount; index += 1) {
-      const email = \`perf-\${runId}-\${index + 1}@example.test\`;
+      const email = "perf-" + runId + "-" + (index + 1) + "@example.test";
       const user = await tx.user.upsert({
         where: { email },
         create: {
@@ -66,12 +65,12 @@ async function seedBenchmarkFixtures(db, env = process.env) {
           email,
           password: passwordHash,
           firstName: "Benchmark",
-          lastName: \`User \${index + 1}\`,
+          lastName: "User " + (index + 1),
           phone: "0900000000",
           role: "USER",
           isVerified: true,
         },
-        update: {},
+        update: { password: passwordHash, isVerified: true },
       });
       await tx.cart.upsert({
         where: { userId: user.id },
@@ -80,12 +79,12 @@ async function seedBenchmarkFixtures(db, env = process.env) {
       });
 
       const productId = randomUUID();
-      const slug = \`triad-perf-\${runId}-user-\${index + 1}\`;
+      const slug = "triad-perf-" + runId + "-user-" + (index + 1);
       const product = await tx.product.upsert({
         where: { slug },
         create: {
           id: productId,
-          name: \`[PERF] Independent SKU \${index + 1}\`,
+          name: "[PERF] Independent SKU " + (index + 1),
           description: "Disposable local checkout benchmark fixture.",
           price: 1000,
           stock: 1000000,
@@ -102,11 +101,11 @@ async function seedBenchmarkFixtures(db, env = process.env) {
       emails.push(email);
     }
 
-    const hotSlug = \`triad-perf-\${runId}-hot-product\`;
+    const hotSlug = "triad-perf-" + runId + "-hot-product";
     const hotProduct = await tx.product.upsert({
       where: { slug: hotSlug },
       create: {
-        id: hotProductId,
+        id: randomUUID(),
         name: "[PERF] Shared hot SKU",
         description: "Disposable shared-SKU contention benchmark fixture.",
         price: 1000,
@@ -144,10 +143,14 @@ async function seedBenchmarkFixtures(db, env = process.env) {
       });
     }
 
-    return { userCount: emails.length };
+    return { userCount: emails.length, hotProductId: hotProduct.id };
   }, { maxWait: 10000, timeout: 30000 });
 
-  return { runId, emails, productIds, hotProductId };
+  const hotProduct = await db.product.findUniqueOrThrow({
+    where: { slug: "triad-perf-" + runId + "-hot-product" },
+    select: { id: true },
+  });
+  return { runId, emails, productIds, hotProductId: hotProduct.id };
 }
 
 async function main() {

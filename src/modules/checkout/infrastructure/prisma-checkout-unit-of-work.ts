@@ -23,6 +23,7 @@ import type { Order } from "@modules/orders/domain/order.entity";
 import type { DomainEvent } from "@shared/domain/events/domain-event";
 import { IdempotencyConflictError } from "../application/errors/idempotency-conflict.error";
 import { ConflictError } from "@shared/errors/application-error";
+import { isPrismaSerializationConflict } from "@core/database/prisma-error-classifier";
 import {
   toSafeDecimalNumber,
   toSafeMoneyNumber,
@@ -31,20 +32,6 @@ import {
 const TRANSACTION_TIMEOUT_MS = 10_000;
 
 type PersistEvents = typeof persistEvents;
-
-function isSerializationConflict(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-    return false;
-  }
-
-  if (error.code === "P2034") {
-    return true;
-  }
-
-  // PostgreSQL serialization failures raised by raw SQL are wrapped by
-  // Prisma as P2010, with the original SQLSTATE in meta.code.
-  return error.code === "P2010" && String(error.meta?.code) === "40001";
-}
 
 class PrismaCheckoutTransaction implements CheckoutTransaction {
   constructor(
@@ -237,7 +224,7 @@ export class PrismaCheckoutUnitOfWork implements CheckoutUnitOfWork {
         },
       );
     } catch (error) {
-      if (isSerializationConflict(error)) {
+      if (isPrismaSerializationConflict(error)) {
         throw new ConflictError("Transaction conflict. Please retry.");
       }
 

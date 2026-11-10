@@ -32,6 +32,20 @@ const TRANSACTION_TIMEOUT_MS = 10_000;
 
 type PersistEvents = typeof persistEvents;
 
+function isSerializationConflict(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code === "P2034") {
+    return true;
+  }
+
+  // PostgreSQL serialization failures raised by raw SQL are wrapped by
+  // Prisma as P2010, with the original SQLSTATE in meta.code.
+  return error.code === "P2010" && String(error.meta?.code) === "40001";
+}
+
 class PrismaCheckoutTransaction implements CheckoutTransaction {
   constructor(
     private readonly tx: Prisma.TransactionClient,
@@ -223,10 +237,7 @@ export class PrismaCheckoutUnitOfWork implements CheckoutUnitOfWork {
         },
       );
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2034"
-      ) {
+      if (isSerializationConflict(error)) {
         throw new ConflictError("Transaction conflict. Please retry.");
       }
 

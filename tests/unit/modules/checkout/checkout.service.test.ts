@@ -154,9 +154,11 @@ describe("CheckoutService", () => {
   let pricingService: PricingService;
   let service: CheckoutService;
   let mockStockService: StockReservationService;
+  let metrics: { increment: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    metrics = { increment: vi.fn() };
 
     transaction = createTransaction();
 
@@ -195,7 +197,7 @@ describe("CheckoutService", () => {
         generate: vi.fn().mockReturnValue("ORD-TEST-123"),
       },
       noopTracer,
-      noopMetrics,
+      metrics,
     );
   });
 
@@ -681,6 +683,8 @@ describe("CheckoutService", () => {
 
       expect(result.order.id).toBeDefined();
       expect(callCount).toBe(2);
+      expect(metrics.increment).toHaveBeenCalledWith("checkout.transaction.conflict");
+      expect(metrics.increment).toHaveBeenCalledWith("checkout.transaction.retry");
     });
 
     it("uses the locked product price instead of the stale cart price", async () => {
@@ -986,6 +990,8 @@ describe("CheckoutService", () => {
       await assertion;
 
       expect(callCount).toBe(6);
+      expect(metrics.increment).toHaveBeenCalledTimes(11);
+      expect(metrics.increment).toHaveBeenLastCalledWith("checkout.transaction.conflict");
     });
 
     it("throws ConflictError if discount usage limit reached", async () => {

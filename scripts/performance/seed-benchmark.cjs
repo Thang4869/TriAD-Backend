@@ -24,6 +24,9 @@ function readConfiguration(env = process.env) {
   if (databaseUrl.pathname.replace(/^\//, "") !== DATABASE_NAME) {
     throw new Error("Refusing to seed: database name must be triad_perf.");
   }
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(databaseUrl.hostname)) {
+    throw new Error("Refusing to seed: DATABASE_URL host must be loopback.");
+  }
 
   const runId = env.TRIAD_PERF_RUN_ID || new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
   if (!/^[a-zA-Z0-9-]{8,32}$/.test(runId)) {

@@ -145,6 +145,47 @@ function sourceEnvironment(value, sourceName = "render", fixture = false) {
     throw new Error("Invalid environment value");
   return env;
 }
+function buildEvidence({
+  mode,
+  sourceName,
+  previousEvidence,
+  sha256,
+  archiveBytes,
+  verifiedAt = new Date().toISOString(),
+}) {
+  const previousSourceIsValid =
+    previousEvidence?.result === "PASS" &&
+    ["render", "neon"].includes(previousEvidence.source) &&
+    previousEvidence.sha256 === sha256 &&
+    previousEvidence.archiveBytes === archiveBytes;
+  const source =
+    mode === "backup"
+      ? sourceName
+      : previousSourceIsValid
+        ? previousEvidence.source
+        : "archive";
+  const sourceBackupAt =
+    mode === "backup"
+      ? verifiedAt
+      : previousSourceIsValid
+        ? (previousEvidence.sourceBackupAt || previousEvidence.verifiedAt || null)
+        : null;
+
+  return {
+    result: "PASS",
+    source,
+    database: "triad_staging",
+    sourceBackupAt,
+    verifiedAt,
+    postgresMajor: 18,
+    sha256,
+    archiveBytes,
+    disposableRestore: true,
+    limits:
+      "Local logical snapshot only; no PITR, Redis backup, hosted cutover or RTO/RPO guarantee",
+  };
+}
+
 function docker(args, options = {}) {
   const result = spawnSync("docker", args, {
     stdio: ["ignore", "pipe", "pipe"],
@@ -290,7 +331,15 @@ async function run(mode, env = process.env) {
       stage("source-validation", "Selected local archive for verification");
     }
     stage("archive-verification", "Decrypting and verifying archive integrity");
-    fs.rmSync(encrypted + ".verified.json", { force: true });
+    const receiptPath = encrypted + ".verified.json";
+    let previousEvidence = null;
+    if (mode === "verify" && fs.existsSync(receiptPath)) {
+      try {
+        previousEvidence = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+      } catch {
+        // Ignore invalid old evidence; never trust its source metadata.
+      }
+    }
     const restored = path.join(temporary, "restored.dump");
     await archive("decrypt", encrypted, restored, key);
     // The restore destination is always a fresh, randomly named local container.
@@ -397,23 +446,18 @@ async function run(mode, env = process.env) {
     if (verified.toString().trim() !== "t")
       throw new Error("Restored schema verification failed");
     stage("schema-verification", "Required schema verified");
-    const evidence = {
-      result: "PASS",
-      source: mode === "backup" ? sourceName : "archive",
-      database: "triad_staging",
-      verifiedAt: new Date().toISOString(),
-      postgresMajor: 18,
+    const evidence = buildEvidence({
+      mode,
+      sourceName,
+      previousEvidence,
       sha256: crypto
         .createHash("sha256")
         .update(fs.readFileSync(encrypted))
         .digest("hex"),
       archiveBytes: fs.statSync(encrypted).size,
-      disposableRestore: true,
-      limits:
-        "Local logical snapshot only; no PITR, Redis backup, hosted cutover or RTO/RPO guarantee",
-    };
+    });
     fs.writeFileSync(
-      encrypted + ".verified.json",
+      receiptPath,
       JSON.stringify(evidence, null, 2),
       { mode: 0o600 },
     );
@@ -461,6 +505,7 @@ if (require.main === module)
 module.exports = {
   sourceEnvironment,
   localBackupFile,
+  buildEvidence,
   run,
   classifyError,
   redact,

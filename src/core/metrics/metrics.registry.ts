@@ -151,7 +151,7 @@ export const rateLimitStoreFailuresTotal = new client.Counter({
 
 export const checkoutTransactionConflicts = new client.Counter({
   name: "triad_backend_checkout_transaction_conflicts_total",
-  help: "Checkout transaction conflicts observed before retry or failure",
+  help: "Checkout ConflictError events observed by the retry handler, including exhausted retries",
   registers: [metricsRegistry],
 });
 

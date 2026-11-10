@@ -45,6 +45,16 @@ test("refuses any database other than triad_perf", () => {
   );
 });
 
+test("refuses a non-loopback database host", () => {
+  assert.throws(
+    () => readConfiguration({
+      ...validEnv,
+      DATABASE_URL: "postgresql://user:password@db.example.com:5432/triad_perf",
+    }),
+    /host must be loopback/,
+  );
+});
+
 test("rejects invalid user counts and weak benchmark passwords", () => {
   assert.throws(
     () => readConfiguration({ ...validEnv, TRIAD_PERF_USERS: "51" }),

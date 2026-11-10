@@ -1,273 +1,66 @@
-import prisma from "@core/database/prisma";
-import {
-  Order as PrismaOrder,
-  PaymentMethod,
-  PaymentStatus,
-  Prisma,
-} from "@prisma/client";
+import { describe, expect, it } from "vitest";
+import { Prisma } from "@prisma/client";
+import { PrismaErrorClassifier } from "@core/database/prisma-error-classifier";
 
-import {
-  persistDomainEvents,
-  persistEvents,
-} from "@core/outbox/persist-domain-events";
-import type {
-  CheckoutTransaction,
-  CheckoutUnitOfWork,
-} from "../application/ports/checkout-transaction";
-import type {
-  DiscountRecord,
-  LockedProductRow,
-} from "../application/ports/checkout-models";
-import type { SavedCheckoutOrder } from "../application/ports/checkout-models";
-import type { Order } from "@modules/orders/domain/order.entity";
-import type { DomainEvent } from "@shared/domain/events/domain-event";
-import { IdempotencyConflictError } from "../application/errors/idempotency-conflict.error";
-import { ConflictError } from "@shared/errors/application-error";
-import {
-  toSafeDecimalNumber,
-  toSafeMoneyNumber,
-} from "@shared/infrastructure/money-number";
+describe("PrismaErrorClassifier", () => {
+  const classifier = new PrismaErrorClassifier();
 
-const TRANSACTION_TIMEOUT_MS = 10_000;
-
-type PersistEvents = typeof persistEvents;
-
-function isSerializationConflict(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-    return false;
-  }
-
-  if (error.code === "P2034") {
-    return true;
-  }
-
-  // PostgreSQL serialization failures raised by raw SQL are wrapped by
-  // Prisma as P2010, with the original SQLSTATE in meta.code.
-  return error.code === "P2010" && String(error.meta?.code) === "40001";
-}
-
-class PrismaCheckoutTransaction implements CheckoutTransaction {
-  constructor(
-    private readonly tx: Prisma.TransactionClient,
-    private readonly persistTypedEvents: PersistEvents,
-  ) {}
-
-  async lockProductsForUpdate(
-    productIds: string[],
-  ): Promise<LockedProductRow[]> {
-    const rows = await this.tx.$queryRaw<
-      Array<
-        Omit<LockedProductRow, "price"> & {
-          price: Prisma.Decimal | number | string;
-        }
-      >
-    >`
-      SELECT id, name, price, stock, version, "isActive"
-      FROM products
-      WHERE id = ANY(${productIds})
-      FOR UPDATE
-    `;
-
-    return rows.map((row) => ({
-      ...row,
-      price: toSafeMoneyNumber(row.price),
-    }));
-  }
-
-  async decrementProductStock(
-    productId: string,
-    expectedVersion: number,
-    quantity: number,
-  ): Promise<boolean> {
-    const result = await this.tx.product.updateMany({
-      where: {
-        id: productId,
-        version: expectedVersion,
-      },
-      data: {
-        stock: { decrement: quantity },
-        version: { increment: 1 },
-      },
+  it("classifies P2002 as UNIQUE_CONSTRAINT", () => {
+    const error = new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+      code: "P2002",
+      clientVersion: "test",
     });
+    expect(classifier.classify(error)).toEqual({ kind: "UNIQUE_CONSTRAINT" });
+  });
 
-    return result.count > 0;
-  }
-
-  async persistProductEvent(
-    event: DomainEvent,
-    sourceVersion: number,
-  ): Promise<void> {
-    await this.persistTypedEvents(
-      this.tx,
-      [event],
-      new Map([[event.aggregateId, sourceVersion]]),
-    );
-  }
-
-  async findDiscountByCode(code: string): Promise<DiscountRecord | null> {
-    const discount = await this.tx.discount.findUnique({
-      where: { code },
+  it("classifies P2025 as NOT_FOUND", () => {
+    const error = new Prisma.PrismaClientKnownRequestError("Record not found", {
+      code: "P2025",
+      clientVersion: "test",
     });
+    expect(classifier.classify(error)).toEqual({ kind: "NOT_FOUND" });
+  });
 
-    return discount
-      ? {
-          ...discount,
-          value: toSafeDecimalNumber(discount.value),
-          minOrderAmount:
-            discount.minOrderAmount == null
-              ? null
-              : toSafeMoneyNumber(discount.minOrderAmount),
-        }
-      : null;
-  }
-
-  async incrementDiscountUsage(
-    discountId: string,
-    maxUses: number | null,
-  ): Promise<boolean> {
-    const result = await this.tx.discount.updateMany({
-      where: {
-        id: discountId,
-        ...(maxUses != null
-          ? {
-              usedCount: {
-                lt: maxUses,
-              },
-            }
-          : {}),
-      },
-      data: {
-        usedCount: {
-          increment: 1,
-        },
-      },
+  it("classifies P2034 as TRANSACTION_CONFLICT", () => {
+    const error = new Prisma.PrismaClientKnownRequestError("Transaction conflict", {
+      code: "P2034",
+      clientVersion: "test",
     });
+    expect(classifier.classify(error)).toEqual({ kind: "TRANSACTION_CONFLICT" });
+  });
 
-    return result.count > 0;
-  }
+  it("classifies raw-query SQLSTATE 40001 as TRANSACTION_CONFLICT without instanceof", () => {
+    expect(classifier.classify({
+      name: "PrismaClientKnownRequestError",
+      code: "P2010",
+      meta: { code: "40001", message: "could not serialize access due to concurrent update" },
+    })).toEqual({ kind: "TRANSACTION_CONFLICT" });
+  });
 
-  async clearCartItems(cartId: string): Promise<void> {
-    await this.tx.cartItem.deleteMany({
-      where: { cartId },
+  it("keeps other P2010 SQLSTATE values as DATABASE", () => {
+    expect(classifier.classify({
+      name: "PrismaClientKnownRequestError",
+      code: "P2010",
+      meta: { code: "42P01" },
+    })).toEqual({ kind: "DATABASE" });
+  });
+
+  it("classifies other known Prisma errors as DATABASE", () => {
+    const error = new Prisma.PrismaClientKnownRequestError("Foreign key constraint failed", {
+      code: "P2003",
+      clientVersion: "test",
     });
-  }
+    expect(classifier.classify(error)).toEqual({ kind: "DATABASE" });
+  });
 
-  async saveNewOrder(
-    order: Order,
-    idempotencyKey?: string,
-  ): Promise<SavedCheckoutOrder> {
-    let created: PrismaOrder;
-
-    try {
-      created = await this.tx.order.create({
-        data: {
-          id: order.id,
-          orderNumber: order.orderNumber,
-          userId: order.userId,
-          status: order.status,
-          paymentMethod: order.paymentMethod as PaymentMethod,
-          paymentStatus: order.paymentStatus as PaymentStatus,
-          subtotal: order.subtotal.getValue(),
-          tax: order.tax.getValue(),
-          shippingFee: order.shippingFee.getValue(),
-          total: order.total.getValue(),
-          discountAmount: order.discountAmount.getValue(),
-          discountCode: order.discountCode,
-          customerName: order.customerName,
-          customerEmail: order.customerEmail,
-          customerPhone: order.customerPhone,
-          customerAddress: order.customerAddress,
-          notes: order.notes,
-          ...(idempotencyKey ? { idempotencyKey } : {}),
-        },
-      });
-    } catch (error) {
-      if (
-        idempotencyKey &&
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        const target = error.meta?.target;
-
-        const targets = Array.isArray(target)
-          ? target.map(String)
-          : typeof target === "string"
-            ? [target]
-            : [];
-
-        if (targets.some((field) => field.includes("idempotencyKey"))) {
-          throw new IdempotencyConflictError();
-        }
-      }
-
-      throw error;
-    }
-
-    await this.tx.orderItem.createMany({
-      data: order.items.map((item) => ({
-        orderId: created.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        price: item.unitPrice.getValue(),
-        total: item.total.getValue(),
-      })),
+  it("classifies PrismaClientValidationError as VALIDATION", () => {
+    const error = new Prisma.PrismaClientValidationError("Invalid data", {
+      clientVersion: "test",
     });
+    expect(classifier.classify(error)).toEqual({ kind: "VALIDATION" });
+  });
 
-    await persistDomainEvents(this.tx, [order], new Map([[order.id, 0]]));
-
-    return toSavedCheckoutOrder(created);
-  }
-}
-
-export class PrismaCheckoutUnitOfWork implements CheckoutUnitOfWork {
-  constructor(
-    private readonly persistTypedEvents: PersistEvents = persistEvents,
-  ) {}
-
-  async run<T>(
-    work: (transaction: CheckoutTransaction) => Promise<T>,
-  ): Promise<T> {
-    try {
-      return await prisma.$transaction(
-        (tx) =>
-          work(new PrismaCheckoutTransaction(tx, this.persistTypedEvents)),
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-          timeout: TRANSACTION_TIMEOUT_MS,
-        },
-      );
-    } catch (error) {
-      if (isSerializationConflict(error)) {
-        throw new ConflictError("Transaction conflict. Please retry.");
-      }
-
-      throw error;
-    }
-  }
-}
-
-function toSavedCheckoutOrder(order: PrismaOrder): SavedCheckoutOrder {
-  return {
-    id: order.id,
-    orderNumber: order.orderNumber,
-    userId: order.userId,
-    status: order.status,
-    paymentMethod: order.paymentMethod,
-    paymentStatus: order.paymentStatus,
-    subtotal: toSafeMoneyNumber(order.subtotal),
-    tax: toSafeMoneyNumber(order.tax),
-    shippingFee: toSafeMoneyNumber(order.shippingFee),
-    total: toSafeMoneyNumber(order.total),
-    discountAmount: toSafeMoneyNumber(order.discountAmount),
-    discountCode: order.discountCode,
-    customerName: order.customerName,
-    customerEmail: order.customerEmail,
-    customerPhone: order.customerPhone,
-    customerAddress: order.customerAddress,
-    notes: order.notes,
-    idempotencyKey: order.idempotencyKey,
-    createdAt: order.createdAt,
-    updatedAt: order.updatedAt,
-    version: order.version,
-  };
-}
+  it("returns null for non-Prisma errors", () => {
+    expect(classifier.classify(new Error("Regular error"))).toBeNull();
+  });
+});

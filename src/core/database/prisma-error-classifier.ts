@@ -15,7 +15,7 @@ function isPrismaKnownRequestError(
     error instanceof Prisma.PrismaClientKnownRequestError ||
     (isRecord(error) &&
       typeof error.code === "string" &&
-      /^P\\d{4}$/.test(error.code))
+      /^P\d{4}$/.test(error.code))
   );
 }
 

@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   stockReservationFailed: { inc: vi.fn() },
   checkoutSucceeded: { inc: vi.fn() },
   checkoutFailed: { inc: vi.fn() },
+  checkoutTransactionConflicts: { inc: vi.fn() },
+  checkoutTransactionRetries: { inc: vi.fn() },
   sagaCompensations: { inc: vi.fn() },
 }));
 
@@ -24,6 +26,8 @@ describe("PrometheusMetricsAdapter", () => {
     ["stock.reservation.failed", mocks.stockReservationFailed],
     ["checkout.saga.succeeded", mocks.checkoutSucceeded],
     ["checkout.saga.failed", mocks.checkoutFailed],
+    ["checkout.transaction.conflict", mocks.checkoutTransactionConflicts],
+    ["checkout.transaction.retry", mocks.checkoutTransactionRetries],
   ] as const)("increments %s", (metric, counter) => {
     const adapter = new PrometheusMetricsAdapter();
 

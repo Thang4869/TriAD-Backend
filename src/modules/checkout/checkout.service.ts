@@ -267,7 +267,13 @@ export class CheckoutService {
     try {
       return await this.unitOfWork.run(operation);
     } catch (error) {
-      if (error instanceof ConflictError && retryCount < MAX_RETRIES) {
+      if (error instanceof ConflictError) {
+        this.metrics.increment("checkout.transaction.conflict");
+        if (retryCount < MAX_RETRIES) {
+          this.metrics.increment("checkout.transaction.retry");
+        } else {
+          throw error;
+        }
         const exponentialDelay = BASE_DELAY_MS * Math.pow(2, retryCount);
 
         const jitter = Math.random() * BASE_DELAY_MS;

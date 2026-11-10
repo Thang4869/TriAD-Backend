@@ -66,7 +66,7 @@ jobs:
           cache: "npm"
       - run: npm ci
       - name: Test PR classification and staging safeguards
-        run: node --test tests/scripts/pr-labels.test.cjs tests/scripts/staging-smoke.test.cjs tests/scripts/staging-catalog.test.cjs
+        run: node --test tests/scripts/pr-labels.test.cjs tests/scripts/staging-smoke.test.cjs tests/scripts/staging-catalog.test.cjs tests/scripts/seed-benchmark.test.cjs
       - run: npm run architecture:check
       - run: npm run lint
       - run: npm run typecheck

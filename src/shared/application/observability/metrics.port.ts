@@ -4,6 +4,8 @@ export type ApplicationMetric =
   | "stock.reservation.failed"
   | "checkout.saga.succeeded"
   | "checkout.saga.failed"
+  | "checkout.transaction.conflict"
+  | "checkout.transaction.retry"
   | "saga.compensation";
 
 export type MetricLabels = Record<string, string | number>;

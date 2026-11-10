@@ -5,6 +5,8 @@ import type {
 } from "@shared/application/observability/metrics.port";
 import {
   checkoutFailed,
+  checkoutTransactionConflicts,
+  checkoutTransactionRetries,
   checkoutSucceeded,
   ordersPlaced,
   sagaCompensations,
@@ -33,6 +35,14 @@ export class PrometheusMetricsAdapter implements MetricsPort {
 
       case "checkout.saga.failed":
         checkoutFailed.inc();
+        return;
+
+      case "checkout.transaction.conflict":
+        checkoutTransactionConflicts.inc();
+        return;
+
+      case "checkout.transaction.retry":
+        checkoutTransactionRetries.inc();
         return;
 
       case "saga.compensation": {

@@ -14,7 +14,7 @@ import {
   ConflictError,
 } from "@shared/errors/application-error";
 import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
-import { noopTracer } from "../../../helpers/observability";
+import { noopMetrics, noopTracer } from "../../../helpers/observability";
 
 const discount = {
   id: "d1",

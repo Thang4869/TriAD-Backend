@@ -2,6 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const {
   sourceEnvironment,
+  buildEvidence,
   classifyError,
   redact,
   createLogger,
@@ -115,4 +116,56 @@ test("classifies operational failures and redacts credentials", async () => {
   } finally {
     fs.rmSync(localAppData, { recursive: true, force: true });
   }
+});
+
+test("verification preserves the original Render or Neon backup source", () => {
+  for (const source of ["render", "neon"]) {
+    const evidence = buildEvidence({
+      mode: "verify",
+      previousEvidence: {
+        result: "PASS",
+        source,
+        verifiedAt: "2026-11-10T01:00:00.000Z",
+        sha256: "a".repeat(64),
+        archiveBytes: 1234,
+      },
+      sha256: "a".repeat(64),
+      archiveBytes: 1234,
+      verifiedAt: "2026-11-10T02:00:00.000Z",
+    });
+    assert.equal(evidence.source, source);
+    assert.equal(evidence.sourceBackupAt, "2026-11-10T01:00:00.000Z");
+    assert.equal(evidence.verifiedAt, "2026-11-10T02:00:00.000Z");
+  }
+});
+
+test("verification does not inherit a source from a mismatched receipt", () => {
+  const evidence = buildEvidence({
+    mode: "verify",
+    previousEvidence: {
+      result: "PASS",
+      source: "render",
+      verifiedAt: "2026-11-10T01:00:00.000Z",
+      sha256: "b".repeat(64),
+      archiveBytes: 1234,
+    },
+    sha256: "a".repeat(64),
+    archiveBytes: 1234,
+    verifiedAt: "2026-11-10T02:00:00.000Z",
+  });
+  assert.equal(evidence.source, "archive");
+  assert.equal(evidence.sourceBackupAt, null);
+});
+
+test("a new backup records its selected source and source backup timestamp", () => {
+  const evidence = buildEvidence({
+    mode: "backup",
+    sourceName: "neon",
+    sha256: "a".repeat(64),
+    archiveBytes: 1234,
+    verifiedAt: "2026-11-10T02:00:00.000Z",
+  });
+  assert.equal(evidence.source, "neon");
+  assert.equal(evidence.sourceBackupAt, "2026-11-10T02:00:00.000Z");
+  assert.equal(evidence.verifiedAt, "2026-11-10T02:00:00.000Z");
 });

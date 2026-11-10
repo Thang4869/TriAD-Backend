@@ -92,7 +92,7 @@ For each run, record:
 - Git commit SHA, Node.js version, k6 version and Docker image tags.
 - CPU/RAM and Docker resource limits for the API, PostgreSQL and Redis.
 - PostgreSQL connection settings, VU count, duration, run ID and scenario.
-- p50/p95/p99 checkout latency, throughput, successful checkout count, HTTP error rate, HTTP 409 count, transaction conflict delta and retry delta.
+- p50/p95/p99 checkout latency, throughput, successful checkout count, HTTP error rate, HTTP 409 count, checkout ConflictError delta and retry delta.
 - Whether thresholds passed, plus any warm-up or environmental anomalies.
 
 Save k6's JSON output with \`--out json=<path>\` only in a local ignored directory (for example \`reports/performance/\`). Review the file before sharing it. Do not commit tokens, passwords, customer data or environment dumps.

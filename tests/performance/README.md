@@ -32,6 +32,7 @@ $env:PORT = '5001'
 $env:DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:5544/triad_perf?schema=public'
 $env:REDIS_URL = 'redis://127.0.0.1:6381'
 $env:QUEUE_REDIS_URL = 'redis://127.0.0.1:6381'
+$env:RATE_LIMIT_MAX = '10000'
 $env:TRIAD_PERF_CONFIRM = 'I_UNDERSTAND_LOCAL_BENCHMARK_DATA'
 $env:TRIAD_PERF_RUN_ID = 'local-20261110'
 $env:TRIAD_PERF_USERS = '10'
@@ -51,7 +52,7 @@ The seeder creates verified benchmark-only users, one independent product per us
 
 ## 4. Start the isolated API
 
-In a second PowerShell terminal, set the same `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL` and `QUEUE_REDIS_URL` values, then run:
+In a second PowerShell terminal, set the same `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `QUEUE_REDIS_URL` and `RATE_LIMIT_MAX` values, then run:
 
 ```powershell
 npx ts-node -r tsconfig-paths/register src/server.ts

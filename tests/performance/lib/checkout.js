@@ -31,10 +31,10 @@ function readContentionMetrics(baseUrl) {
 }
 
 export function setupCheckout() {
-  const baseUrl = requiredEnv("K6_BASE_URL").replace(/\\/+$/, "");
+  const baseUrl = requiredEnv("K6_BASE_URL").replace(/\/+$/, "");
   // k6 does not expose the browser URL global. Parse only the authority needed
   // for target validation, without weakening the loopback/HTTPS restrictions.
-  const target = baseUrl.match(/^([a-z][a-z0-9+.-]*):\\/\\/(\\[[0-9a-f:.]+\\]|[a-z0-9.-]+)(?::(\\d+))?(?:[/?#]|$)/i);
+  const target = baseUrl.match(/^([a-z][a-z0-9+.-]*):\/\/(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::(\d+))?(?:[/?#]|$)/i);
   if (!target) {
     throw new Error("K6_BASE_URL must be a valid absolute HTTP(S) URL");
   }

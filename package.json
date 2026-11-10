@@ -35,7 +35,10 @@
     "prisma:studio": "prisma studio",
     "prisma:generate": "prisma generate && tsc-alias",
     "prisma:reset": "prisma migrate reset --force && ts-node scripts/seed.ts",
-    "prepare": "node scripts/prepare-husky.cjs"
+    "prepare": "node scripts/prepare-husky.cjs",
+    "perf:checkout:baseline": "k6 run tests/performance/checkout-baseline.js",
+    "perf:checkout:contention": "k6 run tests/performance/hot-product-contention.js",
+    "perf:checkout:seed": "node scripts/performance/seed-benchmark.cjs"
   },
   "dependencies": {
     "@opentelemetry/api": "1.9.1",

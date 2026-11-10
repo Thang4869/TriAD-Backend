@@ -14,6 +14,7 @@ import {
   ConflictError,
 } from "@shared/errors/application-error";
 import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
+import type { MetricsPort } from "@shared/application/observability/metrics.port";
 import { noopMetrics, noopTracer } from "../../../helpers/observability";
 
 const discount = {
@@ -154,11 +155,11 @@ describe("CheckoutService", () => {
   let pricingService: PricingService;
   let service: CheckoutService;
   let mockStockService: StockReservationService;
-  let metrics: { increment: ReturnType<typeof vi.fn> };
+  let metrics: MetricsPort;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    metrics = { increment: vi.fn() };
+    metrics = { increment: vi.fn<MetricsPort["increment"]>() };
 
     transaction = createTransaction();
 

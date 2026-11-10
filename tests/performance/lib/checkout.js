@@ -14,8 +14,7 @@ function requiredEnv(name) {
 }
 
 function counterValue(metricsText, metricName) {
-  const escaped = metricName.replace(/[.*+?^\${}()|[\]\\]/g, "\\$&");
-  const match = metricsText.match(new RegExp("^" + escaped + "\\\\s+([0-9.eE+-]+)$", "m"));
+  const match = metricsText.match(new RegExp("^" + metricName + "\\s+([0-9.eE+-]+)$", "m"));
   return match ? Number(match[1]) : 0;
 }
 

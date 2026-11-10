@@ -36,7 +36,31 @@ describe("PrismaCheckoutUnitOfWork", () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
-  it("rethrows non-P2034 Prisma errors unchanged", async () => {
+  it("translates PostgreSQL raw-query SQLSTATE 40001 into ConflictError", async () => {
+    const unitOfWork = new PrismaCheckoutUnitOfWork();
+
+    const prismaError = new Prisma.PrismaClientKnownRequestError(
+      "Raw query failed: could not serialize access due to concurrent update",
+      {
+        code: "P2010",
+        clientVersion: "test",
+        meta: {
+          code: "40001",
+          message: "could not serialize access due to concurrent update",
+        },
+      },
+    );
+
+    vi.mocked(prisma.$transaction).mockRejectedValueOnce(prismaError);
+
+    await expect(unitOfWork.run(async () => "ok")).rejects.toBeInstanceOf(
+      ConflictError,
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("rethrows non-serialization Prisma errors unchanged", async () => {
     const unitOfWork = new PrismaCheckoutUnitOfWork();
 
     const prismaError = new Prisma.PrismaClientKnownRequestError(
@@ -44,6 +68,26 @@ describe("PrismaCheckoutUnitOfWork", () => {
       {
         code: "P2002",
         clientVersion: "test",
+      },
+    );
+
+    vi.mocked(prisma.$transaction).mockRejectedValueOnce(prismaError);
+
+    await expect(unitOfWork.run(async () => "ok")).rejects.toBe(prismaError);
+  });
+
+  it("does not treat other P2010 raw-query errors as transaction conflicts", async () => {
+    const unitOfWork = new PrismaCheckoutUnitOfWork();
+
+    const prismaError = new Prisma.PrismaClientKnownRequestError(
+      "Raw query failed for a non-serialization reason",
+      {
+        code: "P2010",
+        clientVersion: "test",
+        meta: {
+          code: "42P01",
+          message: "relation does not exist",
+        },
       },
     );
 

@@ -9,7 +9,7 @@ These k6 scenarios are for a **disposable local PostgreSQL/Redis environment**. 
 - k6 reports checkout duration p50/p95/p99, checkout throughput (successful checkouts/second), successful checkouts, HTTP failures and HTTP 409 conflicts.
 - The backend exposes Prometheus counters for transaction conflicts and retries. Each run prints the before/after delta as `CHECKOUT_CONTENTION_METRICS`.
 
-The cart-add request is setup for each iteration and is tagged separately; `checkout_duration` measures only the checkout request. Each VU has its own account and unique idempotency key per iteration.
+The cart-add request is setup for each iteration and is tagged separately; `checkout_duration` measures only the checkout request. Each VU has its own account and unique idempotency key per scenario, VU and iteration.
 
 ## 1. Start isolated dependencies
 
@@ -66,35 +66,47 @@ Install k6 locally from the official Grafana k6 distribution; it is intentionall
 
 ```powershell
 $fixtures = Get-Content -LiteralPath "$env:TEMP\triad-perf-fixtures.json" -Raw | ConvertFrom-Json
-$env:K6_BASE_URL = 'http://127.0.0.1:5001'
-$env:K6_RUN_ID = $fixtures.runId
-$env:K6_BENCH_EMAILS = ConvertTo-Json -Compress -InputObject @($fixtures.emails)
-$env:K6_PRODUCT_IDS = ConvertTo-Json -Compress -InputObject @($fixtures.productIds)
-$env:K6_HOT_PRODUCT_ID = $fixtures.hotProductId
-$env:K6_BENCH_PASSWORD = $env:TRIAD_PERF_PASSWORD
-$env:K6_VUS = '5'
-$env:K6_DURATION = '2m'
+$env:TRIAD_PERF_BASE_URL = 'http://127.0.0.1:5001'
+$env:TRIAD_PERF_RUN_ID = $fixtures.runId
+$env:TRIAD_PERF_BENCH_EMAILS = ConvertTo-Json -Compress -InputObject @($fixtures.emails)
+$env:TRIAD_PERF_PRODUCT_IDS = ConvertTo-Json -Compress -InputObject @($fixtures.productIds)
+$env:TRIAD_PERF_HOT_PRODUCT_ID = $fixtures.hotProductId
+$env:TRIAD_PERF_BENCH_PASSWORD = $env:TRIAD_PERF_PASSWORD
+$env:TRIAD_PERF_VUS = '5'
+$env:TRIAD_PERF_DURATION = '2m'
 
 npm run perf:checkout:baseline
-$env:K6_VUS = '10'
+$env:TRIAD_PERF_VUS = '10'
 npm run perf:checkout:contention
 ```
 
-Set `K6_VUS` no higher than the seeded user count. The default targets are loopback only. A remote host is rejected unless `K6_ALLOW_REMOTE=true` is explicitly supplied; do not set it for production. Never include passwords, cookies, bearer tokens or raw environment dumps in benchmark artifacts.
+`TRIAD_PERF_VUS` must not exceed the seeded user count. The default target is loopback only. A remote host is rejected unless `TRIAD_PERF_ALLOW_REMOTE=true` is explicitly supplied; do not set it for production. Never include passwords, cookies, bearer tokens or raw environment dumps in benchmark artifacts.
 
 Thresholds are intentionally configurable for different local hardware:
-- `K6_P95_MS` (default baseline 1500 ms; contention 2500 ms)
-- `K6_P99_MS` (default baseline 3000 ms; contention 5000 ms)
-- `K6_ERROR_RATE` (default 0.01)
+
+- `TRIAD_PERF_P95_MS` (default baseline 1500 ms; contention 2500 ms)
+- `TRIAD_PERF_P99_MS` (default baseline 3000 ms; contention 5000 ms)
+- `TRIAD_PERF_ERROR_RATE` (default 0.01)
+
+Run each workload separately with a new run ID or disposable fixture database:
+
+```powershell
+npm run perf:checkout:baseline
+npm run perf:checkout:contention
+```
+
+The scripts use the official k6 `scenarios` configuration. Benchmark settings intentionally use the `TRIAD_PERF_*` namespace so they cannot override k6 scenario options. The baseline uses the `checkout_baseline` scenario name and the contention workload uses `hot_product_contention`. Checkout idempotency keys are formed as `runId-scenarioName-VU-iteration`; the scenario name is required, so restarting `__ITER` in another workload cannot replay the previous workload's key.
 
 ## 6. Record reproducible evidence
 
 For each run, record:
+
 - Git commit SHA, Node.js version, k6 version and Docker image tags.
 - CPU/RAM and Docker resource limits for the API, PostgreSQL and Redis.
 - PostgreSQL connection settings, VU count, duration, run ID and scenario.
 - p50/p95/p99 checkout latency, throughput, successful checkout count, HTTP error rate, HTTP 409 count, checkout ConflictError delta and retry delta.
 - Whether thresholds passed, plus any warm-up or environmental anomalies.
+- HTTP 409 responses, transaction conflict deltas and retry deltas; these are observations, not proof of an idempotency replay cause.
 
 Save k6's JSON output with `--out json=<path>` only in a local ignored directory (for example `reports/performance/`). Review the file before sharing it. Do not commit tokens, passwords, customer data or environment dumps.
 

@@ -139,15 +139,19 @@ The checkout service retries transaction conflicts up to five times, using expon
 
 This retry strategy helps recover from transient conflicts but can contribute to long-tail latency when repeated retries occur. The baseline p99 result warrants further investigation; this benchmark alone does not establish the root cause.
 
-## 8. Benchmark execution caveat
+## 8. Benchmark execution caveat and isolation findings
 
 Both k6 runs emitted this warning:
 
 `"env" level configuration overrode scenarios configuration entirely`
 
-The effective run still used 5 VUs for 2 minutes, as confirmed by the execution summary. However, the scenario was reported as `default` rather than the configured scenario name.
+The effective run still used 5 VUs for 2 minutes, as confirmed by the execution summary. However, the scenario was reported as `default` rather than the configured scenario name. The benchmark configuration used custom k6-prefixed environment names, which overlap with k6's own configuration namespace and can override the `scenarios` configuration.
 
-The benchmark should be repeated after reviewing the k6 environment option names and avoiding collisions with built-in k6 options. The warning is recorded here rather than silently disregarded.
+The original checkout key was composed only from run ID, VU and iteration. Because `__ITER` starts again when another scenario starts, baseline and contention could generate the same key and receive a replayed idempotency response. This is a risk identified from the implementation, not evidence that any specific response in this run was replayed.
+
+The 23 baseline and 27 hot-product HTTP 409 responses are observed benchmark results. The report does not attribute those 409 responses to idempotency replay without response-level evidence; transaction conflicts and retries were also observed.
+
+The scripts are being corrected to use the `TRIAD_PERF_*` namespace and scenario-qualified keys (`runId-scenarioName-VU-iteration`). No post-fix benchmark has been run yet, so the results in this report remain the original 2026-11-11 measurements.
 
 ## 9. Raw artifacts
 
@@ -169,8 +173,82 @@ Run ID: `local-20261111`
 
 Recommended follow-up:
 
-1. Resolve the k6 environment option collision and repeat both workloads.
+1. Complete the namespace and scenario-key isolation fix, then repeat both workloads.
 2. Investigate baseline p99 tail latency and residual HTTP 409 responses.
 3. Repeat under controlled conditions before making capacity or production-readiness claims.
 
 No production load test was performed.
+
+## 11. Post-fix verification – Issue #144
+
+The isolation fix was verified locally on 2026-11-12 against commit `df45cb9637418ca9f3e82c19cfaec28ff9418a44`. The benchmark used the existing dedicated local containers without recreating or deleting them:
+
+| Component | Configuration |
+|---|---|
+| k6 | v2.3.0 |
+| Node.js | v24.14.0 |
+| API | local compiled server on `http://127.0.0.1:5001` |
+| PostgreSQL | `triad-perf-postgres`, `postgres:16-alpine`, host port 5544 |
+| Redis | `triad-perf-redis`, `redis:7-alpine`, host port 6381, database 0 |
+| Database | `triad_perf` |
+| PostgreSQL/Redis state | Dedicated benchmark containers; no data or keys were deleted |
+
+The API readiness endpoint and metrics endpoint both returned HTTP 200. The API startup log confirmed the benchmark database URL, Redis URL and port 5001. The fixture seeder created additive, run-specific users and products using the existing `TRIAD_PERF_*` safety checks.
+
+### 11.1 Baseline
+
+- Run ID: `postfix-baseline-20261112-0349`
+- Scenario: `checkout_baseline`
+- VUs: 5
+- Duration: 2 minutes
+- Completed iterations: 1,013
+- Successful checkouts: 991
+- Failed checkouts: 22
+- HTTP status: 991 HTTP 201, 22 HTTP 409
+- Cart-add failures: 0
+- p50: 204.65 ms
+- p95: 2.21 s
+- p99: 4.13 s
+- Successful checkout throughput: 7.837786/s
+- Transaction conflicts: 634
+- Transaction retries: 612
+
+Threshold result: **FAIL**. p95, p99 and failure-rate thresholds were crossed. The 22 failed checkout responses were observed as `APPLICATION.CONFLICT` / transaction-conflict responses; this run provides no evidence that they were idempotency replays.
+
+### 11.2 Hot-product contention
+
+- Run ID: `postfix-contention-20261112-0349`
+- Scenario: `hot_product_contention`
+- VUs: 10
+- Duration: 2 minutes
+- Completed iterations: 1,341
+- Successful checkouts: 1,212
+- Failed checkouts: 129
+- HTTP status: 1,212 HTTP 201, 129 HTTP 409
+- Cart-add failures: 0
+- p50: 207.16 ms
+- p95: 3.91 s
+- p99: 4.35 s
+- Successful checkout throughput: 9.536294/s
+- Transaction conflicts: 1,480
+- Transaction retries: 1,351
+
+Threshold result: **FAIL**. p95 and failure-rate thresholds were crossed; p99 passed. The 129 failed checkout responses were observed as transaction-conflict responses, not proven idempotency replays.
+
+### 11.3 Isolation evidence and comparison
+
+Both k6 runs reported their configured scenario names and did not emit the previous `env`/`scenarios` override warning. The generated checkout keys included the run ID, scenario name, VU and iteration:
+
+- Baseline: 991 persisted orders with 991 distinct `checkout_baseline` keys.
+- Contention: 1,212 persisted orders with 1,212 distinct `hot_product_contention` keys.
+- No order used the old unqualified key shape in the checked run IDs.
+- Redis contained 991 baseline-scenario idempotency keys and 1,212 contention-scenario keys after the runs. The dedicated Redis database contained pre-existing keys; none were deleted.
+
+Compared with the 2026-11-11 measurements, the new runs are not a controlled performance comparison: the contention workload used 10 VUs instead of the earlier report's 5 VUs, and the fixture/run IDs and accumulated local container state differed. The new evidence verifies scenario and idempotency isolation, but both workloads failed the configured performance thresholds. The run is therefore **PARTIALLY VERIFIED**, not benchmark-accepted.
+
+Raw post-fix artifacts were retained outside Git:
+
+- `%TEMP%\triad-checkout-baseline-postfix-20261112.json`
+- `%TEMP%\triad-checkout-contention-postfix-20261112.json`
+- `%TEMP%\triad-checkout-baseline-postfix-20261112.log`
+- `%TEMP%\triad-checkout-contention-postfix-20261112.log`

@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CheckoutService } from "@modules/checkout/checkout.service";
+import {
+  CheckoutService,
+  classifyCheckoutError,
+} from "@modules/checkout/checkout.service";
 import { ICheckoutRepository } from "@modules/checkout/application/ports/checkout.repository.port";
 import type {
   CheckoutTransaction,
@@ -159,7 +162,10 @@ describe("CheckoutService", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    metrics = { increment: vi.fn<MetricsPort["increment"]>() };
+    metrics = {
+      increment: vi.fn<MetricsPort["increment"]>(),
+      observe: vi.fn<NonNullable<MetricsPort["observe"]>>(),
+    };
 
     transaction = createTransaction();
 
@@ -684,8 +690,70 @@ describe("CheckoutService", () => {
 
       expect(result.order.id).toBeDefined();
       expect(callCount).toBe(2);
-      expect(metrics.increment).toHaveBeenCalledWith("checkout.transaction.conflict");
-      expect(metrics.increment).toHaveBeenCalledWith("checkout.transaction.retry");
+      expect(metrics.increment).toHaveBeenCalledWith(
+        "checkout.transaction.conflict",
+      );
+      expect(metrics.increment).toHaveBeenCalledWith(
+        "checkout.transaction.retry",
+      );
+      expect(metrics.observe).toHaveBeenCalledWith(
+        "checkout.transaction.duration",
+        expect.any(Number),
+        { outcome: "retry" },
+      );
+      expect(metrics.observe).toHaveBeenCalledWith(
+        "checkout.transaction.duration",
+        expect.any(Number),
+        { outcome: "success" },
+      );
+    });
+
+    it("emits bounded success telemetry for a transaction", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      mockFindOrderSuccess();
+
+      await service.checkout("user-1", baseInput);
+
+      expect(metrics.observe).toHaveBeenCalledWith(
+        "checkout.transaction.attempts",
+        1,
+        { outcome: "success" },
+      );
+      expect(metrics.observe).toHaveBeenCalledWith(
+        "checkout.transaction.duration",
+        expect.any(Number),
+        { outcome: "success" },
+      );
+    });
+
+    it("does not fail checkout when telemetry observation throws", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      mockFindOrderSuccess();
+      metrics.observe = vi.fn().mockImplementation(() => {
+        throw new Error("telemetry unavailable");
+      });
+
+      await expect(
+        service.checkout("user-1", baseInput),
+      ).resolves.toMatchObject({
+        idempotent: false,
+      });
+    });
+
+    it.each([
+      [
+        new ConflictError("Stock conflict for product prod-1"),
+        "product_stock_conflict",
+      ],
+      [
+        new ConflictError("Transaction conflict. Please retry."),
+        "transaction_conflict",
+      ],
+      [new IdempotencyConflictError(), "idempotency_conflict"],
+      [{ code: "P2034" }, "database_error"],
+      [new ValidationError("invalid input"), "application_error"],
+    ] as const)("classifies %s safely", (error, category) => {
+      expect(classifyCheckoutError(error)).toBe(category);
     });
 
     it("uses the locked product price instead of the stale cart price", async () => {
@@ -992,7 +1060,9 @@ describe("CheckoutService", () => {
 
       expect(callCount).toBe(6);
       expect(metrics.increment).toHaveBeenCalledTimes(11);
-      expect(metrics.increment).toHaveBeenLastCalledWith("checkout.transaction.conflict");
+      expect(metrics.increment).toHaveBeenLastCalledWith(
+        "checkout.transaction.conflict",
+      );
     });
 
     it("throws ConflictError if discount usage limit reached", async () => {

@@ -126,9 +126,15 @@ describe("persistDomainEvents", () => {
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining("Failed to write domain events"),
       expect.objectContaining({
-        error,
         events: ["EventA"],
+        errorCategory: "unknown",
+        prismaCode: "unknown",
+        prismaModel: "unknown",
+        observedOperation: "outbox_create_many",
       }),
+    );
+    expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain(
+      error.message,
     );
   });
 });

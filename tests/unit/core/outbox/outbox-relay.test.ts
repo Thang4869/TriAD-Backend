@@ -7,10 +7,13 @@ import {
 import { logger } from "@core/logger/winston";
 import { OutboxRelayStore } from "@core/outbox/outbox-relay-store.port";
 import {
+  outboxClaimDurationSeconds,
+  outboxCompletionDurationSeconds,
   outboxDeadLetteredEvents,
   outboxEventsFailed,
   outboxEventsPublished,
   outboxLagSeconds,
+  outboxPublishDurationSeconds,
 } from "@core/metrics/metrics.registry";
 
 vi.mock("@core/logger/winston", () => ({
@@ -18,7 +21,7 @@ vi.mock("@core/logger/winston", () => ({
 }));
 
 vi.mock("@core/metrics/metrics.registry", () => {
-  const metric = () => ({ inc: vi.fn(), set: vi.fn() });
+  const metric = () => ({ inc: vi.fn(), set: vi.fn(), observe: vi.fn() });
   return {
     outboxEventsClaimed: metric(),
     outboxEventsPublished: metric(),
@@ -26,6 +29,11 @@ vi.mock("@core/metrics/metrics.registry", () => {
     outboxEventsDeadLettered: metric(),
     outboxLagSeconds: metric(),
     outboxDeadLetteredEvents: metric(),
+    outboxClaimDurationSeconds: metric(),
+    outboxCompletionDurationSeconds: metric(),
+    outboxPublishDurationSeconds: metric(),
+    outboxRelayLeaseLosses: metric(),
+    outboxRelayRetries: metric(),
   };
 });
 
@@ -113,6 +121,36 @@ describe("OutboxRelay.pollOnce", () => {
     expect(id).toBe("outbox-1");
     expect(owner).toEqual(expect.any(String));
     expect(data.publishedAt).toBeInstanceOf(Date);
+    expect(outboxClaimDurationSeconds.observe).toHaveBeenCalledWith(
+      expect.any(Number),
+    );
+    expect(outboxPublishDurationSeconds.observe).toHaveBeenCalledWith(
+      expect.any(Number),
+    );
+    expect(outboxCompletionDurationSeconds.observe).toHaveBeenCalledWith(
+      expect.any(Number),
+    );
+  });
+
+  it("continues publishing when relay telemetry fails", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    vi.mocked(outboxPublishDurationSeconds.observe).mockImplementation(() => {
+      throw new Error("telemetry unavailable");
+    });
+    const publish = vi
+      .fn()
+      .mockResolvedValue({ success: true, failedHandlers: [] });
+
+    await expect(
+      new OutboxRelay(
+        store,
+        handlerTracker,
+        createEventBus(publish),
+      ).pollOnce(),
+    ).resolves.toBeUndefined();
+
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(store.updateClaimed).toHaveBeenCalled();
   });
 
   it("does not dispatch an event with an unsupported schemaVersion", async () => {

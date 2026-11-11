@@ -178,3 +178,77 @@ Recommended follow-up:
 3. Repeat under controlled conditions before making capacity or production-readiness claims.
 
 No production load test was performed.
+
+## 11. Post-fix verification – Issue #144
+
+The isolation fix was verified locally on 2026-11-12 against commit `df45cb9637418ca9f3e82c19cfaec28ff9418a44`. The benchmark used the existing dedicated local containers without recreating or deleting them:
+
+| Component | Configuration |
+|---|---|
+| k6 | v2.3.0 |
+| Node.js | v24.14.0 |
+| API | local compiled server on `http://127.0.0.1:5001` |
+| PostgreSQL | `triad-perf-postgres`, `postgres:16-alpine`, host port 5544 |
+| Redis | `triad-perf-redis`, `redis:7-alpine`, host port 6381, database 0 |
+| Database | `triad_perf` |
+| PostgreSQL/Redis state | Dedicated benchmark containers; no data or keys were deleted |
+
+The API readiness endpoint and metrics endpoint both returned HTTP 200. The API startup log confirmed the benchmark database URL, Redis URL and port 5001. The fixture seeder created additive, run-specific users and products using the existing `TRIAD_PERF_*` safety checks.
+
+### 11.1 Baseline
+
+- Run ID: `postfix-baseline-20261112-0349`
+- Scenario: `checkout_baseline`
+- VUs: 5
+- Duration: 2 minutes
+- Completed iterations: 1,013
+- Successful checkouts: 991
+- Failed checkouts: 22
+- HTTP status: 991 HTTP 201, 22 HTTP 409
+- Cart-add failures: 0
+- p50: 204.65 ms
+- p95: 2.21 s
+- p99: 4.13 s
+- Successful checkout throughput: 7.837786/s
+- Transaction conflicts: 634
+- Transaction retries: 612
+
+Threshold result: **FAIL**. p95, p99 and failure-rate thresholds were crossed. The 22 failed checkout responses were observed as `APPLICATION.CONFLICT` / transaction-conflict responses; this run provides no evidence that they were idempotency replays.
+
+### 11.2 Hot-product contention
+
+- Run ID: `postfix-contention-20261112-0349`
+- Scenario: `hot_product_contention`
+- VUs: 10
+- Duration: 2 minutes
+- Completed iterations: 1,341
+- Successful checkouts: 1,212
+- Failed checkouts: 129
+- HTTP status: 1,212 HTTP 201, 129 HTTP 409
+- Cart-add failures: 0
+- p50: 207.16 ms
+- p95: 3.91 s
+- p99: 4.35 s
+- Successful checkout throughput: 9.536294/s
+- Transaction conflicts: 1,480
+- Transaction retries: 1,351
+
+Threshold result: **FAIL**. p95 and failure-rate thresholds were crossed; p99 passed. The 129 failed checkout responses were observed as transaction-conflict responses, not proven idempotency replays.
+
+### 11.3 Isolation evidence and comparison
+
+Both k6 runs reported their configured scenario names and did not emit the previous `env`/`scenarios` override warning. The generated checkout keys included the run ID, scenario name, VU and iteration:
+
+- Baseline: 991 persisted orders with 991 distinct `checkout_baseline` keys.
+- Contention: 1,212 persisted orders with 1,212 distinct `hot_product_contention` keys.
+- No order used the old unqualified key shape in the checked run IDs.
+- Redis contained 991 baseline-scenario idempotency keys and 1,212 contention-scenario keys after the runs. The dedicated Redis database contained pre-existing keys; none were deleted.
+
+Compared with the 2026-11-11 measurements, the new runs are not a controlled performance comparison: the contention workload used 10 VUs instead of the earlier report's 5 VUs, and the fixture/run IDs and accumulated local container state differed. The new evidence verifies scenario and idempotency isolation, but both workloads failed the configured performance thresholds. The run is therefore **PARTIALLY VERIFIED**, not benchmark-accepted.
+
+Raw post-fix artifacts were retained outside Git:
+
+- `%TEMP%\triad-checkout-baseline-postfix-20261112.json`
+- `%TEMP%\triad-checkout-contention-postfix-20261112.json`
+- `%TEMP%\triad-checkout-baseline-postfix-20261112.log`
+- `%TEMP%\triad-checkout-contention-postfix-20261112.log`

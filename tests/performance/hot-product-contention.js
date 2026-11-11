@@ -1,10 +1,14 @@
-import { setupCheckout, runCheckout, teardownCheckout } from "./lib/checkout.js";
+import {
+  setupCheckout,
+  runCheckout,
+  teardownCheckout,
+} from "./lib/checkout.js";
 
-const vus = Number(__ENV.K6_VUS || 10);
-const duration = __ENV.K6_DURATION || "2m";
-const p95 = Number(__ENV.K6_P95_MS || 2500);
-const p99 = Number(__ENV.K6_P99_MS || 5000);
-const errorRate = Number(__ENV.K6_ERROR_RATE || 0.01);
+const vus = Number(__ENV.TRIAD_PERF_VUS || 10);
+const duration = __ENV.TRIAD_PERF_DURATION || "2m";
+const p95 = Number(__ENV.TRIAD_PERF_P95_MS || 2500);
+const p99 = Number(__ENV.TRIAD_PERF_P99_MS || 5000);
+const errorRate = Number(__ENV.TRIAD_PERF_ERROR_RATE || 0.01);
 
 export const options = {
   scenarios: {
@@ -21,7 +25,7 @@ export function setup() {
 }
 
 export default function (data) {
-  runCheckout(data, data.hotProductId);
+  runCheckout(data, data.hotProductId, "hot_product_contention");
 }
 
 export function teardown(data) {

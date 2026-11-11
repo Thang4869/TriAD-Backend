@@ -64,14 +64,14 @@ function logFailureSample(label, response, alreadyLogged) {
 }
 
 export function setupCheckout() {
-  const baseUrl = requiredEnv("K6_BASE_URL").replace(/\/+$/, "");
+  const baseUrl = requiredEnv("TRIAD_PERF_BASE_URL").replace(/\/+$/, "");
 
   const target = baseUrl.match(
     /^([a-z][a-z0-9+.-]*):\/\/(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::(\d+))?(?:[/?#]|$)/i,
   );
 
   if (!target) {
-    throw new Error("K6_BASE_URL must be a valid absolute HTTP(S) URL");
+    throw new Error("TRIAD_PERF_BASE_URL must be a valid absolute HTTP(S) URL");
   }
 
   const protocol = target[1].toLowerCase() + ":";
@@ -79,23 +79,25 @@ export function setupCheckout() {
   const port = target[3] ? Number(target[3]) : null;
 
   if (port !== null && (port < 1 || port > 65535)) {
-    throw new Error("K6_BASE_URL must use a valid TCP port");
+    throw new Error("TRIAD_PERF_BASE_URL must use a valid TCP port");
   }
 
   const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(hostname);
 
   if (protocol !== "https:" && !(protocol === "http:" && loopback)) {
-    throw new Error("K6_BASE_URL must use HTTPS, or HTTP on loopback only");
-  }
-
-  if (!loopback && __ENV.K6_ALLOW_REMOTE !== "true") {
     throw new Error(
-      "Remote load targets require explicit K6_ALLOW_REMOTE=true",
+      "TRIAD_PERF_BASE_URL must use HTTPS, or HTTP on loopback only",
     );
   }
 
-  const emails = JSON.parse(requiredEnv("K6_BENCH_EMAILS"));
-  const productIds = JSON.parse(requiredEnv("K6_PRODUCT_IDS"));
+  if (!loopback && __ENV.TRIAD_PERF_ALLOW_REMOTE !== "true") {
+    throw new Error(
+      "Remote load targets require explicit TRIAD_PERF_ALLOW_REMOTE=true",
+    );
+  }
+
+  const emails = JSON.parse(requiredEnv("TRIAD_PERF_BENCH_EMAILS"));
+  const productIds = JSON.parse(requiredEnv("TRIAD_PERF_PRODUCT_IDS"));
 
   if (
     !Array.isArray(emails) ||
@@ -104,7 +106,7 @@ export function setupCheckout() {
     productIds.length < emails.length
   ) {
     throw new Error(
-      "K6_BENCH_EMAILS and K6_PRODUCT_IDS must be JSON arrays with one entry per VU",
+      "TRIAD_PERF_BENCH_EMAILS and TRIAD_PERF_PRODUCT_IDS must be JSON arrays with one entry per VU",
     );
   }
 
@@ -115,7 +117,7 @@ export function setupCheckout() {
       baseUrl + "/api/auth/login",
       JSON.stringify({
         email,
-        password: requiredEnv("K6_BENCH_PASSWORD"),
+        password: requiredEnv("TRIAD_PERF_BENCH_PASSWORD"),
       }),
       {
         headers: { "Content-Type": "application/json" },
@@ -134,25 +136,31 @@ export function setupCheckout() {
     users.push(token);
   }
 
-  const vus = Number(__ENV.K6_VUS || 5);
+  const vus = Number(__ENV.TRIAD_PERF_VUS || 5);
 
   if (!Number.isInteger(vus) || vus < 1 || vus > users.length) {
     throw new Error(
-      "K6_VUS must be between 1 and the number of seeded benchmark users",
+      "TRIAD_PERF_VUS must be between 1 and the number of seeded benchmark users",
     );
   }
 
   return {
     baseUrl,
-    runId: requiredEnv("K6_RUN_ID"),
+    runId: requiredEnv("TRIAD_PERF_RUN_ID"),
     users,
     productIds,
-    hotProductId: requiredEnv("K6_HOT_PRODUCT_ID"),
+    hotProductId: requiredEnv("TRIAD_PERF_HOT_PRODUCT_ID"),
     metricsBefore: readContentionMetrics(baseUrl),
   };
 }
 
-export function runCheckout(data, productId) {
+export function runCheckout(data, productId, scenarioName) {
+  if (typeof scenarioName !== "string" || scenarioName.trim().length === 0) {
+    throw new Error(
+      "scenarioName is required for checkout idempotency isolation",
+    );
+  }
+
   const token = data.users[__VU - 1];
 
   if (!token) {
@@ -194,7 +202,7 @@ export function runCheckout(data, productId) {
     {
       headers: {
         ...headers,
-        "Idempotency-Key": data.runId + "-" + __VU + "-" + __ITER,
+        "Idempotency-Key": [data.runId, scenarioName, __VU, __ITER].join("-"),
       },
       tags: { name: "benchmark_checkout" },
     },

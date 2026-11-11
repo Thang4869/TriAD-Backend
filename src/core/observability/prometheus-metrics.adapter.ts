@@ -1,11 +1,15 @@
 import type {
   ApplicationMetric,
+  ApplicationObservation,
   MetricLabels,
   MetricsPort,
 } from "@shared/application/observability/metrics.port";
 import {
+  checkoutStageDurationSeconds,
+  checkoutTransactionAttempts,
   checkoutFailed,
   checkoutTransactionConflicts,
+  checkoutTransactionDurationSeconds,
   checkoutTransactionRetries,
   checkoutSucceeded,
   ordersPlaced,
@@ -61,6 +65,35 @@ export class PrometheusMetricsAdapter implements MetricsPort {
         });
         return;
       }
+    }
+  }
+
+  observe(
+    metric: ApplicationObservation,
+    value: number,
+    labels?: MetricLabels,
+  ): void {
+    switch (metric) {
+      case "checkout.transaction.duration":
+        checkoutTransactionDurationSeconds.observe(
+          { outcome: String(labels?.outcome ?? "unknown") },
+          value / 1000,
+        );
+        return;
+
+      case "checkout.transaction.attempts":
+        checkoutTransactionAttempts.observe(
+          { outcome: String(labels?.outcome ?? "unknown") },
+          value,
+        );
+        return;
+
+      case "checkout.stage.duration":
+        checkoutStageDurationSeconds.observe(
+          { stage: String(labels?.stage ?? "unknown") },
+          value / 1000,
+        );
+        return;
     }
   }
 }

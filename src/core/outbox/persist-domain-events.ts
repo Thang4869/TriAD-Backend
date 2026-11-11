@@ -3,6 +3,7 @@ import { AggregateRoot } from "@shared/domain/aggregate-root";
 import type { DomainEvent } from "@shared/domain/events/domain-event";
 import { logger } from "@core/logger/winston";
 import { CURRENT_OUTBOX_EVENT_SCHEMA_VERSION } from "./outbox-event-schema";
+import { describePrismaError } from "@core/database/prisma-error-classifier";
 
 export async function persistEvents(
   tx: Prisma.TransactionClient,
@@ -27,9 +28,13 @@ export async function persistEvents(
       })),
     });
   } catch (error) {
+    const details = describePrismaError(error);
     logger.error("Failed to write domain events to outbox", {
-      error,
       events: events.map((event) => event.eventName),
+      errorCategory: details.category,
+      prismaCode: details.code,
+      prismaModel: details.model,
+      observedOperation: "outbox_create_many",
     });
 
     throw error;

@@ -17,6 +17,11 @@ import {
   outboxEventsDeadLettered,
   outboxLagSeconds,
   outboxDeadLetteredEvents,
+  outboxClaimDurationSeconds,
+  outboxCompletionDurationSeconds,
+  outboxPublishDurationSeconds,
+  outboxRelayLeaseLosses,
+  outboxRelayRetries,
 } from "@core/metrics/metrics.registry";
 import crypto from "crypto";
 
@@ -24,6 +29,30 @@ const POLL_INTERVAL_MS = 2_000;
 const BATCH_SIZE = 50;
 const MAX_ATTEMPTS = 10;
 const LOCK_LEASE_SECONDS = 60;
+
+function observeSafely(
+  metric: { observe: (value: number) => void },
+  value: number,
+  name: string,
+): void {
+  try {
+    metric.observe(value);
+  } catch {
+    logger.warn("Outbox relay metrics observation failed", { metric: name });
+  }
+}
+
+function incrementSafely(
+  metric: { inc: (value?: number) => void },
+  value: number,
+  name: string,
+): void {
+  try {
+    metric.inc(value);
+  } catch {
+    logger.warn("Outbox relay metrics increment failed", { metric: name });
+  }
+}
 
 export interface OutboxRelayOptions {
   pollIntervalMs?: number;
@@ -96,12 +125,22 @@ export class OutboxRelay {
     if (this.running) return;
     this.running = true;
     try {
-      const rows = await this.store.claimBatch(
-        this.owner,
-        this.batchSize,
-        this.maxAttempts,
-        this.leaseDurationSeconds,
-      );
+      const claimStartedAt = performance.now();
+      let rows: ClaimedOutboxEvent[];
+      try {
+        rows = await this.store.claimBatch(
+          this.owner,
+          this.batchSize,
+          this.maxAttempts,
+          this.leaseDurationSeconds,
+        );
+      } finally {
+        observeSafely(
+          outboxClaimDurationSeconds,
+          (performance.now() - claimStartedAt) / 1000,
+          "outbox_claim",
+        );
+      }
 
       await this.refreshObservability();
       outboxEventsClaimed.inc(rows.length);
@@ -123,9 +162,12 @@ export class OutboxRelay {
   }
 
   private async publishRow(row: ClaimedOutboxEvent): Promise<void> {
+    let publishAttempts = 0;
+    const publishStartedAt = performance.now();
     try {
       await withRetry(
         async () => {
+          publishAttempts += 1;
           const result = await this.eventBus.publish(
             deserializeOutboxEvent(row.payload, {
               eventName: row.eventName,
@@ -149,6 +191,18 @@ export class OutboxRelay {
           maxTimeout: 500,
         },
       );
+      if (publishAttempts > 1) {
+        incrementSafely(
+          outboxRelayRetries,
+          publishAttempts - 1,
+          "outbox_relay_retries",
+        );
+      }
+      observeSafely(
+        outboxPublishDurationSeconds,
+        (performance.now() - publishStartedAt) / 1000,
+        "outbox_publish",
+      );
       const updated = await this.updateClaimedRow(row.id, {
         publishedAt: new Date(),
         lockedAt: null,
@@ -158,6 +212,18 @@ export class OutboxRelay {
       if (!updated) return;
       outboxEventsPublished.inc();
     } catch (error) {
+      if (publishAttempts > 1) {
+        incrementSafely(
+          outboxRelayRetries,
+          publishAttempts - 1,
+          "outbox_relay_retries",
+        );
+      }
+      observeSafely(
+        outboxPublishDurationSeconds,
+        (performance.now() - publishStartedAt) / 1000,
+        "outbox_publish",
+      );
       logger.error("OutboxRelay failed to publish event, will retry", {
         error,
         eventName: row.eventName,
@@ -186,9 +252,20 @@ export class OutboxRelay {
     id: string,
     data: OutboxRelayUpdate,
   ): Promise<boolean> {
-    const updated = await this.store.updateClaimed(id, this.owner, data);
+    const completionStartedAt = performance.now();
+    let updated: boolean;
+    try {
+      updated = await this.store.updateClaimed(id, this.owner, data);
+    } finally {
+      observeSafely(
+        outboxCompletionDurationSeconds,
+        (performance.now() - completionStartedAt) / 1000,
+        "outbox_completion",
+      );
+    }
     this.activeClaimIds.delete(id);
     if (!updated) {
+      incrementSafely(outboxRelayLeaseLosses, 1, "outbox_relay_lease_losses");
       logger.warn("OutboxRelay lost ownership before updating event", {
         eventId: id,
         owner: this.owner,
@@ -214,7 +291,14 @@ export class OutboxRelay {
         .then((renewed) => {
           const renewedIds = new Set(renewed);
           for (const id of activeIds) {
-            if (!renewedIds.has(id)) this.activeClaimIds.delete(id);
+            if (!renewedIds.has(id)) {
+              this.activeClaimIds.delete(id);
+              incrementSafely(
+                outboxRelayLeaseLosses,
+                1,
+                "outbox_relay_lease_losses",
+              );
+            }
           }
           if (renewed.length !== activeIds.length) {
             logger.warn("OutboxRelay lost ownership during heartbeat", {

@@ -8,8 +8,18 @@ export type ApplicationMetric =
   | "checkout.transaction.retry"
   | "saga.compensation";
 
+export type ApplicationObservation =
+  | "checkout.transaction.duration"
+  | "checkout.transaction.attempts"
+  | "checkout.stage.duration";
+
 export type MetricLabels = Record<string, string | number>;
 
 export interface MetricsPort {
   increment(metric: ApplicationMetric, labels?: MetricLabels): void;
+  observe?(
+    metric: ApplicationObservation,
+    value: number,
+    labels?: MetricLabels,
+  ): void;
 }

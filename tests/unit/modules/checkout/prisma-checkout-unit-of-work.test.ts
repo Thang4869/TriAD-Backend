@@ -19,7 +19,9 @@ describe("PrismaCheckoutUnitOfWork", () => {
       { code: "P2034", clientVersion: "test" },
     );
     vi.mocked(prisma.$transaction).mockRejectedValueOnce(prismaError);
-    await expect(unitOfWork.run(async () => "ok")).rejects.toBeInstanceOf(ConflictError);
+    await expect(unitOfWork.run(async () => "ok")).rejects.toBeInstanceOf(
+      ConflictError,
+    );
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
@@ -37,7 +39,9 @@ describe("PrismaCheckoutUnitOfWork", () => {
       },
     );
     vi.mocked(prisma.$transaction).mockRejectedValueOnce(prismaError);
-    await expect(unitOfWork.run(async () => "ok")).rejects.toBeInstanceOf(ConflictError);
+    await expect(unitOfWork.run(async () => "ok")).rejects.toBeInstanceOf(
+      ConflictError,
+    );
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
@@ -52,7 +56,9 @@ describe("PrismaCheckoutUnitOfWork", () => {
       },
     };
     vi.mocked(prisma.$transaction).mockRejectedValueOnce(prismaError);
-    await expect(unitOfWork.run(async () => "ok")).rejects.toBeInstanceOf(ConflictError);
+    await expect(unitOfWork.run(async () => "ok")).rejects.toBeInstanceOf(
+      ConflictError,
+    );
   });
 
   it("rethrows non-serialization Prisma errors unchanged", async () => {

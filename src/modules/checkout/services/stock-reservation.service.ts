@@ -11,6 +11,19 @@ import type {
 } from "@shared/application/observability/tracer.port";
 import type { MetricsPort } from "@shared/application/observability/metrics.port";
 import { ProductUpdatedEvent } from "@shared/domain/events/product-events";
+import { logger } from "@core/logger/winston";
+
+function observeStage(
+  metrics: MetricsPort,
+  stage: string,
+  durationMs: number,
+): void {
+  try {
+    metrics.observe?.("checkout.stage.duration", durationMs, { stage });
+  } catch {
+    logger.warn("Stock reservation metrics observation failed", { stage });
+  }
+}
 
 export class StockReservationService {
   constructor(
@@ -57,7 +70,17 @@ export class StockReservationService {
   ): Promise<LockedProductRow[]> {
     const productIds = cartItems.map((item) => item.productId);
 
-    const lockedProducts = await tx.lockProductsForUpdate(productIds);
+    const lockStartedAt = performance.now();
+    let lockedProducts: LockedProductRow[];
+    try {
+      lockedProducts = await tx.lockProductsForUpdate(productIds);
+    } finally {
+      observeStage(
+        this.metrics,
+        "product_lock",
+        performance.now() - lockStartedAt,
+      );
+    }
 
     const productMap = new Map(
       lockedProducts.map((product) => [product.id, product]),
@@ -94,11 +117,21 @@ export class StockReservationService {
     for (const item of cartItems) {
       const product = productMap.get(item.productId)!;
 
-      const success = await tx.decrementProductStock(
-        item.productId,
-        product.version,
-        item.quantity,
-      );
+      const stockStartedAt = performance.now();
+      let success: boolean;
+      try {
+        success = await tx.decrementProductStock(
+          item.productId,
+          product.version,
+          item.quantity,
+        );
+      } finally {
+        observeStage(
+          this.metrics,
+          "stock_update",
+          performance.now() - stockStartedAt,
+        );
+      }
 
       if (!success) {
         throw new ConflictError(

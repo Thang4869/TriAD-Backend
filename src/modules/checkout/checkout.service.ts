@@ -14,8 +14,16 @@ import { StockReservationService } from "./services/stock-reservation.service";
 import { Order } from "@modules/orders/domain/order.entity";
 import { IdempotencyConflictError } from "./application/errors/idempotency-conflict.error";
 import { OrderNumberGenerator } from "./application/ports/order-number-generator.port";
-import type { TracerPort } from "@shared/application/observability/tracer.port";
-import type { MetricsPort } from "@shared/application/observability/metrics.port";
+import type {
+  TraceAttributeSetter,
+  TracerPort,
+} from "@shared/application/observability/tracer.port";
+import type {
+  ApplicationObservation,
+  MetricLabels,
+  MetricsPort,
+} from "@shared/application/observability/metrics.port";
+import { logger } from "@core/logger/winston";
 
 export interface CheckoutInput {
   idempotencyKey?: string;
@@ -29,6 +37,69 @@ export interface CheckoutInput {
 
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 100;
+const MAX_ATTEMPTS = MAX_RETRIES + 1;
+
+export type CheckoutErrorCategory =
+  | "transaction_conflict"
+  | "product_stock_conflict"
+  | "idempotency_conflict"
+  | "database_error"
+  | "application_error"
+  | "unknown";
+
+export function classifyCheckoutError(error: unknown): CheckoutErrorCategory {
+  if (error instanceof IdempotencyConflictError) {
+    return "idempotency_conflict";
+  }
+
+  if (error instanceof ConflictError) {
+    return error.message.startsWith("Stock conflict")
+      ? "product_stock_conflict"
+      : "transaction_conflict";
+  }
+
+  if (error && typeof error === "object" && "code" in error) {
+    const code = String(error.code);
+    if (/^P\d{4}$/.test(code) || code === "40001") {
+      return "database_error";
+    }
+  }
+
+  if (error instanceof Error) {
+    return "application_error";
+  }
+
+  return "unknown";
+}
+
+function safeIncrement(
+  metrics: MetricsPort,
+  metric: Parameters<MetricsPort["increment"]>[0],
+  labels?: Parameters<MetricsPort["increment"]>[1],
+): void {
+  try {
+    if (labels === undefined) {
+      metrics.increment(metric);
+    } else {
+      metrics.increment(metric, labels);
+    }
+  } catch {
+    logger.warn("Checkout metrics increment failed", { metric });
+  }
+}
+
+function safeObserve(
+  metrics: MetricsPort,
+  metric: ApplicationObservation,
+  value: number,
+  labels?: MetricLabels,
+): void {
+  try {
+    metrics.observe?.(metric, value, labels);
+  } catch {
+    logger.warn("Checkout metrics observation failed", { metric });
+  }
+}
 
 export class CheckoutService {
   constructor(
@@ -113,70 +184,74 @@ export class CheckoutService {
         let persistedOrder: Order;
 
         try {
-          persistedOrder = await this.executeWithRetry(async (tx) => {
-            attemptCount += 1;
+          persistedOrder = await this.executeWithRetry(
+            async (tx) => {
+              attemptCount += 1;
 
-            const lockedProducts = await this.stockService.reserveStock(
-              tx,
-              cart.items,
-            );
+              const lockedProducts = await this.stockService.reserveStock(
+                tx,
+                cart.items,
+              );
 
-            const lockedProductMap = new Map(
-              lockedProducts.map((product) => [product.id, product]),
-            );
+              const lockedProductMap = new Map(
+                lockedProducts.map((product) => [product.id, product]),
+              );
 
-            const order = Order.create({
-              id: crypto.randomUUID(),
-              userId,
-              orderNumber: this.orderNumberGenerator.generate(),
-              customerName: `${user.firstName} ${user.lastName}`,
-              customerEmail: user.email,
-              customerPhone: input.phone || user.phone || "",
-              customerAddress: input.address,
-              paymentMethod: input.paymentMethod,
-              notes: input.notes,
-            });
+              const order = Order.create({
+                id: crypto.randomUUID(),
+                userId,
+                orderNumber: this.orderNumberGenerator.generate(),
+                customerName: `${user.firstName} ${user.lastName}`,
+                customerEmail: user.email,
+                customerPhone: input.phone || user.phone || "",
+                customerAddress: input.address,
+                paymentMethod: input.paymentMethod,
+                notes: input.notes,
+              });
 
-            for (const item of cart.items) {
-              const product = lockedProductMap.get(item.productId);
+              for (const item of cart.items) {
+                const product = lockedProductMap.get(item.productId);
 
-              if (!product) {
-                throw new ResourceNotFoundError(
-                  `Product ${item.productId} not found`,
+                if (!product) {
+                  throw new ResourceNotFoundError(
+                    `Product ${item.productId} not found`,
+                  );
+                }
+
+                order.addItem(
+                  item.productId,
+                  product.name,
+                  item.quantity,
+                  new Money(product.price),
                 );
               }
 
-              order.addItem(
-                item.productId,
-                product.name,
-                item.quantity,
-                new Money(product.price),
+              const pricing = await this.pricingService.calculatePricing(
+                order.subtotal,
+                input.discountCode,
+                tx,
               );
-            }
 
-            const pricing = await this.pricingService.calculatePricing(
-              order.subtotal,
-              input.discountCode,
-              tx,
-            );
+              order.applyPricing(pricing);
+              if (
+                input.expectedTotal !== undefined &&
+                order.total.getValue() !== input.expectedTotal
+              ) {
+                throw new ValidationError(
+                  "Checkout total changed. Refresh the total and review it before placing the order.",
+                );
+              }
+              order.place();
 
-            order.applyPricing(pricing);
-            if (
-              input.expectedTotal !== undefined &&
-              order.total.getValue() !== input.expectedTotal
-            ) {
-              throw new ValidationError(
-                "Checkout total changed. Refresh the total and review it before placing the order.",
-              );
-            }
-            order.place();
+              await tx.saveNewOrder(order, input.idempotencyKey);
 
-            await tx.saveNewOrder(order, input.idempotencyKey);
+              await tx.clearCartItems(cart.id);
 
-            await tx.clearCartItems(cart.id);
-
-            return order;
-          });
+              return order;
+            },
+            0,
+            setAttributes,
+          );
         } catch (error) {
           if (
             error instanceof IdempotencyConflictError &&
@@ -220,7 +295,7 @@ export class CheckoutService {
           throw new Error("Failed to retrieve created order");
         }
 
-        this.metrics.increment("orders.placed");
+        safeIncrement(this.metrics, "orders.placed");
 
         return {
           order: fullOrder,
@@ -263,14 +338,70 @@ export class CheckoutService {
   private async executeWithRetry<T>(
     operation: (tx: CheckoutTransaction) => Promise<T>,
     retryCount = 0,
+    setAttributes?: TraceAttributeSetter,
   ): Promise<T> {
+    const attempt = retryCount + 1;
+    const startedAt = performance.now();
+
     try {
-      return await this.unitOfWork.run(operation);
+      const result = await this.unitOfWork.run(operation);
+      const durationMs = performance.now() - startedAt;
+
+      safeObserve(this.metrics, "checkout.transaction.duration", durationMs, {
+        outcome: "success",
+      });
+      safeObserve(this.metrics, "checkout.transaction.attempts", attempt, {
+        outcome: "success",
+      });
+      setAttributes?.({
+        "checkout.transaction.attempt": attempt,
+        "checkout.transaction.max_attempts": MAX_ATTEMPTS,
+        "checkout.transaction.outcome": "success",
+        "checkout.transaction.duration_ms": durationMs,
+      });
+      logger.debug("Checkout transaction attempt completed", {
+        attempt,
+        maxAttempts: MAX_ATTEMPTS,
+        outcome: "success",
+        durationMs: Math.round(durationMs),
+      });
+
+      return result;
     } catch (error) {
+      const durationMs = performance.now() - startedAt;
+      const category = classifyCheckoutError(error);
+      const retryable = error instanceof ConflictError;
+      const exhausted = retryable && retryCount >= MAX_RETRIES;
+      const outcome = exhausted ? "exhausted" : retryable ? "retry" : "failure";
+
+      safeObserve(this.metrics, "checkout.transaction.duration", durationMs, {
+        outcome,
+      });
+      if (exhausted || !retryable) {
+        safeObserve(this.metrics, "checkout.transaction.attempts", attempt, {
+          outcome,
+        });
+      }
+      setAttributes?.({
+        "checkout.transaction.attempt": attempt,
+        "checkout.transaction.max_attempts": MAX_ATTEMPTS,
+        "checkout.transaction.outcome": outcome,
+        "checkout.transaction.error_category": category,
+        "checkout.transaction.duration_ms": durationMs,
+      });
+      logger.warn("Checkout transaction attempt failed", {
+        attempt,
+        maxAttempts: MAX_ATTEMPTS,
+        outcome,
+        errorCategory: category,
+        observedOperation: "checkout_transaction",
+        durationMs: Math.round(durationMs),
+      });
+
       if (error instanceof ConflictError) {
-        this.metrics.increment("checkout.transaction.conflict");
+        safeIncrement(this.metrics, "checkout.transaction.conflict");
         if (retryCount < MAX_RETRIES) {
-          this.metrics.increment("checkout.transaction.retry");
+          safeIncrement(this.metrics, "checkout.transaction.retry");
         } else {
           throw error;
         }
@@ -282,7 +413,7 @@ export class CheckoutService {
 
         await new Promise((resolve) => setTimeout(resolve, delay));
 
-        return this.executeWithRetry(operation, retryCount + 1);
+        return this.executeWithRetry(operation, retryCount + 1, setAttributes);
       }
 
       throw error;

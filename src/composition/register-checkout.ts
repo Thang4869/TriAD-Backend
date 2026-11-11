@@ -18,7 +18,7 @@ export function registerCheckoutModule(container: Container): void {
 
   container.register(
     TOKENS.CheckoutUnitOfWork,
-    () => new PrismaCheckoutUnitOfWork(),
+    (c) => new PrismaCheckoutUnitOfWork(undefined, c.resolve(TOKENS.Metrics)),
   );
 
   container.register(

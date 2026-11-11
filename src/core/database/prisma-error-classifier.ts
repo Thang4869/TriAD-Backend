@@ -19,6 +19,31 @@ function isPrismaKnownRequestError(
   );
 }
 
+export function describePrismaError(error: unknown): {
+  category: "serialization_conflict" | "database_error" | "unknown";
+  code: string;
+  model: string;
+} {
+  if (!isRecord(error)) {
+    return { category: "unknown", code: "unknown", model: "unknown" };
+  }
+
+  const code = typeof error.code === "string" ? error.code : "unknown";
+  const meta = isRecord(error.meta) ? error.meta : undefined;
+  const model =
+    meta && typeof meta.modelName === "string" ? meta.modelName : "unknown";
+
+  return {
+    category: isPrismaSerializationConflict(error)
+      ? "serialization_conflict"
+      : isPrismaKnownRequestError(error)
+        ? "database_error"
+        : "unknown",
+    code,
+    model,
+  };
+}
+
 export function isPrismaSerializationConflict(error: unknown): boolean {
   if (!isRecord(error)) {
     return false;

@@ -160,3 +160,60 @@ export const checkoutTransactionRetries = new client.Counter({
   help: "Checkout transaction retries attempted after a conflict",
   registers: [metricsRegistry],
 });
+
+export const checkoutTransactionDurationSeconds = new client.Histogram({
+  name: "triad_backend_checkout_transaction_duration_seconds",
+  help: "Checkout transaction duration by final attempt outcome",
+  labelNames: ["outcome"],
+  buckets: [0.01, 0.05, 0.1, 0.3, 0.5, 1, 2, 5, 10],
+  registers: [metricsRegistry],
+});
+
+export const checkoutTransactionAttempts = new client.Histogram({
+  name: "triad_backend_checkout_transaction_attempts",
+  help: "Number of checkout transaction attempts per operation",
+  labelNames: ["outcome"],
+  buckets: [1, 2, 3, 4, 5, 6],
+  registers: [metricsRegistry],
+});
+
+export const checkoutStageDurationSeconds = new client.Histogram({
+  name: "triad_backend_checkout_stage_duration_seconds",
+  help: "Checkout transaction stage duration",
+  labelNames: ["stage"],
+  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.3, 1, 2, 5],
+  registers: [metricsRegistry],
+});
+
+export const outboxClaimDurationSeconds = new client.Histogram({
+  name: "triad_backend_outbox_claim_duration_seconds",
+  help: "Outbox relay claim operation duration",
+  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.3, 1, 2],
+  registers: [metricsRegistry],
+});
+
+export const outboxPublishDurationSeconds = new client.Histogram({
+  name: "triad_backend_outbox_publish_duration_seconds",
+  help: "Outbox relay event publish duration",
+  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.3, 1, 2, 5],
+  registers: [metricsRegistry],
+});
+
+export const outboxCompletionDurationSeconds = new client.Histogram({
+  name: "triad_backend_outbox_completion_duration_seconds",
+  help: "Outbox relay completion update duration",
+  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.3, 1, 2],
+  registers: [metricsRegistry],
+});
+
+export const outboxRelayRetries = new client.Counter({
+  name: "triad_backend_outbox_relay_retries_total",
+  help: "Outbox relay publish retry attempts",
+  registers: [metricsRegistry],
+});
+
+export const outboxRelayLeaseLosses = new client.Counter({
+  name: "triad_backend_outbox_relay_lease_losses_total",
+  help: "Outbox relay claims lost before completion",
+  registers: [metricsRegistry],
+});

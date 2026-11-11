@@ -23,7 +23,12 @@ import type { Order } from "@modules/orders/domain/order.entity";
 import type { DomainEvent } from "@shared/domain/events/domain-event";
 import { IdempotencyConflictError } from "../application/errors/idempotency-conflict.error";
 import { ConflictError } from "@shared/errors/application-error";
-import { isPrismaSerializationConflict } from "@core/database/prisma-error-classifier";
+import {
+  describePrismaError,
+  isPrismaSerializationConflict,
+} from "@core/database/prisma-error-classifier";
+import type { MetricsPort } from "@shared/application/observability/metrics.port";
+import { logger } from "@core/logger/winston";
 import {
   toSafeDecimalNumber,
   toSafeMoneyNumber,
@@ -37,6 +42,7 @@ class PrismaCheckoutTransaction implements CheckoutTransaction {
   constructor(
     private readonly tx: Prisma.TransactionClient,
     private readonly persistTypedEvents: PersistEvents,
+    private readonly metrics?: MetricsPort,
   ) {}
 
   async lockProductsForUpdate(
@@ -84,11 +90,16 @@ class PrismaCheckoutTransaction implements CheckoutTransaction {
     event: DomainEvent,
     sourceVersion: number,
   ): Promise<void> {
-    await this.persistTypedEvents(
-      this.tx,
-      [event],
-      new Map([[event.aggregateId, sourceVersion]]),
-    );
+    const startedAt = performance.now();
+    try {
+      await this.persistTypedEvents(
+        this.tx,
+        [event],
+        new Map([[event.aggregateId, sourceVersion]]),
+      );
+    } finally {
+      this.observeStage("product_outbox", performance.now() - startedAt);
+    }
   }
 
   async findDiscountByCode(code: string): Promise<DiscountRecord | null> {
@@ -145,90 +156,141 @@ class PrismaCheckoutTransaction implements CheckoutTransaction {
   ): Promise<SavedCheckoutOrder> {
     let created: PrismaOrder;
 
+    const orderStartedAt = performance.now();
     try {
-      created = await this.tx.order.create({
-        data: {
-          id: order.id,
-          orderNumber: order.orderNumber,
-          userId: order.userId,
-          status: order.status,
-          paymentMethod: order.paymentMethod as PaymentMethod,
-          paymentStatus: order.paymentStatus as PaymentStatus,
-          subtotal: order.subtotal.getValue(),
-          tax: order.tax.getValue(),
-          shippingFee: order.shippingFee.getValue(),
-          total: order.total.getValue(),
-          discountAmount: order.discountAmount.getValue(),
-          discountCode: order.discountCode,
-          customerName: order.customerName,
-          customerEmail: order.customerEmail,
-          customerPhone: order.customerPhone,
-          customerAddress: order.customerAddress,
-          notes: order.notes,
-          ...(idempotencyKey ? { idempotencyKey } : {}),
-        },
-      });
-    } catch (error) {
-      if (
-        idempotencyKey &&
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        const target = error.meta?.target;
+      try {
+        created = await this.tx.order.create({
+          data: {
+            id: order.id,
+            orderNumber: order.orderNumber,
+            userId: order.userId,
+            status: order.status,
+            paymentMethod: order.paymentMethod as PaymentMethod,
+            paymentStatus: order.paymentStatus as PaymentStatus,
+            subtotal: order.subtotal.getValue(),
+            tax: order.tax.getValue(),
+            shippingFee: order.shippingFee.getValue(),
+            total: order.total.getValue(),
+            discountAmount: order.discountAmount.getValue(),
+            discountCode: order.discountCode,
+            customerName: order.customerName,
+            customerEmail: order.customerEmail,
+            customerPhone: order.customerPhone,
+            customerAddress: order.customerAddress,
+            notes: order.notes,
+            ...(idempotencyKey ? { idempotencyKey } : {}),
+          },
+        });
+      } catch (error) {
+        if (
+          idempotencyKey &&
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          const target = error.meta?.target;
 
-        const targets = Array.isArray(target)
-          ? target.map(String)
-          : typeof target === "string"
-            ? [target]
-            : [];
+          const targets = Array.isArray(target)
+            ? target.map(String)
+            : typeof target === "string"
+              ? [target]
+              : [];
 
-        if (targets.some((field) => field.includes("idempotencyKey"))) {
-          throw new IdempotencyConflictError();
+          if (targets.some((field) => field.includes("idempotencyKey"))) {
+            throw new IdempotencyConflictError();
+          }
         }
+
+        throw error;
       }
 
-      throw error;
+      await this.tx.orderItem.createMany({
+        data: order.items.map((item) => ({
+          orderId: created.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          price: item.unitPrice.getValue(),
+          total: item.total.getValue(),
+        })),
+      });
+    } finally {
+      this.observeStage(
+        "order_persistence",
+        performance.now() - orderStartedAt,
+      );
     }
 
-    await this.tx.orderItem.createMany({
-      data: order.items.map((item) => ({
-        orderId: created.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        price: item.unitPrice.getValue(),
-        total: item.total.getValue(),
-      })),
-    });
-
-    await persistDomainEvents(this.tx, [order], new Map([[order.id, 0]]));
+    const outboxStartedAt = performance.now();
+    try {
+      await persistDomainEvents(this.tx, [order], new Map([[order.id, 0]]));
+    } finally {
+      this.observeStage("order_outbox", performance.now() - outboxStartedAt);
+    }
 
     return toSavedCheckoutOrder(created);
+  }
+
+  private observeStage(stage: string, durationMs: number): void {
+    try {
+      this.metrics?.observe?.("checkout.stage.duration", durationMs, { stage });
+    } catch {
+      logger.warn("Checkout stage metrics observation failed", { stage });
+    }
   }
 }
 
 export class PrismaCheckoutUnitOfWork implements CheckoutUnitOfWork {
   constructor(
     private readonly persistTypedEvents: PersistEvents = persistEvents,
+    private readonly metrics?: MetricsPort,
   ) {}
 
   async run<T>(
     work: (transaction: CheckoutTransaction) => Promise<T>,
   ): Promise<T> {
+    const startedAt = performance.now();
     try {
-      return await prisma.$transaction(
+      const result = await prisma.$transaction(
         (tx) =>
-          work(new PrismaCheckoutTransaction(tx, this.persistTypedEvents)),
+          work(
+            new PrismaCheckoutTransaction(
+              tx,
+              this.persistTypedEvents,
+              this.metrics,
+            ),
+          ),
         {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
           timeout: TRANSACTION_TIMEOUT_MS,
         },
       );
+      this.observeTransaction(performance.now() - startedAt);
+      return result;
     } catch (error) {
+      this.observeTransaction(performance.now() - startedAt);
+      const details = describePrismaError(error);
+      if (isPrismaSerializationConflict(error)) {
+        logger.warn("Checkout transaction serialization conflict observed", {
+          errorCategory: details.category,
+          prismaCode: details.code,
+          prismaModel: details.model,
+          observedOperation: "transaction_callback",
+        });
+      }
       if (isPrismaSerializationConflict(error)) {
         throw new ConflictError("Transaction conflict. Please retry.");
       }
 
       throw error;
+    }
+  }
+
+  private observeTransaction(durationMs: number): void {
+    try {
+      this.metrics?.observe?.("checkout.stage.duration", durationMs, {
+        stage: "transaction",
+      });
+    } catch {
+      logger.warn("Checkout transaction metrics observation failed");
     }
   }
 }

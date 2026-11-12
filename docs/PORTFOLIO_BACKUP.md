@@ -142,6 +142,8 @@ syncing. This is a best-effort PC schedule, not managed cloud backup.
 
    ```powershell
    .\scripts\backup\portfolio-backup.ps1 -Action InstallRetentionTask
+   # After reviewing the dry-run and the preview above, explicitly install:
+   .\scripts\backup\portfolio-backup.ps1 -Action InstallRetentionTask -Apply
    Get-ScheduledTaskInfo -TaskName 'TriAD Portfolio Backup Retention'
    ```
 
@@ -253,7 +255,7 @@ or configuration into an issue if it contains unexpected local paths or data.
 The task action uses the checkout as its working directory and resolves the
 user's Node executable at runtime. It remains an interactive, best-effort task:
 the user must be logged in, Docker Desktop must be ready, and network access must
-be available. A failed run never prunes archives or replaces the recovery key.
+be available. A failed backup or retention verification never removes archives or replaces the recovery key.
 
 To remove only the schedule and keep archives/keys:
 
@@ -266,8 +268,8 @@ To remove only the schedule and keep archives/keys:
 | Item              | Free portfolio behavior                                                                                                                                                             |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cost              | Existing PC/disk and Docker Desktop personal/student tooling; no paid cloud resource or GitHub artifact storage provisioned.                                                        |
-| Cadence           | Daily best-effort attempt while logged in; no cloud backup agent.                                                                                                                   |
-| Retention         | Owner-managed local copies; no automatic pruning. Keep at least seven known-good daily copies if possible.                                                                          |
+| Cadence           | Every three hours per source, with Neon staggered 20 minutes after Render; best effort while logged in, not a cloud backup agent. |
+| Retention         | Keep the newest verified archive for every source and ICT calendar day; remove only older verified copies from that same day after a fresh disposable restore. Never prune across days or remove unknown/unverified archives. |
 | Data loss         | Measured from the latest **successful** snapshot. The intended three-hour cadence reduces the normal interval, but missed/failed runs make the gap longer. No guaranteed RPO. |
 | Recovery time     | Real hosted recovery has not been timed; provisioning, network and manual reconfiguration are excluded from CI timing. No guaranteed RTO.                                           |
 | Redis             | Free persistence remains off; waiting jobs and ephemeral auth/cache state can disappear on restart. PostgreSQL backup does not preserve Redis.                                      |

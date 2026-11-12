@@ -7,6 +7,10 @@ const {
   redact,
   createLogger,
 } = require("../../scripts/backup/portfolio-backup.cjs");
+const {
+  localDateKey,
+  runRetention,
+} = require("../../scripts/backup/portfolio-backup-retention.cjs");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -168,4 +172,139 @@ test("a new backup records its selected source and source backup timestamp", () 
   assert.equal(evidence.source, "neon");
   assert.equal(evidence.sourceBackupAt, "2026-11-10T02:00:00.000Z");
   assert.equal(evidence.verifiedAt, "2026-11-10T02:00:00.000Z");
+});
+
+
+function makeRetentionFixture(directory, timestamp, source, suffix, options = {}) {
+  const stamp = timestamp.replace(/[-:.]/g, "");
+  const name = "triad-portfolio-" + stamp + "-" + suffix + ".dump.enc";
+  const archivePath = path.join(directory, name);
+  const bytes = Buffer.from(options.content || "encrypted-fixture-" + suffix);
+  fs.writeFileSync(archivePath, bytes, { mode: 0o600 });
+  const receipt = {
+    result: "PASS",
+    source,
+    database: "triad_staging",
+    sourceBackupAt: timestamp,
+    verifiedAt: new Date(Date.parse(timestamp) + 1000).toISOString(),
+    postgresMajor: 18,
+    sha256: require("node:crypto").createHash("sha256").update(bytes).digest("hex"),
+    archiveBytes: bytes.length,
+    disposableRestore: true,
+  };
+  if (options.invalidSource) receipt.source = options.invalidSource;
+  fs.writeFileSync(
+    archivePath + ".verified.json",
+    JSON.stringify(receipt, null, 2),
+    { mode: 0o600 },
+  );
+  return { archivePath, receiptPath: archivePath + ".verified.json", receipt };
+}
+
+test("retention groups by ICT calendar day and keeps unknown or unverified archives", async () => {
+  assert.equal(localDateKey("2026-11-13T16:59:59.000Z"), "2026-11-13");
+  assert.equal(localDateKey("2026-11-13T17:00:00.000Z"), "2026-11-14");
+
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "triad-retention-plan-"));
+  const directory = path.join(temporary, "archives");
+  const keyFile = path.join(temporary, "recovery.key");
+  fs.mkdirSync(directory);
+  fs.writeFileSync(keyFile, "a".repeat(64), { mode: 0o600 });
+
+  try {
+    const older = makeRetentionFixture(directory, "2026-11-13T00:00:00.000Z", "render", "00000001");
+    const middle = makeRetentionFixture(directory, "2026-11-13T00:30:00.000Z", "render", "00000002");
+    const newest = makeRetentionFixture(directory, "2026-11-13T01:00:00.000Z", "render", "00000003");
+    const neon = makeRetentionFixture(directory, "2026-11-13T01:10:00.000Z", "neon", "00000004");
+    const previousDay = makeRetentionFixture(directory, "2026-11-12T01:00:00.000Z", "render", "00000005");
+    const unknown = makeRetentionFixture(directory, "2026-11-13T01:20:00.000Z", "render", "00000006", { invalidSource: "archive" });
+    const unverified = path.join(directory, "triad-portfolio-20261113T013000000Z-00000007.dump.enc");
+    fs.writeFileSync(unverified, "no receipt");
+
+    let verifiedCount = 0;
+    const result = await runRetention({
+      directory,
+      keyFile,
+      dryRun: true,
+      verifyArchive: async ({ candidate }) => {
+        verifiedCount += 1;
+        return { evidence: candidate.receipt };
+      },
+    });
+
+    assert.equal(result.groupsReviewed, 1);
+    assert.equal(verifiedCount, 1);
+    assert.deepEqual(
+      result.planned.map((item) => item.archive).sort(),
+      [path.basename(older.archivePath), path.basename(middle.archivePath)].sort(),
+    );
+    assert.equal(result.deleted.length, 0);
+    for (const item of [older, middle, newest, neon, previousDay, unknown]) {
+      assert.equal(fs.existsSync(item.archivePath), true);
+      assert.equal(fs.existsSync(item.receiptPath), true);
+    }
+    assert.equal(fs.existsSync(unverified), true);
+    assert.ok(result.protectedFiles.includes(path.basename(unknown.archivePath)));
+    assert.ok(result.protectedFiles.includes(path.basename(unverified)));
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("retention apply deletes only older verified archives after keeper restore passes", async () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "triad-retention-apply-"));
+  const directory = path.join(temporary, "archives");
+  const keyFile = path.join(temporary, "recovery.key");
+  fs.mkdirSync(directory);
+  fs.writeFileSync(keyFile, "b".repeat(64), { mode: 0o600 });
+
+  try {
+    const older = makeRetentionFixture(directory, "2026-11-13T02:00:00.000Z", "neon", "00000011");
+    const keeper = makeRetentionFixture(directory, "2026-11-13T03:00:00.000Z", "neon", "00000012");
+    const result = await runRetention({
+      directory,
+      keyFile,
+      dryRun: false,
+      verifyArchive: async ({ candidate }) => ({ evidence: candidate.receipt }),
+    });
+
+    assert.equal(result.failures.length, 0);
+    assert.equal(result.deleted.length, 1);
+    assert.equal(fs.existsSync(older.archivePath), false);
+    assert.equal(fs.existsSync(older.receiptPath), false);
+    assert.equal(fs.existsSync(keeper.archivePath), true);
+    assert.equal(fs.existsSync(keeper.receiptPath), true);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("retention preserves every archive when the newest same-day restore fails", async () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "triad-retention-fail-"));
+  const directory = path.join(temporary, "archives");
+  const keyFile = path.join(temporary, "recovery.key");
+  fs.mkdirSync(directory);
+  fs.writeFileSync(keyFile, "c".repeat(64), { mode: 0o600 });
+
+  try {
+    const older = makeRetentionFixture(directory, "2026-11-13T04:00:00.000Z", "render", "00000021");
+    const keeper = makeRetentionFixture(directory, "2026-11-13T05:00:00.000Z", "render", "00000022");
+    const result = await runRetention({
+      directory,
+      keyFile,
+      dryRun: false,
+      verifyArchive: async () => {
+        throw new Error("synthetic restore failure");
+      },
+    });
+
+    assert.equal(result.deleted.length, 0);
+    assert.equal(result.failures.length, 1);
+    assert.equal(fs.existsSync(older.archivePath), true);
+    assert.equal(fs.existsSync(older.receiptPath), true);
+    assert.equal(fs.existsSync(keeper.archivePath), true);
+    assert.equal(fs.existsSync(keeper.receiptPath), true);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
 });

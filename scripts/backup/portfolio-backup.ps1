@@ -168,12 +168,16 @@ if ($Action -eq 'InstallRetentionTask') {
     if (-not (Get-ChildItem -LiteralPath $config.BackupDirectory -Filter '*.dump.enc.verified.json' -File)) {
         throw 'A successful backup receipt is required before installing retention.'
     }
+    if (-not $Apply) {
+        Write-Host 'DRY RUN: no scheduled task was created. Review Retention output, then re-run InstallRetentionTask with -Apply.'
+        return
+    }
     $taskAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -File "' + $scriptPath + '" -Action Retention -Apply') -WorkingDirectory $PSScriptRoot
     $trigger = New-ScheduledTaskTrigger -Daily -At '23:50'
     $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1)
     Register-ScheduledTask -TaskName $retentionTaskName -Action $taskAction -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
-    Write-Host 'Daily 23:50 LOCAL time retention task installed. It applies only the same-day cleanup rules; run Retention dry-run first.'
+    Write-Host 'Daily 23:50 LOCAL time retention task installed. It applies only the same-day cleanup rules.'
     return
 }
 

@@ -62,7 +62,7 @@ function createLogger(env = process.env, id = executionId()) {
       stage,
       message: redact(message),
     };
-    if (details) record.details = redact(details);
+    if (details) record.details = redact(typeof details === "string" ? details : JSON.stringify(details));
     stream.write(JSON.stringify(record) + "\n");
   };
   const close = () =>

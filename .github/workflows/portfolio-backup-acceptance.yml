@@ -118,6 +118,15 @@ jobs:
           export PORTFOLIO_BACKUP_ARCHIVE="$(find "$temporary" -maxdepth 1 -name '*.dump.enc' -print -quit)"
           test -f "$PORTFOLIO_BACKUP_ARCHIVE.verified.json"
           node scripts/backup/portfolio-backup.cjs verify
+          # Exercise the real retention verifier with two same-day copies; dry-run must preserve both.
+          duplicate_archive="$(node -e 'const fs=require("node:fs"),p=require("node:path"),a=process.env.PORTFOLIO_BACKUP_ARCHIVE,m=/^triad-portfolio-(\d{8}T\d{9}Z)-([a-f0-9]{8})\.dump\.enc$/.exec(p.basename(a));if(!m)throw Error("Unexpected archive name");const suffix=m[2]==="ffffffff"?"00000000":"ffffffff",d=p.join(p.dirname(a),"triad-portfolio-"+m[1]+"-"+suffix+".dump.enc");if(fs.existsSync(d))throw Error("Duplicate archive already exists");fs.copyFileSync(a,d);fs.copyFileSync(a+".verified.json",d+".verified.json");process.stdout.write(d)')"
+          retention_output="$(node scripts/backup/portfolio-backup-retention.cjs --dry-run)"
+          printf '%s\n' "$retention_output"
+          grep -q '^WOULD DELETE ' <<<"$retention_output"
+          test -f "$PORTFOLIO_BACKUP_ARCHIVE"
+          test -f "$PORTFOLIO_BACKUP_ARCHIVE.verified.json"
+          test -f "$duplicate_archive"
+          test -f "$duplicate_archive.verified.json"
           # Reject an incomplete Prisma migration in a fresh backup, not an older snapshot.
           valid_archive="$PORTFOLIO_BACKUP_ARCHIVE"
           docker exec triad-portfolio-source psql -U test -d triad_portfolio_fixture -v ON_ERROR_STOP=1 -c "INSERT INTO \"_prisma_migrations\" (id, finished_at, rolled_back_at) VALUES ('incomplete', NULL, NULL)"

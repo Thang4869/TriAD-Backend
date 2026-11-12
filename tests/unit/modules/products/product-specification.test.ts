@@ -60,6 +60,12 @@ describe("PriceRangeSpecification", () => {
     });
   });
 
+  it("có cả hai biên thì giữ độc lập từng điều kiện", () => {
+    const filter = new PriceRangeSpecification(0, 0).toFilter();
+
+    expect(filter).toEqual({ price: { gte: 0, lte: 0 } });
+  });
+
   it("không có min lẫn max thì không thêm điều kiện", () => {
     expect(new PriceRangeSpecification().toFilter()).toEqual({});
   });

@@ -5,11 +5,8 @@ import { Money } from "@shared/value-objects/money";
 import {
   OrderNotMutableError,
   InvalidOrderItemError,
-  InvalidDiscountError,
-  EmptyOrderError,
   OrderAlreadyPlacedError,
   InvalidOrderTransitionError,
-  OrderNotCancellableError,
 } from "@shared/domain/errors/domain-error";
 import { OrderPlacedEvent } from "@shared/domain/events/order-events";
 
@@ -24,6 +21,15 @@ function newOrder(notes?: string) {
     customerAddress: "123 Lê Lợi",
     paymentMethod: "COD",
     notes,
+  });
+
+  it("từ chối merge làm tràn số nguyên an toàn", () => {
+    const order = newOrder();
+    order.addItem("p1", "Áo", Number.MAX_SAFE_INTEGER, new Money(1));
+
+    expect(() => order.addItem("p1", "Áo", 1, new Money(1))).toThrow(
+      "Merged quantity exceeds safe integer range",
+    );
   });
 }
 
@@ -64,6 +70,24 @@ describe("Order.create", () => {
     expect(order.paymentStatus).toBe("PENDING");
     expect(order.createdAt).toBeInstanceOf(Date);
     expect(order.domainEvents).toEqual([]);
+  });
+
+  it("exposes normalized customer contact values", () => {
+    const order = Order.create({
+      id: "o1",
+      userId: "u1",
+      orderNumber: " ord-0001 ",
+      customerName: "A",
+      customerEmail: " A@EXAMPLE.COM ",
+      customerPhone: "0900-000-000",
+      customerAddress: "  HN  ",
+      paymentMethod: "COD",
+    });
+
+    expect(order.orderNumber).toBe("ORD-0001");
+    expect(order.customerEmail).toBe("a@example.com");
+    expect(order.customerPhone).toBe("0900000000");
+    expect(order.customerAddress).toBe("HN");
   });
 });
 
@@ -108,24 +132,24 @@ describe("Order.addItem", () => {
   it("từ chối số lượng <= 0", () => {
     const order = newOrder();
     expect(() => order.addItem("p1", "Áo", 0, new Money(1))).toThrow(
-      InvalidOrderItemError,
+      new InvalidOrderItemError("Quantity must be positive"),
     );
     expect(() => order.addItem("p1", "Áo", -1, new Money(1))).toThrow(
-      InvalidOrderItemError,
+      new InvalidOrderItemError("Quantity must be positive"),
     );
   });
 
   it("không cho sửa đơn đã place", () => {
     const order = placedOrder();
     expect(() => order.addItem("p2", "Quần", 1, new Money(1))).toThrow(
-      OrderNotMutableError,
+      "Cannot modify an order that has already been placed",
     );
   });
 
   it("không cho sửa đơn không còn PENDING", () => {
     const order = Order.hydrate(hydrateData({ status: OrderStatus.SHIPPED }));
     expect(() => order.addItem("p2", "Quần", 1, new Money(1))).toThrow(
-      OrderNotMutableError,
+      "Cannot modify an order that has already been placed",
     );
   });
 
@@ -152,7 +176,10 @@ describe("Order.addItem", () => {
     try {
       order.addItem("p2", "Quần", 1, new Money(1));
     } catch (err) {
-      expect((err as Error).message).toContain("not PENDING");
+      expect(err).toMatchObject({
+        message: "Cannot modify an order that is not PENDING",
+        context: { reason: "NOT_PENDING" },
+      });
     }
   });
 });
@@ -223,7 +250,7 @@ describe("Order.applyPricing", () => {
         shippingFee: new Money(0),
         discountAmount: new Money(100_001),
       }),
-    ).toThrow(InvalidDiscountError);
+    ).toThrow("Discount cannot exceed order subtotal");
   });
 
   it("không cho áp giá khi đơn đã place", () => {
@@ -246,7 +273,7 @@ describe("Order.total", () => {
       }),
     );
 
-    expect(() => order.total).toThrow(InvalidDiscountError);
+    expect(() => order.total).toThrow("Discount cannot exceed order total");
   });
 });
 
@@ -290,11 +317,15 @@ describe("Order.place", () => {
   });
 
   it("từ chối đơn rỗng", () => {
-    expect(() => newOrder().place()).toThrow(EmptyOrderError);
+    expect(() => newOrder().place()).toThrow(
+      "Cannot place an order with no items",
+    );
   });
 
   it("từ chối place lần hai", () => {
-    expect(() => placedOrder().place()).toThrow(OrderAlreadyPlacedError);
+    expect(() => placedOrder().place()).toThrow(
+      "Order has already been placed",
+    );
   });
 
   it("không place sau khi draft đã chuyển khỏi PENDING", () => {
@@ -302,7 +333,15 @@ describe("Order.place", () => {
     order.addItem("p1", "Áo", 1, new Money(100));
     order.confirm();
 
-    expect(() => order.place()).toThrow(OrderNotMutableError);
+    try {
+      order.place();
+      expect.unreachable("place must fail");
+    } catch (error) {
+      expect(error).toMatchObject({
+        message: "Cannot modify an order that is not PENDING",
+        context: { reason: "NOT_PENDING" },
+      });
+    }
     expect(
       order.domainEvents.some((event) => event.eventName === "OrderPlaced"),
     ).toBe(false);
@@ -378,12 +417,20 @@ describe("state machine", () => {
 
   it("không huỷ được đơn đã DELIVERED", () => {
     const order = Order.hydrate(hydrateData({ status: OrderStatus.DELIVERED }));
-    expect(() => order.cancel()).toThrow(OrderNotCancellableError);
+    expect(() => order.cancel()).toThrow("Cannot cancel a delivered order");
   });
 
   it("không huỷ được đơn đã CANCELLED", () => {
     const order = Order.hydrate(hydrateData({ status: OrderStatus.CANCELLED }));
-    expect(() => order.cancel()).toThrow(OrderNotCancellableError);
+    try {
+      order.cancel();
+      expect.unreachable("cancel must fail");
+    } catch (error) {
+      expect(error).toMatchObject({
+        message: "Order already cancelled",
+        context: { reason: "ALREADY_CANCELLED" },
+      });
+    }
   });
 
   it("đơn SHIPPED không huỷ được vì bảng chuyển trạng thái không cho phép", () => {

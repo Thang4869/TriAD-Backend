@@ -261,6 +261,8 @@ async function runRetention({
           evidence.disposableRestore !== true ||
           evidence.postgresMajor !== 18 ||
           evidence.sourceBackupAt !== group.keeper.receipt.sourceBackupAt ||
+          !Number.isFinite(Date.parse(evidence.verifiedAt)) ||
+          Date.parse(evidence.verifiedAt) < group.keeper.sourceBackupAt ||
           localDateKey(evidence.sourceBackupAt) !== group.day
         )
           throw new Error("Newest same-day archive failed retention evidence checks");
@@ -274,6 +276,13 @@ async function runRetention({
         }
 
         for (const older of group.older) {
+          const keeperStillValid = await readCandidate(
+            backupDirectory,
+            group.keeper.name,
+          );
+          if (!sameCandidate(keeperStillValid, group.keeper)) {
+            throw new Error("Newest archive changed before same-day cleanup");
+          }
           const current = await readCandidate(backupDirectory, older.name);
           if (!sameCandidate(current, older)) continue;
 

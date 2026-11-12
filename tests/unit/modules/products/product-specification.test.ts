@@ -43,19 +43,21 @@ describe("Specification đơn lẻ", () => {
 
 describe("PriceRangeSpecification", () => {
   it("cả min và max cho ra khoảng gte/lte", () => {
-    expect(new PriceRangeSpecification(10, 100).toFilter()).toEqual({
+    expect(new PriceRangeSpecification(10, 100).toFilter()).toStrictEqual({
       price: { gte: 10, lte: 100 },
     });
   });
 
   it("chỉ có min thì chỉ sinh gte", () => {
-    expect(new PriceRangeSpecification(10).toFilter()).toEqual({
+    expect(new PriceRangeSpecification(10).toFilter()).toStrictEqual({
       price: { gte: 10 },
     });
   });
 
   it("chỉ có max thì chỉ sinh lte", () => {
-    expect(new PriceRangeSpecification(undefined, 100).toFilter()).toEqual({
+    expect(
+      new PriceRangeSpecification(undefined, 100).toFilter(),
+    ).toStrictEqual({
       price: { lte: 100 },
     });
   });
@@ -63,15 +65,15 @@ describe("PriceRangeSpecification", () => {
   it("có cả hai biên thì giữ độc lập từng điều kiện", () => {
     const filter = new PriceRangeSpecification(0, 0).toFilter();
 
-    expect(filter).toEqual({ price: { gte: 0, lte: 0 } });
+    expect(filter).toStrictEqual({ price: { gte: 0, lte: 0 } });
   });
 
   it("không có min lẫn max thì không thêm điều kiện", () => {
-    expect(new PriceRangeSpecification().toFilter()).toEqual({});
+    expect(new PriceRangeSpecification().toFilter()).toStrictEqual({});
   });
 
   it("min = 0 vẫn được giữ (không bị coi là falsy)", () => {
-    expect(new PriceRangeSpecification(0).toFilter()).toEqual({
+    expect(new PriceRangeSpecification(0).toFilter()).toStrictEqual({
       price: { gte: 0 },
     });
   });
@@ -104,7 +106,9 @@ describe("Kết hợp bằng and()", () => {
 
 describe("ProductSpecificationBuilder", () => {
   it("builder rỗng trả về where không điều kiện", () => {
-    expect(new ProductSpecificationBuilder().build().toFilter()).toEqual({});
+    expect(new ProductSpecificationBuilder().build().toFilter()).toStrictEqual(
+      {},
+    );
   });
 
   it("activeOnly() luôn thêm điều kiện isActive", () => {
@@ -119,7 +123,7 @@ describe("ProductSpecificationBuilder", () => {
         .withIsActive(undefined)
         .build()
         .toFilter(),
-    ).toEqual({});
+    ).toStrictEqual({});
   });
 
   it("withIsActive(false) vẫn thêm điều kiện dù là giá trị falsy", () => {
@@ -150,7 +154,7 @@ describe("ProductSpecificationBuilder", () => {
   ])("%s không thêm điều kiện thừa", (_name, apply) => {
     const builder = apply(new ProductSpecificationBuilder());
 
-    expect(builder.build().toFilter()).toEqual({});
+    expect(builder.build().toFilter()).toStrictEqual({});
   });
 
   it("mọi filter được áp dụng cùng lúc", () => {

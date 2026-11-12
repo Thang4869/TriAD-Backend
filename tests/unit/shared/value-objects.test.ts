@@ -66,6 +66,7 @@ describe("value objects", () => {
     expect(new Money(100).multiply(2).getValue()).toBe(200);
     expect(() => new Money(-1)).toThrow();
     expect(() => new Money(100, "USDx")).toThrow("Invalid currency");
+    expect(() => new Money(100, "xUSD")).toThrow("Invalid currency");
     expect(() => new Money(1, "USD").add(new Money(1))).toThrow();
     expect(new Money(100).lessThan(new Money(100))).toBe(false);
     expect(

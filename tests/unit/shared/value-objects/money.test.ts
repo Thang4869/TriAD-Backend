@@ -90,6 +90,12 @@ describe("Money", () => {
     },
   );
 
+  it("rejects a negative factor even when the amount is zero", () => {
+    expect(() => new Money(0).multiply(-1)).toThrow(
+      "Factor must be finite and non-negative",
+    );
+  });
+
   it("should reject multiplication overflow", () => {
     expect(() => new Money(Number.MAX_SAFE_INTEGER).multiply(2)).toThrow(
       "Amount must be a safe integer",

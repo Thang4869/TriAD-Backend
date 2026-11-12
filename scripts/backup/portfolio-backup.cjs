@@ -323,7 +323,7 @@ async function run(mode, env = process.env) {
       );
       stage("encryption", "Encrypting PostgreSQL dump");
       await archive("encrypt", dump, encrypted, key);
-      // Never prune old backups automatically. The owner keeps known-good copies.
+      // Retention is a separate, explicit operation; backup never prunes archives.
       console.log("Encrypted backup saved: " + encrypted);
       stage("encryption", "Encrypted archive published");
     } else {

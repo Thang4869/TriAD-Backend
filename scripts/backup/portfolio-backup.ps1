@@ -79,13 +79,18 @@ if ($Action -eq 'SetRecurringSchedule') {
         @{ Name = $taskName; BackupAction = 'Backup'; Times = @('00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00') },
         @{ Name = 'TriAD Portfolio Backup Neon'; BackupAction = 'BackupNeon'; Times = @('00:20', '03:20', '06:20', '09:20', '12:20', '15:20', '18:20', '21:20') }
     )
-    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $currentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $currentUser = $currentIdentity.Name
+    $currentUserName = $currentUser.Split('\')[-1]
+    $currentUserSid = $currentIdentity.User.Value
     foreach ($entry in $expectedTasks) {
         $task = Get-ScheduledTask -TaskName $entry.Name -ErrorAction Stop
         if ($task.Principal.LogonType -notin @('Interactive', 'InteractiveToken') -or $task.Principal.RunLevel -ne 'Limited') {
             throw ('Refusing to alter a task without the expected interactive/limited principal: ' + $entry.Name)
         }
-        if ($task.Principal.UserId -and $task.Principal.UserId -ne $currentUser) {
+        $taskUser = [string]$task.Principal.UserId
+        $taskUserName = $taskUser.Split('\')[-1]
+        if ($taskUser -and $taskUser -ne $currentUser -and $taskUser -ne $currentUserSid -and $taskUserName -ne $currentUserName) {
             throw ('Refusing to alter a task owned by another Windows account: ' + $entry.Name)
         }
         if (@($task.Actions).Count -ne 1) { throw ('Unexpected task action count: ' + $entry.Name) }

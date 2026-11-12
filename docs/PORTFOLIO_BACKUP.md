@@ -268,8 +268,8 @@ To remove only the schedule and keep archives/keys:
 | Item              | Free portfolio behavior                                                                                                                                                             |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cost              | Existing PC/disk and Docker Desktop personal/student tooling; no paid cloud resource or GitHub artifact storage provisioned.                                                        |
-| Cadence           | Every three hours per source, with Neon staggered 20 minutes after Render; best effort while logged in, not a cloud backup agent. |
-| Retention         | Keep the newest verified archive for every source and ICT calendar day; remove only older verified copies from that same day after a fresh disposable restore. Never prune across days or remove unknown/unverified archives. |
+| Cadence           | Target: every three hours per source, with Neon staggered 20 minutes after Render; owner applies the local schedule explicitly. Best effort while logged in. |
+| Retention         | When explicitly enabled, keep the newest verified archive for every source and ICT calendar day; remove only older verified copies from that same day after a fresh disposable restore. Never prune across days or remove unknown/unverified archives. |
 | Data loss         | Measured from the latest **successful** snapshot. The intended three-hour cadence reduces the normal interval, but missed/failed runs make the gap longer. No guaranteed RPO. |
 | Recovery time     | Real hosted recovery has not been timed; provisioning, network and manual reconfiguration are excluded from CI timing. No guaranteed RTO.                                           |
 | Redis             | Free persistence remains off; waiting jobs and ephemeral auth/cache state can disappear on restart. PostgreSQL backup does not preserve Redis.                                      |
@@ -322,13 +322,14 @@ new verification.
 
 ## Three-hour backup cadence and same-day retention
 
-The local schedule is eight Render runs and eight Neon runs per ICT calendar
-day. Neon starts 20 minutes after the corresponding Render run. This remains
+The intended local schedule, applied with SetRecurringSchedule, is eight Render
+runs and eight Neon runs per ICT calendar day. Neon starts 20 minutes after the
+corresponding Render run. This remains
 best-effort: the same Windows user must be logged on, the PC must be awake or
 wake-capable, Docker Desktop must be ready, and network access must be available.
 
-The separate retention task runs at **23:50 ICT**, after the final scheduled
-Neon attempt at 21:20. It never removes prior calendar days, so the seven-day
+When installed, the separate retention task runs at **23:50 ICT**, after the
+final scheduled Neon attempt at 21:20. It never removes prior calendar days, so the seven-day
 evidence window for Issue #143 remains intact. A source/day group is eligible
 only when it contains at least two archives whose receipts prove a successful
 PostgreSQL 18 disposable restore and whose archive byte count and SHA-256 still

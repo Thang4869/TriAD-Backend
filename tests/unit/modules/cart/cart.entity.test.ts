@@ -28,7 +28,11 @@ describe("CartItem", () => {
   it.each([0, -1])("increase(%s) bị từ chối vì không dương", (amount) => {
     const item = new CartItem("p1", "Áo thun", new Money(50_000), 1);
 
-    expect(() => item.increase(amount)).toThrow(InvalidCartQuantityError);
+    expect(() => item.increase(amount)).toThrow(
+      new InvalidCartQuantityError(
+        "Amount must be a positive safe integer without overflow",
+      ),
+    );
   });
 
   it("decrease() trừ số lượng, cho phép về đúng 0", () => {
@@ -51,7 +55,9 @@ describe("CartItem", () => {
   it.each([0, -5])("decrease(%s) bị từ chối vì không dương", (amount) => {
     const item = new CartItem("p1", "Áo thun", new Money(50_000), 2);
 
-    expect(() => item.decrease(amount)).toThrow(InvalidCartQuantityError);
+    expect(() => item.decrease(amount)).toThrow(
+      new InvalidCartQuantityError("Amount must be a positive safe integer"),
+    );
   });
 });
 
@@ -98,7 +104,7 @@ describe("Cart.addItem", () => {
     const cart = newCart();
 
     expect(() => cart.addItem("p1", "Áo", new Money(1), quantity)).toThrow(
-      InvalidCartQuantityError,
+      new InvalidCartQuantityError("Quantity must be a positive safe integer"),
     );
     expect(cart.items).toHaveLength(0);
     expect(cart.domainEvents).toHaveLength(0);
@@ -274,22 +280,31 @@ describe("Cart integer quantity invariants", () => {
       cart.addItem("p1", "Áo", new Money(1), 2);
       cart.pullEvents();
       expect(() => cart.updateItemQuantity("p1", quantity)).toThrow(
-        InvalidCartQuantityError,
+        new InvalidCartQuantityError(
+          "Quantity must be a non-negative safe integer",
+        ),
       );
       expect(cart.items[0].quantity).toBe(2);
       expect(cart.domainEvents).toHaveLength(0);
     },
   );
 
-  it.each(invalid)("rejects persisted invalid quantity %s", (quantity) => {
-    expect(() =>
-      Cart.hydrate({
-        id: "cart-1",
-        userId: "user-1",
-        items: [{ productId: "p1", productName: "Áo", price: 1, quantity }],
-      }),
-    ).toThrow(InvalidCartQuantityError);
-  });
+  it.each([...invalid, 0, -1])(
+    "rejects persisted invalid quantity %s",
+    (quantity) => {
+      expect(() =>
+        Cart.hydrate({
+          id: "cart-1",
+          userId: "user-1",
+          items: [{ productId: "p1", productName: "Áo", price: 1, quantity }],
+        }),
+      ).toThrow(
+        new InvalidCartQuantityError(
+          "Persisted quantity must be a positive safe integer",
+        ),
+      );
+    },
+  );
 
   it("rejects quantity overflow on an existing cart item without events", () => {
     const cart = newCart();

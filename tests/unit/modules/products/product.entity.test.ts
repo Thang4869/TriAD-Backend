@@ -138,7 +138,15 @@ describe("Product.reduceStock", () => {
     const product = newProduct();
 
     expect(() => product.reduceStock(quantity)).toThrow(
-      InvalidStockQuantityError,
+      new InvalidStockQuantityError("Quantity must be a positive safe integer"),
+    );
+  });
+
+  it("rejects a positive reduction from an already depleted product", () => {
+    const product = newProduct({ stock: 0 });
+
+    expect(() => product.reduceStock(1)).toThrow(
+      new InsufficientStockError(0, 1),
     );
   });
 });
@@ -161,7 +169,7 @@ describe("Product.increaseStock", () => {
     const product = newProduct();
 
     expect(() => product.increaseStock(quantity)).toThrow(
-      InvalidStockQuantityError,
+      new InvalidStockQuantityError("Quantity must be a positive safe integer"),
     );
   });
 });
@@ -249,14 +257,30 @@ describe("Product stock hydration and overflow", () => {
   it.each([-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
     "rejects invalid hydrated stock %s",
     (stock) => {
-      expect(() => newProduct({ stock })).toThrow(InvalidStockQuantityError);
+      expect(() => newProduct({ stock })).toThrow(
+        "Stock must be a non-negative safe integer",
+      );
     },
   );
 
   it("rejects restock overflowing safe integer without mutating stock", () => {
     const product = newProduct({ stock: Number.MAX_SAFE_INTEGER });
-    expect(() => product.increaseStock(1)).toThrow(InvalidStockQuantityError);
+    expect(() => product.increaseStock(1)).toThrow(
+      new InvalidStockQuantityError("Resulting stock must be a safe integer"),
+    );
     expect(product.stock).toBe(Number.MAX_SAFE_INTEGER);
     expect(product.domainEvents).toHaveLength(0);
+  });
+
+  it("raises explicit events when marking a product created or updated", () => {
+    const product = newProduct();
+
+    product.markCreated();
+    product.markUpdated();
+
+    expect(product.domainEvents.map((event) => event.eventName)).toEqual([
+      "ProductCreated",
+      "ProductUpdated",
+    ]);
   });
 });

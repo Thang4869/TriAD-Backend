@@ -1,8 +1,9 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Setup', 'SetupNeon', 'Backup', 'BackupNeon', 'Verify', 'InstallTask', 'RemoveTask')]
+    [ValidateSet('Setup', 'SetupNeon', 'Backup', 'BackupNeon', 'Verify', 'InstallTask', 'RemoveTask', 'SetRecurringSchedule', 'Retention', 'InstallRetentionTask', 'RemoveRetentionTask')]
     [string]$Action,
-    [string]$Archive
+    [string]$Archive,
+    [switch]$Apply
 )
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Use this launcher on Windows under your own account.' }
@@ -10,7 +11,9 @@ $stateDirectory = Join-Path $env:LOCALAPPDATA 'TriAD-Backup'
 $configPath = Join-Path $stateDirectory 'settings.json'
 $scriptPath = $PSCommandPath
 $nodeScript = Join-Path $PSScriptRoot 'portfolio-backup.cjs'
+$retentionScript = Join-Path $PSScriptRoot 'portfolio-backup-retention.cjs'
 $taskName = 'TriAD Portfolio Backup'
+$retentionTaskName = 'TriAD Portfolio Backup Retention'
 $logDirectory = Join-Path $stateDirectory 'logs'
 $executionId = [guid]::NewGuid().ToString()
 
@@ -36,6 +39,11 @@ Write-BackupLog 'INFO' 'configuration' 'Backup launcher started.'
 if ($Action -eq 'RemoveTask') {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
     Write-Host 'Schedule removed; backups and recovery key retained.'
+    return
+}
+if ($Action -eq 'RemoveRetentionTask') {
+    Unregister-ScheduledTask -TaskName $retentionTaskName -Confirm:$false -ErrorAction SilentlyContinue
+    Write-Host 'Retention schedule removed; backup archives and recovery key retained.'
     return
 }
 if ($Action -eq 'Setup') {
@@ -66,6 +74,52 @@ if ($Action -eq 'Setup') {
 }
 if (-not (Test-Path -LiteralPath $configPath)) { throw 'Run Setup first.' }
 $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+if ($Action -eq 'SetRecurringSchedule') {
+    $expectedTasks = @(
+        @{ Name = $taskName; BackupAction = 'Backup'; Times = @('00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00') },
+        @{ Name = 'TriAD Portfolio Backup Neon'; BackupAction = 'BackupNeon'; Times = @('00:20', '03:20', '06:20', '09:20', '12:20', '15:20', '18:20', '21:20') }
+    )
+    $currentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $currentUser = $currentIdentity.Name
+    $currentUserName = $currentUser.Split('\')[-1]
+    $currentUserSid = $currentIdentity.User.Value
+    foreach ($entry in $expectedTasks) {
+        $task = Get-ScheduledTask -TaskName $entry.Name -ErrorAction Stop
+        if ($task.Principal.LogonType -notin @('Interactive', 'InteractiveToken') -or $task.Principal.RunLevel -ne 'Limited') {
+            throw ('Refusing to alter a task without the expected interactive/limited principal: ' + $entry.Name)
+        }
+        $taskUser = [string]$task.Principal.UserId
+        $taskUserName = $taskUser.Split('\')[-1]
+        if ($taskUser -and $taskUser -ne $currentUser -and $taskUser -ne $currentUserSid -and $taskUserName -ne $currentUserName) {
+            throw ('Refusing to alter a task owned by another Windows account: ' + $entry.Name)
+        }
+        if (@($task.Actions).Count -ne 1) { throw ('Unexpected task action count: ' + $entry.Name) }
+        $taskAction = @($task.Actions)[0]
+        $expectedAction = '*-Action ' + $entry.BackupAction + '*'
+        $validAction = $taskAction.Arguments -like $expectedAction
+        if ($entry.BackupAction -eq 'Backup') { $validAction = $validAction -and $taskAction.Arguments -notlike '*-Action BackupNeon*' }
+        if ($taskAction.Execute -notlike '*powershell.exe' -or $taskAction.Arguments -notlike ('*' + $scriptPath + '*') -or -not $validAction) {
+            throw ('Refusing to alter a task whose action does not match this checkout: ' + $entry.Name)
+        }
+    }
+    foreach ($entry in $expectedTasks) {
+        $triggers = @(
+            foreach ($time in $entry.Times) {
+                $at = [datetime]::ParseExact($time, 'HH:mm', [Globalization.CultureInfo]::InvariantCulture)
+                New-ScheduledTaskTrigger -Daily -At $at
+            }
+        )
+        if ($Apply) {
+            Set-ScheduledTask -TaskName $entry.Name -Trigger $triggers -ErrorAction Stop | Out-Null
+            Write-Host ('Updated triggers for ' + $entry.Name + '. Existing action, principal and task settings were preserved.')
+        }
+        else {
+            Write-Host ('DRY RUN ' + $entry.Name + ': ' + ($entry.Times -join ', '))
+        }
+    }
+    if (-not $Apply) { Write-Host 'No task was changed. Re-run with -Apply only after reviewing both schedules.' }
+    return
+}
 if ($Action -eq 'SetupNeon') {
     . (Join-Path $PSScriptRoot 'neon-connection.ps1')
     $url = Read-Host 'Neon connection URI (hidden input)' -AsSecureString
@@ -110,6 +164,39 @@ if ($Action -eq 'InstallTask') {
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
     Register-ScheduledTask -TaskName $taskName -Action $taskAction -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
     Write-Host 'Daily 20:30 LOCAL time. Requires logged-in user, running Docker and network access. This is best effort.'
+    return
+}
+if ($Action -eq 'InstallRetentionTask') {
+    if (Get-ScheduledTask -TaskName $retentionTaskName -ErrorAction SilentlyContinue) {
+        throw 'Retention task exists; inspect it instead of overwriting it.'
+    }
+    if (-not (Get-ChildItem -LiteralPath $config.BackupDirectory -Filter '*.dump.enc.verified.json' -File)) {
+        throw 'A successful backup receipt is required before installing retention.'
+    }
+    if (-not $Apply) {
+        Write-Host 'DRY RUN: no scheduled task was created. Review Retention output, then re-run InstallRetentionTask with -Apply.'
+        return
+    }
+    $taskAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -File "' + $scriptPath + '" -Action Retention -Apply') -WorkingDirectory $PSScriptRoot
+    $trigger = New-ScheduledTaskTrigger -Daily -At '23:50'
+    $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+    Register-ScheduledTask -TaskName $retentionTaskName -Action $taskAction -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+    Write-Host 'Daily 23:50 LOCAL time retention task installed. It applies only the same-day cleanup rules.'
+    return
+}
+
+if ($Action -eq 'Retention') {
+    $nodeCommand = (Get-Command node -ErrorAction Stop).Source
+    $env:PORTFOLIO_BACKUP_KEY_FILE = $config.KeyPath
+    $env:PORTFOLIO_BACKUP_DIRECTORY = $config.BackupDirectory
+    if ($Apply) {
+        & $nodeCommand $retentionScript --apply
+    }
+    else {
+        & $nodeCommand $retentionScript --dry-run
+    }
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     return
 }
 $names = @('PORTFOLIO_BACKUP_DATABASE_URL', 'PORTFOLIO_BACKUP_SOURCE', 'PORTFOLIO_BACKUP_KEY_FILE', 'PORTFOLIO_BACKUP_DIRECTORY', 'PORTFOLIO_BACKUP_ARCHIVE', 'PORTFOLIO_BACKUP_FIXTURE', 'PORTFOLIO_BACKUP_NETWORK')

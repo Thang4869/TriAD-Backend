@@ -62,7 +62,7 @@ function createLogger(env = process.env, id = executionId()) {
       stage,
       message: redact(message),
     };
-    if (details) record.details = redact(details);
+    if (details) record.details = redact(typeof details === "string" ? details : JSON.stringify(details));
     stream.write(JSON.stringify(record) + "\n");
   };
   const close = () =>
@@ -226,7 +226,7 @@ function localBackupFile(value) {
     throw new Error("Select a portfolio backup archive");
   return file;
 }
-async function run(mode, env = process.env) {
+async function run(mode, env = process.env, options = {}) {
   const logger = createLogger(env);
   let currentStage = "configuration";
   const stage = (name, message) => {
@@ -323,7 +323,7 @@ async function run(mode, env = process.env) {
       );
       stage("encryption", "Encrypting PostgreSQL dump");
       await archive("encrypt", dump, encrypted, key);
-      // Never prune old backups automatically. The owner keeps known-good copies.
+      // Retention is a separate, explicit operation; backup never prunes archives.
       console.log("Encrypted backup saved: " + encrypted);
       stage("encryption", "Encrypted archive published");
     } else {
@@ -456,11 +456,13 @@ async function run(mode, env = process.env) {
         .digest("hex"),
       archiveBytes: fs.statSync(encrypted).size,
     });
-    fs.writeFileSync(
-      receiptPath,
-      JSON.stringify(evidence, null, 2),
-      { mode: 0o600 },
-    );
+    if (options.writeReceipt !== false) {
+      fs.writeFileSync(
+        receiptPath,
+        JSON.stringify(evidence, null, 2),
+        { mode: 0o600 },
+      );
+    }
     console.log(
       "PASS: encrypted archive restored into a disposable PostgreSQL 18 container",
     );

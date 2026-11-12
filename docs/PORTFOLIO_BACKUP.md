@@ -33,9 +33,13 @@ Linux containers. No npm installation is needed for these backup scripts.
 - Temporary plaintext, environment files and restore containers are removed on
   normal success/failure. Power loss can interrupt cleanup; use a private Windows
   account and normal disk encryption where available.
-- Encrypted archives are **never pruned automatically**. Keep at least seven
-  distinct successful daily copies if disk space permits. Review older copies
-  manually after confirming a newer restore and an offline key copy.
+- Retention is source- and ICT-calendar-day scoped. For a day with multiple
+  verified archives from the same source, the newest archive is decrypted and
+  restored again in an isolated PostgreSQL 18 container before older same-day
+  archives and their receipts can be removed. The receipt, source, snapshot day,
+  byte count and SHA-256 must match. Archives from other days are never pruned.
+  Unknown-source, unverified, malformed, changed or checksum-mismatched archives
+  are preserved. Retention defaults to dry-run; deletion requires the explicit Apply switch.
 
 ## Enable on your Windows PC
 
@@ -104,6 +108,51 @@ syncing. This is a best-effort PC schedule, not managed cloud backup.
    run when available, but snapshots for days the PC was off are not backfilled.
    Keep this checkout at its current path. Check `LastTaskResult = 0` and the
    latest receipt: registration alone is not proof a backup ran.
+
+7. After both existing tasks are present, preview and apply the three-hour
+   schedule. The script validates both task actions and their interactive,
+   limited principals, then changes **triggers only**; actions, accounts and
+   existing task settings (including wake behavior) are preserved:
+
+   ```powershell
+   .\scripts\backup\portfolio-backup.ps1 -Action SetRecurringSchedule
+   .\scripts\backup\portfolio-backup.ps1 -Action SetRecurringSchedule -Apply
+   ```
+
+   - Render: **00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00**.
+   - Neon: **00:20, 03:20, 06:20, 09:20, 12:20, 15:20, 18:20, 21:20**.
+
+8. Review retention in dry-run mode before enabling its daily task:
+
+   ```powershell
+   .\scripts\backup\portfolio-backup.ps1 -Action Retention
+   ```
+
+   The dry-run re-restores each newest same-source/same-day candidate that has
+   older verified copies and lists only the files it would remove. It does not
+   delete archives or receipts. After reviewing the output, a manual apply is
+   available:
+
+   ```powershell
+   .\scripts\backup\portfolio-backup.ps1 -Action Retention -Apply
+   ```
+
+   Only after the dry-run has been reviewed, install the daily **23:50 local
+   time** retention task:
+
+   ```powershell
+   .\scripts\backup\portfolio-backup.ps1 -Action InstallRetentionTask
+   # After reviewing the dry-run and the preview above, explicitly install:
+   .\scripts\backup\portfolio-backup.ps1 -Action InstallRetentionTask -Apply
+   Get-ScheduledTaskInfo -TaskName 'TriAD Portfolio Backup Retention'
+   ```
+
+   The task uses the same logged-in Windows account, starts when available and
+   may wake the PC. Docker must be ready. It runs the explicit apply mode, but
+   only removes older verified archives from a day that still has a newer
+   archive whose disposable restore and evidence checks pass. To remove only
+   this task while retaining all backups and keys, use the RemoveRetentionTask
+   action.
 
 ## Windows acceptance evidence — 2026-10-24
 
@@ -206,7 +255,7 @@ or configuration into an issue if it contains unexpected local paths or data.
 The task action uses the checkout as its working directory and resolves the
 user's Node executable at runtime. It remains an interactive, best-effort task:
 the user must be logged in, Docker Desktop must be ready, and network access must
-be available. A failed run never prunes archives or replaces the recovery key.
+be available. A failed backup or retention verification never removes archives or replaces the recovery key.
 
 To remove only the schedule and keep archives/keys:
 
@@ -219,9 +268,9 @@ To remove only the schedule and keep archives/keys:
 | Item              | Free portfolio behavior                                                                                                                                                             |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cost              | Existing PC/disk and Docker Desktop personal/student tooling; no paid cloud resource or GitHub artifact storage provisioned.                                                        |
-| Cadence           | Daily best-effort attempt while logged in; no cloud backup agent.                                                                                                                   |
-| Retention         | Owner-managed local copies; no automatic pruning. Keep at least seven known-good daily copies if possible.                                                                          |
-| Data loss         | Measured from the latest **successful** snapshot. Successful daily runs normally leave about 24 hours between snapshots; missed/failed runs make the gap longer. No guaranteed RPO. |
+| Cadence           | Target: every three hours per source, with Neon staggered 20 minutes after Render; owner applies the local schedule explicitly. Best effort while logged in. |
+| Retention         | When explicitly enabled, keep the newest verified archive for every source and ICT calendar day; remove only older verified copies from that same day after a fresh disposable restore. Never prune across days or remove unknown/unverified archives. |
+| Data loss         | Measured from the latest **successful** snapshot. The intended three-hour cadence reduces the normal interval, but missed/failed runs make the gap longer. No guaranteed RPO. |
 | Recovery time     | Real hosted recovery has not been timed; provisioning, network and manual reconfiguration are excluded from CI timing. No guaranteed RTO.                                           |
 | Redis             | Free persistence remains off; waiting jobs and ephemeral auth/cache state can disappear on restart. PostgreSQL backup does not preserve Redis.                                      |
 | Availability      | Free API can sleep; workers/relay have no always-on guarantee.                                                                                                                      |
@@ -271,6 +320,30 @@ new verification.
 - This verifies independent offline recovery for the Render archive. The Neon archive copy was hash-verified, but a separate Neon restore using the iPhone key was not performed.
 - The temporary key file is outside the repository and must be securely removed after verification. No source backup configuration or original recovery key was changed.
 
+## Three-hour backup cadence and same-day retention
+
+The intended local schedule, applied with SetRecurringSchedule, is eight Render
+runs and eight Neon runs per ICT calendar day. Neon starts 20 minutes after the
+corresponding Render run. This remains
+best-effort: the same Windows user must be logged on, the PC must be awake or
+wake-capable, Docker Desktop must be ready, and network access must be available.
+
+When installed, the separate retention task runs at **23:50 ICT**, after the
+final scheduled Neon attempt at 21:20. It never removes prior calendar days, so the seven-day
+evidence window for Issue #143 remains intact. A source/day group is eligible
+only when it contains at least two archives whose receipts prove a successful
+PostgreSQL 18 disposable restore and whose archive byte count and SHA-256 still
+match. The newest candidate is restored again before any older same-day archive
+is considered for deletion. Each older archive must independently pass its
+receipt, source, ICT-date, byte-count and checksum checks. Missing or invalid
+evidence is a preserve condition, not a cleanup condition.
+
+The dry-run is the default. The explicit Apply switch is required for deletion;
+the scheduled task is installed separately and is the only automatic apply path.
+If deletion is interrupted after a receipt is removed, the encrypted archive is
+left in place and becomes an unverified file; it is never treated as a verified
+backup again. Keep an independent offline recovery-key copy and do not treat
+local same-disk retention as an off-device backup.
 ## Render PostgreSQL 18 replacement runbook
 
 The current Render Free PostgreSQL 18 expiration is **2026-11-20 13:24:50

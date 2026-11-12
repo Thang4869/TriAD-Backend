@@ -220,6 +220,12 @@ test("retention groups by ICT calendar day and keeps unknown or unverified archi
     const unknown = makeRetentionFixture(directory, "2026-11-13T01:20:00.000Z", "render", "00000006", { invalidSource: "archive" });
     const unverified = path.join(directory, "triad-portfolio-20261113T013000000Z-00000007.dump.enc");
     fs.writeFileSync(unverified, "no receipt");
+    const badChecksum = makeRetentionFixture(directory, "2026-11-13T01:40:00.000Z", "render", "00000008");
+    fs.appendFileSync(badChecksum.archivePath, "tampered");
+    const wrongDate = makeRetentionFixture(directory, "2026-11-13T01:50:00.000Z", "render", "00000009");
+    const wrongDateReceipt = JSON.parse(fs.readFileSync(wrongDate.receiptPath, "utf8"));
+    wrongDateReceipt.sourceBackupAt = "2026-11-12T01:50:00.000Z";
+    fs.writeFileSync(wrongDate.receiptPath, JSON.stringify(wrongDateReceipt));
 
     let verifiedCount = 0;
     const result = await runRetention({
@@ -246,6 +252,8 @@ test("retention groups by ICT calendar day and keeps unknown or unverified archi
     assert.equal(fs.existsSync(unverified), true);
     assert.ok(result.protectedFiles.includes(path.basename(unknown.archivePath)));
     assert.ok(result.protectedFiles.includes(path.basename(unverified)));
+    assert.ok(result.protectedFiles.includes(path.basename(badChecksum.archivePath)));
+    assert.ok(result.protectedFiles.includes(path.basename(wrongDate.archivePath)));
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }

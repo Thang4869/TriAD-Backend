@@ -90,9 +90,9 @@ if ($Action -eq 'SetRecurringSchedule') {
         }
         if (@($task.Actions).Count -ne 1) { throw ('Unexpected task action count: ' + $entry.Name) }
         $taskAction = @($task.Actions)[0]
-        $expectedAction = '-Action ' + $entry.BackupAction
-        $validAction = $taskAction.Arguments.Contains($expectedAction)
-        if ($entry.BackupAction -eq 'Backup') { $validAction = $validAction -and -not $taskAction.Arguments.Contains('-Action BackupNeon') }
+        $expectedAction = '*-Action ' + $entry.BackupAction + '*'
+        $validAction = $taskAction.Arguments -like $expectedAction
+        if ($entry.BackupAction -eq 'Backup') { $validAction = $validAction -and $taskAction.Arguments -notlike '*-Action BackupNeon*' }
         if ($taskAction.Execute -notlike '*powershell.exe' -or $taskAction.Arguments -notlike ('*' + $scriptPath + '*') -or -not $validAction) {
             throw ('Refusing to alter a task whose action does not match this checkout: ' + $entry.Name)
         }

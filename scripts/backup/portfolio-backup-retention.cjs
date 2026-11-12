@@ -3,12 +3,13 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { run: verifyBackup } = require("./portfolio-backup.cjs");
+const { run: verifyBackup, createLogger } = require("./portfolio-backup.cjs");
 
 const ARCHIVE_PATTERN =
   /^triad-portfolio-(\d{8}T\d{9}Z)-([a-f0-9]{8})\.dump\.enc$/;
 const RECEIPT_MAX_BYTES = 64 * 1024;
 const TIME_ZONE = "Asia/Ho_Chi_Minh";
+const NOOP_LOGGER = { write() {} };
 
 function localDateKey(value) {
   const date = value instanceof Date ? value : new Date(value);
@@ -206,6 +207,7 @@ async function runRetention({
   directory,
   keyFile,
   dryRun = true,
+  logger = NOOP_LOGGER,
   verifyArchive = async ({ archivePath, keyFile: recoveryKey }) =>
     verifyBackup(
       "verify",
@@ -238,12 +240,26 @@ async function runRetention({
   let groupsReviewed = 0;
 
   try {
+    logger.write("INFO", "retention", "Retention started", {
+      mode: dryRun ? "dry-run" : "apply",
+      backupDirectory,
+    });
     const inspection = await inspectRetention(backupDirectory);
     protectedFiles = inspection.protectedFiles;
     groupsReviewed = inspection.groups.length;
+    logger.write("INFO", "retention", "Retention inventory complete", {
+      eligibleArchives: inspection.candidates.length,
+      groupsReviewed,
+      protectedFiles: protectedFiles.length,
+    });
 
     for (const group of inspection.groups) {
       try {
+        logger.write("INFO", "retention", "Verifying newest same-day archive", {
+          source: group.source,
+          day: group.day,
+          archive: group.keeper.name,
+        });
         const verification = await verifyArchive({
           archivePath: group.keeper.archivePath,
           keyFile: recoveryKey,
@@ -267,6 +283,12 @@ async function runRetention({
         )
           throw new Error("Newest same-day archive failed retention evidence checks");
 
+        logger.write("INFO", "retention", "Newest same-day restore passed", {
+          source: group.source,
+          day: group.day,
+          archive: group.keeper.name,
+          sha256: group.keeper.sha256,
+        });
         const currentKeeper = await readCandidate(
           backupDirectory,
           group.keeper.name,
@@ -296,8 +318,10 @@ async function runRetention({
 
           if (dryRun) {
             planned.push(item);
+            logger.write("INFO", "retention", "Dry-run would remove older same-day archive", item);
             continue;
           }
+          logger.write("WARN", "retention", "Removing older verified same-day archive", item);
 
           // Remove the receipt first: interruption can leave an archive behind,
           // but can never leave a PASS receipt for an archive already removed.
@@ -305,10 +329,15 @@ async function runRetention({
           try {
             fs.unlinkSync(current.archivePath);
             deleted.push(item);
+            logger.write("INFO", "retention", "Removed older archive and receipt", item);
           } catch (error) {
             failures.push({
               archive: current.name,
               reason: "Receipt removed but archive deletion failed: " + error.message,
+            });
+            logger.write("ERROR", "retention", "Receipt removed but archive deletion failed", {
+              archive: current.name,
+              error: error.message,
             });
           }
         }
@@ -316,6 +345,12 @@ async function runRetention({
         failures.push({
           archive: group.keeper.name,
           reason: error && error.message ? error.message : String(error),
+        });
+        logger.write("ERROR", "retention", "Same-day retention group preserved", {
+          archive: group.keeper.name,
+          source: group.source,
+          day: group.day,
+          error: error && error.message ? error.message : String(error),
         });
       }
     }
@@ -327,6 +362,13 @@ async function runRetention({
     }
   }
 
+  logger.write("INFO", "retention", "Retention completed", {
+    mode: dryRun ? "dry-run" : "apply",
+    groupsReviewed,
+    planned: planned.length,
+    deleted: deleted.length,
+    failures: failures.length,
+  });
   return {
     dryRun,
     groupsReviewed,
@@ -342,11 +384,18 @@ async function main() {
   if (!["--dry-run", "--apply"].includes(argument) || process.argv.length > 3) {
     throw new Error("Use --dry-run (default) or --apply");
   }
-  const result = await runRetention({
-    directory: process.env.PORTFOLIO_BACKUP_DIRECTORY,
-    keyFile: process.env.PORTFOLIO_BACKUP_KEY_FILE,
-    dryRun: argument !== "--apply",
-  });
+  const logger = createLogger(process.env);
+  let result;
+  try {
+    result = await runRetention({
+      directory: process.env.PORTFOLIO_BACKUP_DIRECTORY,
+      keyFile: process.env.PORTFOLIO_BACKUP_KEY_FILE,
+      dryRun: argument !== "--apply",
+      logger,
+    });
+  } finally {
+    await logger.close();
+  }
   console.log(
     "Retention " +
       (result.dryRun ? "DRY RUN" : "APPLY") +

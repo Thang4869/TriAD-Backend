@@ -69,58 +69,87 @@ function hashFile(file) {
   });
 }
 
-async function readCandidate(directory, name) {
+async function inspectCandidate(directory, name) {
   const match = ARCHIVE_PATTERN.exec(name);
-  if (!match) return null;
+  if (!match) return { candidate: null, reason: "filename-not-recognized" };
   const archivePath = path.join(directory, name);
   const receiptPath = archivePath + ".verified.json";
 
+  let archiveStat;
+  let receiptStat;
   try {
-    const archiveStat = fs.lstatSync(archivePath);
-    const receiptStat = fs.lstatSync(receiptPath);
-    if (
-      !archiveStat.isFile() ||
-      archiveStat.isSymbolicLink() ||
-      !receiptStat.isFile() ||
-      receiptStat.isSymbolicLink() ||
-      receiptStat.size > RECEIPT_MAX_BYTES
-    )
-      return null;
+    archiveStat = fs.lstatSync(archivePath);
+  } catch {
+    return { candidate: null, reason: "archive-unavailable" };
+  }
+  try {
+    receiptStat = fs.lstatSync(receiptPath);
+  } catch {
+    return { candidate: null, reason: "receipt-missing-or-unavailable" };
+  }
+  if (
+    !archiveStat.isFile() ||
+    archiveStat.isSymbolicLink() ||
+    !receiptStat.isFile() ||
+    receiptStat.isSymbolicLink()
+  )
+    return { candidate: null, reason: "archive-or-receipt-not-regular-file" };
+  if (receiptStat.size > RECEIPT_MAX_BYTES)
+    return { candidate: null, reason: "receipt-exceeds-size-limit" };
 
-    const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
-    if (
-      receipt.result !== "PASS" ||
-      !["render", "neon"].includes(receipt.source) ||
-      receipt.database !== "triad_staging" ||
-      receipt.postgresMajor !== 18 ||
-      receipt.disposableRestore !== true ||
-      !Number.isSafeInteger(receipt.archiveBytes) ||
-      receipt.archiveBytes <= 0 ||
-      !/^[a-f0-9]{64}$/.test(receipt.sha256 || "") ||
-      typeof receipt.sourceBackupAt !== "string" ||
-      typeof receipt.verifiedAt !== "string"
-    )
-      return null;
+  let receipt;
+  try {
+    receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+  } catch {
+    return { candidate: null, reason: "receipt-invalid-json-or-unreadable" };
+  }
+  if (receipt.result !== "PASS")
+    return { candidate: null, reason: "receipt-result-not-pass" };
+  if (!["render", "neon"].includes(receipt.source))
+    return { candidate: null, reason: "receipt-source-missing-or-unsupported" };
+  if (receipt.database !== "triad_staging")
+    return { candidate: null, reason: "receipt-database-mismatch" };
+  if (receipt.postgresMajor !== 18)
+    return { candidate: null, reason: "receipt-postgres-major-mismatch" };
+  if (receipt.disposableRestore !== true)
+    return { candidate: null, reason: "receipt-restore-not-confirmed" };
+  if (!Number.isSafeInteger(receipt.archiveBytes) || receipt.archiveBytes <= 0)
+    return { candidate: null, reason: "receipt-archive-bytes-invalid" };
+  if (!/^[a-f0-9]{64}$/.test(receipt.sha256 || ""))
+    return { candidate: null, reason: "receipt-sha256-invalid" };
+  if (typeof receipt.sourceBackupAt !== "string" || typeof receipt.verifiedAt !== "string")
+    return { candidate: null, reason: "receipt-timestamp-missing" };
 
-    const sourceBackupAt = Date.parse(receipt.sourceBackupAt);
-    const verifiedAt = Date.parse(receipt.verifiedAt);
-    const fileTimestamp = archiveTimestamp(match[1]);
-    if (
-      !Number.isFinite(sourceBackupAt) ||
-      !Number.isFinite(verifiedAt) ||
-      sourceBackupAt > verifiedAt ||
-      fileTimestamp > verifiedAt ||
-      receipt.archiveBytes !== archiveStat.size
-    )
-      return null;
+  const sourceBackupAt = Date.parse(receipt.sourceBackupAt);
+  const verifiedAt = Date.parse(receipt.verifiedAt);
+  let fileTimestamp;
+  try {
+    fileTimestamp = archiveTimestamp(match[1]);
+  } catch {
+    return { candidate: null, reason: "archive-timestamp-invalid" };
+  }
+  if (!Number.isFinite(sourceBackupAt) || !Number.isFinite(verifiedAt))
+    return { candidate: null, reason: "receipt-timestamp-invalid" };
+  if (sourceBackupAt > verifiedAt || fileTimestamp > verifiedAt)
+    return { candidate: null, reason: "receipt-timestamp-order-invalid" };
+  if (receipt.archiveBytes !== archiveStat.size)
+    return { candidate: null, reason: "archive-size-mismatch" };
 
-    const day = localDateKey(sourceBackupAt);
-    if (localDateKey(fileTimestamp) !== day) return null;
+  const day = localDateKey(sourceBackupAt);
+  if (localDateKey(fileTimestamp) !== day)
+    return { candidate: null, reason: "archive-ict-date-mismatch" };
 
-    const sha256 = await hashFile(archivePath);
-    if (sha256 !== receipt.sha256) return null;
+  let sha256;
+  try {
+    sha256 = await hashFile(archivePath);
+  } catch {
+    return { candidate: null, reason: "archive-checksum-unreadable" };
+  }
+  if (sha256 !== receipt.sha256)
+    return { candidate: null, reason: "archive-checksum-mismatch" };
 
-    return {
+  return {
+    candidate: {
       archivePath,
       receiptPath,
       name,
@@ -131,10 +160,13 @@ async function readCandidate(directory, name) {
       sha256,
       archiveBytes: archiveStat.size,
       receipt,
-    };
-  } catch {
-    return null;
-  }
+    },
+    reason: null,
+  };
+}
+
+async function readCandidate(directory, name) {
+  return (await inspectCandidate(directory, name)).candidate;
 }
 
 function compareNewestFirst(a, b) {
@@ -189,16 +221,21 @@ async function inspectRetention(directory) {
     .map((entry) => entry.name);
   const candidates = [];
   const protectedFiles = [];
+  const protectedReasons = [];
 
   for (const name of names) {
-    const candidate = await readCandidate(directory, name);
-    if (candidate) candidates.push(candidate);
-    else protectedFiles.push(name);
+    const inspection = await inspectCandidate(directory, name);
+    if (inspection.candidate) candidates.push(inspection.candidate);
+    else {
+      protectedFiles.push(name);
+      protectedReasons.push({ archive: name, reason: inspection.reason });
+    }
   }
 
   return {
     candidates,
     protectedFiles,
+    protectedReasons,
     groups: buildRetentionPlan(candidates),
   };
 }
@@ -237,6 +274,7 @@ async function runRetention({
   const deleted = [];
   const failures = [];
   let protectedFiles = [];
+  let protectedReasons = [];
   let groupsReviewed = 0;
 
   try {
@@ -246,11 +284,13 @@ async function runRetention({
     });
     const inspection = await inspectRetention(backupDirectory);
     protectedFiles = inspection.protectedFiles;
+    protectedReasons = inspection.protectedReasons;
     groupsReviewed = inspection.groups.length;
     logger.write("INFO", "retention", "Retention inventory complete", {
       eligibleArchives: inspection.candidates.length,
       groupsReviewed,
       protectedFiles: protectedFiles.length,
+      protectedReasons,
     });
 
     for (const group of inspection.groups) {
@@ -376,6 +416,7 @@ async function runRetention({
     deleted,
     failures,
     protectedFiles,
+    protectedReasons,
   };
 }
 
@@ -418,6 +459,9 @@ async function main() {
     console.error("PRESERVED " + item.archive + ": " + item.reason);
   }
   console.log("Protected unverified/unknown archives: " + result.protectedFiles.length);
+  for (const item of result.protectedReasons) {
+    console.log("PROTECTED " + item.archive + ": " + item.reason);
+  }
   if (result.failures.length) process.exitCode = 1;
 }
 
@@ -431,6 +475,7 @@ if (require.main === module) {
 module.exports = {
   localDateKey,
   buildRetentionPlan,
+  inspectCandidate,
   inspectRetention,
   runRetention,
 };

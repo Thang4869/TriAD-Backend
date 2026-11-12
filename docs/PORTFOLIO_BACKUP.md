@@ -336,7 +336,7 @@ PostgreSQL 18 disposable restore and whose archive byte count and SHA-256 still
 match. The newest candidate is restored again before any older same-day archive
 is considered for deletion. Each older archive must independently pass its
 receipt, source, ICT-date, byte-count and checksum checks. Missing or invalid
-evidence is a preserve condition, not a cleanup condition.
+evidence is a preserve condition, not a cleanup condition. The dry-run inventory also prints a per-archive protection reason (for example, missing receipt, unsupported source, missing timestamp, size mismatch, ICT-date mismatch or checksum mismatch). These diagnostics are read-only; they do not repair legacy receipts or relax any eligibility check. Legacy receipts with missing or ambiguous source evidence remain protected until independently re-verified through the normal Verify workflow and receive a complete receipt.
 
 The dry-run is the default. The explicit Apply switch is required for deletion;
 the scheduled task is installed separately and is the only automatic apply path.

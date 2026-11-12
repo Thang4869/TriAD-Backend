@@ -9,6 +9,7 @@ const {
 } = require("../../scripts/backup/portfolio-backup.cjs");
 const {
   localDateKey,
+  inspectRetention,
   runRetention,
 } = require("../../scripts/backup/portfolio-backup-retention.cjs");
 const fs = require("node:fs");
@@ -260,6 +261,16 @@ test("retention groups by ICT calendar day and keeps unknown or unverified archi
     assert.ok(result.protectedFiles.includes(path.basename(unverified)));
     assert.ok(result.protectedFiles.includes(path.basename(badChecksum.archivePath)));
     assert.ok(result.protectedFiles.includes(path.basename(wrongDate.archivePath)));
+    const reasons = new Map(
+      (await inspectRetention(directory)).protectedReasons.map((item) => [
+        item.archive,
+        item.reason,
+      ]),
+    );
+    assert.equal(reasons.get(path.basename(unknown.archivePath)), "receipt-source-missing-or-unsupported");
+    assert.equal(reasons.get(path.basename(unverified)), "receipt-missing-or-unavailable");
+    assert.equal(reasons.get(path.basename(badChecksum.archivePath)), "archive-checksum-mismatch");
+    assert.equal(reasons.get(path.basename(wrongDate.archivePath)), "archive-ict-date-mismatch");
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }

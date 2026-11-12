@@ -226,7 +226,7 @@ function localBackupFile(value) {
     throw new Error("Select a portfolio backup archive");
   return file;
 }
-async function run(mode, env = process.env) {
+async function run(mode, env = process.env, options = {}) {
   const logger = createLogger(env);
   let currentStage = "configuration";
   const stage = (name, message) => {
@@ -456,11 +456,13 @@ async function run(mode, env = process.env) {
         .digest("hex"),
       archiveBytes: fs.statSync(encrypted).size,
     });
-    fs.writeFileSync(
-      receiptPath,
-      JSON.stringify(evidence, null, 2),
-      { mode: 0o600 },
-    );
+    if (options.writeReceipt !== false) {
+      fs.writeFileSync(
+        receiptPath,
+        JSON.stringify(evidence, null, 2),
+        { mode: 0o600 },
+      );
+    }
     console.log(
       "PASS: encrypted archive restored into a disposable PostgreSQL 18 container",
     );

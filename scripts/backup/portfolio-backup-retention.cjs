@@ -393,6 +393,9 @@ async function main() {
       dryRun: argument !== "--apply",
       logger,
     });
+  } catch (error) {
+    logger.write("ERROR", "retention", "Retention execution failed", error.message);
+    throw error;
   } finally {
     await logger.close();
   }

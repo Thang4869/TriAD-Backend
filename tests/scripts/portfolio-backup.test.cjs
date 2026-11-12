@@ -107,6 +107,9 @@ test("classifies operational failures and redacts credentials", async () => {
       "00000000-0000-0000-0000-000000000001",
     );
     logger.write("ERROR", "test", "password=secret");
+    logger.write("INFO", "test", "structured details", {
+      url: "postgresql://test:secret@example.test/db",
+    });
     await logger.close();
     const logPath = path.join(
       localAppData,
@@ -116,6 +119,7 @@ test("classifies operational failures and redacts credentials", async () => {
     );
     const content = fs.readFileSync(logPath, "utf8");
     assert.match(content, /executionId/);
+    assert.match(content, /REDACTED_DATABASE_URL/);
     assert.doesNotMatch(content, /secret/);
   } finally {
     fs.rmSync(localAppData, { recursive: true, force: true });

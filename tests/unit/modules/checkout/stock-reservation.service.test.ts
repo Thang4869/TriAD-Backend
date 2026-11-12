@@ -2,16 +2,40 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StockReservationService } from "@modules/checkout/services/stock-reservation.service";
 import { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
-import {
-  ValidationError,
-  ResourceNotFoundError,
-  ConflictError,
-} from "@shared/errors/application-error";
+import { ValidationError } from "@shared/errors/application-error";
 import { noopMetrics, noopTracer } from "../../../helpers/observability";
 
 // withSpan chỉ là lớp bọc tracing — thay bằng passthrough để test tập trung vào logic.
 function createService(): StockReservationService {
   return new StockReservationService(noopTracer, noopMetrics);
+}
+
+function createInstrumentedService() {
+  const metrics = {
+    increment: vi.fn(),
+    observe: vi.fn(),
+  };
+  const tracer = {
+    withSpan: vi.fn(
+      async (
+        _name: string,
+        operation: (
+          setAttributes: (attributes: Record<string, unknown>) => void,
+        ) => Promise<unknown>,
+        _attributes?: Record<string, unknown>,
+      ) => operation(vi.fn()),
+    ),
+  };
+  const setAttributes = vi.fn();
+  tracer.withSpan.mockImplementation(async (_name, operation, _attributes) =>
+    operation(setAttributes),
+  );
+  return {
+    service: new StockReservationService(tracer as never, metrics as never),
+    metrics,
+    tracer,
+    setAttributes,
+  };
 }
 function lockedProduct(overrides: Record<string, unknown> = {}) {
   return {
@@ -127,7 +151,7 @@ describe("StockReservationService.reserveStock", () => {
           quantity: 1,
         },
       ]),
-    ).rejects.toThrow(ResourceNotFoundError);
+    ).rejects.toThrow("Product prod-1 not found");
 
     expect(tx.decrementProductStock).not.toHaveBeenCalled();
   });
@@ -150,7 +174,7 @@ describe("StockReservationService.reserveStock", () => {
           quantity: 5,
         },
       ]),
-    ).rejects.toThrow(/Not enough stock for Áo thun. Available: 2/);
+    ).rejects.toThrow("Not enough stock for Áo thun. Available: 2");
 
     expect(tx.decrementProductStock).not.toHaveBeenCalled();
   });
@@ -167,7 +191,7 @@ describe("StockReservationService.reserveStock", () => {
             quantity,
           },
         ]),
-      ).rejects.toThrow(ValidationError);
+      ).rejects.toThrow("Invalid quantity for product prod-1");
 
       expect(tx.decrementProductStock).not.toHaveBeenCalled();
     },
@@ -191,7 +215,7 @@ describe("StockReservationService.reserveStock", () => {
           quantity: 1,
         },
       ]),
-    ).rejects.toThrow(ValidationError);
+    ).rejects.toThrow("Product Áo thun is inactive");
 
     expect(tx.decrementProductStock).not.toHaveBeenCalled();
   });
@@ -264,7 +288,7 @@ describe("StockReservationService.reserveStock", () => {
           quantity: 1,
         },
       ]),
-    ).rejects.toThrow(ConflictError);
+    ).rejects.toThrow("Stock conflict for product prod-1. Please retry.");
   });
 
   it("trừ kho cho từng item trong giỏ nhiều sản phẩm", async () => {
@@ -296,5 +320,80 @@ describe("StockReservationService.reserveStock", () => {
     expect(tx.decrementProductStock).toHaveBeenCalledTimes(2);
 
     expect(tx.persistProductEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it("ghi nhận metric thành công, span attributes và thời gian từng stage", async () => {
+    const { service, metrics, tracer, setAttributes } =
+      createInstrumentedService();
+    const now = vi.spyOn(performance, "now");
+    now
+      .mockReturnValueOnce(100)
+      .mockReturnValueOnce(125)
+      .mockReturnValueOnce(200)
+      .mockReturnValueOnce(230);
+
+    try {
+      await service.reserveStock(tx, [{ productId: "prod-1", quantity: 1 }]);
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(tracer.withSpan).toHaveBeenCalledWith(
+      "checkout.reserve_stock",
+      expect.any(Function),
+      { "stock.sku_count": 1 },
+    );
+    expect(setAttributes).toHaveBeenCalledWith({
+      "stock.locked_product_count": 1,
+    });
+    expect(metrics.increment).toHaveBeenCalledWith(
+      "stock.reservation.succeeded",
+    );
+    expect(metrics.observe).toHaveBeenCalledTimes(2);
+    expect(metrics.observe).toHaveBeenNthCalledWith(
+      1,
+      "checkout.stage.duration",
+      25,
+      { stage: "product_lock" },
+    );
+    expect(metrics.observe).toHaveBeenNthCalledWith(
+      2,
+      "checkout.stage.duration",
+      30,
+      { stage: "stock_update" },
+    );
+  });
+
+  it("ghi nhận metric thất bại và vẫn truyền lỗi nghiệp vụ ra ngoài", async () => {
+    const metrics = {
+      increment: vi.fn(),
+      observe: vi.fn(),
+    };
+    const tracer = {
+      withSpan: vi.fn().mockRejectedValue(new Error("transaction failed")),
+    };
+    const service = new StockReservationService(
+      tracer as never,
+      metrics as never,
+    );
+
+    await expect(
+      service.reserveStock(tx, [{ productId: "prod-1", quantity: 1 }]),
+    ).rejects.toThrow("transaction failed");
+    expect(metrics.increment).toHaveBeenCalledWith("stock.reservation.failed");
+  });
+
+  it("không làm hỏng reservation nếu metrics observe bị lỗi", async () => {
+    const { service, metrics } = createInstrumentedService();
+    metrics.observe.mockImplementation(() => {
+      throw new Error("metrics unavailable");
+    });
+
+    await expect(
+      service.reserveStock(tx, [{ productId: "prod-1", quantity: 1 }]),
+    ).resolves.toEqual([lockedProduct()]);
+    expect(metrics.increment).toHaveBeenCalledWith(
+      "stock.reservation.succeeded",
+    );
   });
 });

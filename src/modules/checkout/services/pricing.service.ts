@@ -63,7 +63,7 @@ export class PricingService {
         throw new ValidationError("Invalid or inactive discount code");
       }
 
-      if (discount.expiresAt && discount.expiresAt < new Date()) {
+      if (discount.expiresAt && discount.expiresAt <= new Date()) {
         throw new ValidationError("Discount code has expired");
       }
 

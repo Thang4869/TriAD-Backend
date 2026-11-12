@@ -4,10 +4,7 @@ import { PricingService } from "@modules/checkout/services/pricing.service";
 import { CheckoutTransaction } from "@modules/checkout/application/ports/checkout-transaction";
 import { Money } from "@shared/value-objects/money";
 import { CHECKOUT_PRICING } from "@shared/constants/order.constant";
-import {
-  ValidationError,
-  ConflictError,
-} from "@shared/errors/application-error";
+import { ValidationError } from "@shared/errors/application-error";
 
 const enabledFeatureFlags = {
   isEnabled: vi.fn().mockReturnValue(true),
@@ -218,6 +215,28 @@ describe("PricingService - mã giảm giá hợp lệ", () => {
     });
   });
 
+  it("mã hết hạn đúng tại thời điểm hiện tại không được áp dụng", async () => {
+    const now = new Date();
+    vi.setSystemTime(now);
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          expiresAt: now,
+        }),
+      ),
+    });
+
+    const service = new PricingService(enabledFeatureFlags);
+
+    try {
+      await expect(
+        service.calculatePricing(new Money(1_000_000), "SALE10", tx),
+      ).rejects.toThrow("Discount code has expired");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("đạt đúng minOrderAmount thì hợp lệ", async () => {
     tx = createTransaction({
       findDiscountByCode: vi.fn().mockResolvedValue(
@@ -313,7 +332,45 @@ describe("PricingService - mã giảm giá không hợp lệ", () => {
 
     await expect(
       service.calculatePricing(new Money(1_000_000), "SALE10", tx),
-    ).rejects.toThrow(ConflictError);
+    ).rejects.toThrow(
+      "Discount code just reached its usage limit. Please retry.",
+    );
+  });
+
+  it("preview không consume usage nhưng vẫn chặn mã đã hết lượt", async () => {
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          maxUses: 1,
+          usedCount: 1,
+        }),
+      ),
+    });
+
+    const service = new PricingService(enabledFeatureFlags);
+
+    await expect(
+      service.previewPricing(new Money(1_000_000), "SALE10", tx),
+    ).rejects.toThrow("Discount code has reached its usage limit");
+    expect(tx.incrementDiscountUsage).not.toHaveBeenCalled();
+  });
+
+  it("preview cho phép mã còn lượt hoặc không giới hạn mà không consume usage", async () => {
+    tx = createTransaction({
+      findDiscountByCode: vi.fn().mockResolvedValue(
+        discount({
+          maxUses: null,
+          usedCount: 0,
+        }),
+      ),
+    });
+
+    const service = new PricingService(enabledFeatureFlags);
+
+    await expect(
+      service.previewPricing(new Money(1_000_000), "SALE10", tx),
+    ).resolves.toMatchObject({ discountCode: "SALE10" });
+    expect(tx.incrementDiscountUsage).not.toHaveBeenCalled();
   });
 
   it("mã không hợp lệ thì không tăng usage count", async () => {

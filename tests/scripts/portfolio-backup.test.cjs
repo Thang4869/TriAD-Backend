@@ -225,7 +225,9 @@ test("retention groups by ICT calendar day and keeps unknown or unverified archi
     const unverified = path.join(directory, "triad-portfolio-20261113T013000000Z-00000007.dump.enc");
     fs.writeFileSync(unverified, "no receipt");
     const badChecksum = makeRetentionFixture(directory, "2026-11-13T01:40:00.000Z", "render", "00000008");
-    fs.appendFileSync(badChecksum.archivePath, "tampered");
+    const tamperedBytes = fs.readFileSync(badChecksum.archivePath);
+    tamperedBytes[0] ^= 1;
+    fs.writeFileSync(badChecksum.archivePath, tamperedBytes);
     const wrongDate = makeRetentionFixture(directory, "2026-11-13T01:50:00.000Z", "render", "00000009");
     const wrongDateReceipt = JSON.parse(fs.readFileSync(wrongDate.receiptPath, "utf8"));
     wrongDateReceipt.sourceBackupAt = "2026-11-12T01:50:00.000Z";

@@ -231,9 +231,7 @@ describe("OrdersService.getOrderById", () => {
   });
 
   it("propagates projection failures without falling back to write model", async () => {
-    const projectionError = new Error(
-      "Order history projection unavailable",
-    );
+    const projectionError = new Error("Order history projection unavailable");
 
     const repository = createRepository();
 
@@ -242,10 +240,7 @@ describe("OrdersService.getOrderById", () => {
     });
 
     await expect(
-      createService(repository, readPort).getOrderById(
-        "order-1",
-        "user-1",
-      ),
+      createService(repository, readPort).getOrderById("order-1", "user-1"),
     ).rejects.toBe(projectionError);
 
     expect(repository.findByIdAndUser).not.toHaveBeenCalled();

@@ -23,7 +23,13 @@ describe("NotificationsController", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("gets notifications with parsed pagination", async () => {
-    const result = { notifications: [], total: 0, page: 2, limit: 5, totalPages: 0 };
+    const result = {
+      notifications: [],
+      total: 0,
+      page: 2,
+      limit: 5,
+      totalPages: 0,
+    };
     const service = {
       getNotifications: vi.fn().mockResolvedValue(result),
     } as unknown as INotificationsService;

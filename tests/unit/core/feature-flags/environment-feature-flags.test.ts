@@ -9,7 +9,8 @@ afterEach(() => {
     if (key.startsWith("FEATURE_")) delete process.env[key];
   }
   for (const [key, value] of Object.entries(originalEnv)) {
-    if (key.startsWith("FEATURE_") && value !== undefined) process.env[key] = value;
+    if (key.startsWith("FEATURE_") && value !== undefined)
+      process.env[key] = value;
   }
 });
 
@@ -28,9 +29,13 @@ describe("EnvironmentFeatureFlags", () => {
 
   it("uses deterministic user bucketing when rollout is configured", () => {
     process.env.FEATURE_FLAG_ROLLOUT_PERCENT = "100";
-    expect(flags.isEnabled(FeatureFlag.RequireTwoFactor, { userId: "user-1" })).toBe(true);
+    expect(
+      flags.isEnabled(FeatureFlag.RequireTwoFactor, { userId: "user-1" }),
+    ).toBe(true);
     process.env.FEATURE_FLAG_ROLLOUT_PERCENT = "0";
-    expect(flags.isEnabled(FeatureFlag.RequireTwoFactor, { userId: "user-1" })).toBe(false);
+    expect(
+      flags.isEnabled(FeatureFlag.RequireTwoFactor, { userId: "user-1" }),
+    ).toBe(false);
   });
 
   it("falls back to the built-in discount-system default", () => {

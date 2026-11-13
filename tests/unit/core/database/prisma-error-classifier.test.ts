@@ -6,10 +6,13 @@ describe("PrismaErrorClassifier", () => {
   const classifier = new PrismaErrorClassifier();
 
   it("classifies P2002 as UNIQUE_CONSTRAINT", () => {
-    const error = new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
-      code: "P2002",
-      clientVersion: "test",
-    });
+    const error = new Prisma.PrismaClientKnownRequestError(
+      "Unique constraint failed",
+      {
+        code: "P2002",
+        clientVersion: "test",
+      },
+    );
     expect(classifier.classify(error)).toEqual({ kind: "UNIQUE_CONSTRAINT" });
   });
 
@@ -22,34 +25,49 @@ describe("PrismaErrorClassifier", () => {
   });
 
   it("classifies P2034 as TRANSACTION_CONFLICT", () => {
-    const error = new Prisma.PrismaClientKnownRequestError("Transaction conflict", {
-      code: "P2034",
-      clientVersion: "test",
+    const error = new Prisma.PrismaClientKnownRequestError(
+      "Transaction conflict",
+      {
+        code: "P2034",
+        clientVersion: "test",
+      },
+    );
+    expect(classifier.classify(error)).toEqual({
+      kind: "TRANSACTION_CONFLICT",
     });
-    expect(classifier.classify(error)).toEqual({ kind: "TRANSACTION_CONFLICT" });
   });
 
   it("classifies raw-query SQLSTATE 40001 as TRANSACTION_CONFLICT without instanceof", () => {
-    expect(classifier.classify({
-      name: "PrismaClientKnownRequestError",
-      code: "P2010",
-      meta: { code: "40001", message: "could not serialize access due to concurrent update" },
-    })).toEqual({ kind: "TRANSACTION_CONFLICT" });
+    expect(
+      classifier.classify({
+        name: "PrismaClientKnownRequestError",
+        code: "P2010",
+        meta: {
+          code: "40001",
+          message: "could not serialize access due to concurrent update",
+        },
+      }),
+    ).toEqual({ kind: "TRANSACTION_CONFLICT" });
   });
 
   it("keeps other P2010 SQLSTATE values as DATABASE", () => {
-    expect(classifier.classify({
-      name: "PrismaClientKnownRequestError",
-      code: "P2010",
-      meta: { code: "42P01" },
-    })).toEqual({ kind: "DATABASE" });
+    expect(
+      classifier.classify({
+        name: "PrismaClientKnownRequestError",
+        code: "P2010",
+        meta: { code: "42P01" },
+      }),
+    ).toEqual({ kind: "DATABASE" });
   });
 
   it("classifies other known Prisma errors as DATABASE", () => {
-    const error = new Prisma.PrismaClientKnownRequestError("Foreign key constraint failed", {
-      code: "P2003",
-      clientVersion: "test",
-    });
+    const error = new Prisma.PrismaClientKnownRequestError(
+      "Foreign key constraint failed",
+      {
+        code: "P2003",
+        clientVersion: "test",
+      },
+    );
     expect(classifier.classify(error)).toEqual({ kind: "DATABASE" });
   });
 

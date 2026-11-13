@@ -17,7 +17,9 @@ describe("metricsRoutes", () => {
   afterEach(() => vi.clearAllMocks());
 
   it("returns Prometheus metrics with the registry content type", async () => {
-    registry.metrics.mockResolvedValue("# HELP requests_total Total requests\nrequests_total 2\n");
+    registry.metrics.mockResolvedValue(
+      "# HELP requests_total Total requests\nrequests_total 2\n",
+    );
     const app = express().use("/metrics", metricsRoutes);
 
     const response = await request(app).get("/metrics/");

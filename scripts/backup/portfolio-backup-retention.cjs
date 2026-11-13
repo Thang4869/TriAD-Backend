@@ -217,7 +217,7 @@ function sameCandidate(a, b) {
 async function inspectRetention(directory) {
   const entries = fs.readdirSync(directory, { withFileTypes: true });
   const names = entries
-    .filter((entry) => entry.isFile() && ARCHIVE_PATTERN.test(entry.name))
+    .filter((entry) => ARCHIVE_PATTERN.test(entry.name))
     .map((entry) => entry.name);
   const candidates = [];
   const protectedFiles = [];

@@ -86,17 +86,13 @@ class PrismaCheckoutTransaction implements CheckoutTransaction {
     return result.count > 0;
   }
 
-  async persistProductEvent(
-    event: DomainEvent,
-    sourceVersion: number,
+  async persistProductEvents(
+    events: DomainEvent[],
+    sourceVersions: ReadonlyMap<string, number>,
   ): Promise<void> {
     const startedAt = performance.now();
     try {
-      await this.persistTypedEvents(
-        this.tx,
-        [event],
-        new Map([[event.aggregateId, sourceVersion]]),
-      );
+      await this.persistTypedEvents(this.tx, events, sourceVersions);
     } finally {
       this.observeStage("product_outbox", performance.now() - startedAt);
     }

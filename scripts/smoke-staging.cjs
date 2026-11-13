@@ -66,7 +66,11 @@ async function runStagingSmoke(
     if (response.status !== check.status) {
       await response.body?.cancel();
       throw new Error(
-        check.path + ": expected HTTP " + check.status + ", received " + response.status,
+        check.path +
+          ": expected HTTP " +
+          check.status +
+          ", received " +
+          response.status,
       );
     }
 
@@ -95,7 +99,11 @@ async function runStagingSmoke(
       await response.body?.cancel();
     }
 
-    checks.push({ target: check.target, path: check.path, status: response.status });
+    checks.push({
+      target: check.target,
+      path: check.path,
+      status: response.status,
+    });
   }
 
   return {

@@ -129,38 +129,60 @@ describe("PrismaCheckoutRepository (integration)", () => {
   });
 
   it("stock reservation ghi ProductUpdated outbox cùng transaction với decrement", async () => {
+    const secondProduct = await prisma.product.create({
+      data: {
+        name: "Second Checkout Product",
+        description: "d",
+        price: 200,
+        stock: 8,
+        category: "c",
+        slug: `checkout-p-second-${Date.now()}`,
+        images: [],
+      },
+    });
     const stockService = new StockReservationService(noopTracer, noopMetrics);
 
     await unitOfWork.run((tx) =>
       stockService.reserveStock(tx, [
-        {
-          productId,
-          quantity: 3,
-        },
+        { productId, quantity: 3 },
+        { productId: secondProduct.id, quantity: 2 },
       ]),
     );
 
-    await expect(
-      prisma.product.findUnique({
-        where: {
-          id: productId,
-        },
-      }),
-    ).resolves.toMatchObject({
-      stock: 7,
-      version: 1,
+    const products = await prisma.product.findMany({
+      where: { id: { in: [productId, secondProduct.id] } },
+      orderBy: { id: "asc" },
     });
+    expect(products).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: productId, stock: 7, version: 1 }),
+        expect.objectContaining({
+          id: secondProduct.id,
+          stock: 6,
+          version: 1,
+        }),
+      ]),
+    );
 
-    await expect(
-      prisma.outboxEvent.findFirst({
-        where: {
-          aggregateId: productId,
-          eventName: "ProductUpdated",
-        },
-      }),
-    ).resolves.toMatchObject({
-      aggregateId: productId,
+    const events = await prisma.outboxEvent.findMany({
+      where: {
+        aggregateId: { in: [productId, secondProduct.id] },
+        eventName: "ProductUpdated",
+      },
     });
+    expect(events).toHaveLength(2);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          aggregateId: productId,
+          payload: expect.objectContaining({ sourceVersion: 1 }),
+        }),
+        expect.objectContaining({
+          aggregateId: secondProduct.id,
+          payload: expect.objectContaining({ sourceVersion: 1 }),
+        }),
+      ]),
+    );
   });
 
   it("inactive product rollback không trừ kho và không ghi ProductUpdated", async () => {

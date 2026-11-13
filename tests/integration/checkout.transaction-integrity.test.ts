@@ -187,6 +187,20 @@ describe("Checkout transaction integrity (isolated PostgreSQL)", () => {
 
   it("rolls back order and stock when outbox persistence conflicts", async () => {
     const { user, product, cart } = await seededCart();
+    const secondProduct = await prisma.product.create({
+      data: {
+        name: "Second Integrity Product",
+        description: "Transaction integrity fixture",
+        slug: `integrity-second-${randomUUID()}`,
+        category: "test",
+        price: 1000,
+        stock: 7,
+        images: [],
+      },
+    });
+    await prisma.cartItem.create({
+      data: { cartId: cart.id, productId: secondProduct.id, quantity: 2 },
+    });
     const unitOfWork = new PrismaCheckoutUnitOfWork(
       async (tx, events, sourceVersions) => {
         if (events.some((event) => event.eventName === "ProductUpdated")) {
@@ -201,16 +215,23 @@ describe("Checkout transaction integrity (isolated PostgreSQL)", () => {
       service.checkout(user.id, checkoutInput()),
     ).rejects.toBeInstanceOf(ConflictError);
 
-    const [storedProduct, orders, events, cartItems] = await Promise.all([
-      prisma.product.findUniqueOrThrow({ where: { id: product.id } }),
-      prisma.order.count({ where: { userId: user.id } }),
-      prisma.outboxEvent.count({ where: { aggregateId: product.id } }),
-      prisma.cartItem.count({ where: { cartId: cart.id } }),
-    ]);
+    const [storedProduct, storedSecondProduct, orders, events, cartItems] =
+      await Promise.all([
+        prisma.product.findUniqueOrThrow({ where: { id: product.id } }),
+        prisma.product.findUniqueOrThrow({ where: { id: secondProduct.id } }),
+        prisma.order.count({ where: { userId: user.id } }),
+        prisma.outboxEvent.count({
+          where: {
+            aggregateId: { in: [product.id, secondProduct.id] },
+          },
+        }),
+        prisma.cartItem.count({ where: { cartId: cart.id } }),
+      ]);
     expect(storedProduct).toMatchObject({ stock: 5, version: 0 });
+    expect(storedSecondProduct).toMatchObject({ stock: 7, version: 0 });
     expect(orders).toBe(0);
     expect(events).toBe(0);
-    expect(cartItems).toBe(1);
+    expect(cartItems).toBe(2);
   }, 30_000);
 
   it("does not duplicate effects when the same key is retried after a transaction conflict", async () => {

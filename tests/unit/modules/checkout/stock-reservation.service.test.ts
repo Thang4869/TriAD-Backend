@@ -57,7 +57,7 @@ function createTransaction(
 
     decrementProductStock: vi.fn().mockResolvedValue(true),
 
-    persistProductEvent: vi.fn().mockResolvedValue(undefined),
+    persistProductEvents: vi.fn().mockResolvedValue(undefined),
 
     ...overrides,
   } as unknown as CheckoutTransaction;
@@ -79,6 +79,7 @@ describe("StockReservationService.reserveStock", () => {
     );
 
     expect(tx.lockProductsForUpdate).not.toHaveBeenCalled();
+    expect(tx.persistProductEvents).not.toHaveBeenCalled();
   });
 
   it("khoá đúng danh sách productId trước khi trừ kho", async () => {
@@ -128,12 +129,14 @@ describe("StockReservationService.reserveStock", () => {
 
     expect(tx.decrementProductStock).toHaveBeenCalledWith("prod-1", 7, 3);
 
-    expect(tx.persistProductEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventName: "ProductUpdated",
-        aggregateId: "prod-1",
-      }),
-      8,
+    expect(tx.persistProductEvents).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          eventName: "ProductUpdated",
+          aggregateId: "prod-1",
+        }),
+      ],
+      new Map([["prod-1", 8]]),
     );
   });
 
@@ -154,6 +157,7 @@ describe("StockReservationService.reserveStock", () => {
     ).rejects.toThrow("Product prod-1 not found");
 
     expect(tx.decrementProductStock).not.toHaveBeenCalled();
+    expect(tx.persistProductEvents).not.toHaveBeenCalled();
   });
 
   it("thiếu hàng → BadRequest kèm tên sản phẩm và số lượng còn lại", async () => {
@@ -177,6 +181,7 @@ describe("StockReservationService.reserveStock", () => {
     ).rejects.toThrow("Not enough stock for Áo thun. Available: 2");
 
     expect(tx.decrementProductStock).not.toHaveBeenCalled();
+    expect(tx.persistProductEvents).not.toHaveBeenCalled();
   });
 
   it.each([0, -1, 1.5])(
@@ -272,6 +277,7 @@ describe("StockReservationService.reserveStock", () => {
         },
       ]),
     ).resolves.toEqual([product]);
+    expect(tx.persistProductEvents).toHaveBeenCalledTimes(1);
   });
 
   it("version đã bị thay đổi bởi giao dịch khác → ConflictError yêu cầu retry", async () => {
@@ -289,6 +295,33 @@ describe("StockReservationService.reserveStock", () => {
         },
       ]),
     ).rejects.toThrow("Stock conflict for product prod-1. Please retry.");
+    expect(tx.persistProductEvents).not.toHaveBeenCalled();
+  });
+
+  it("không ghi batch nếu một item trừ kho thất bại sau item trước đó", async () => {
+    tx = createTransaction({
+      lockProductsForUpdate: vi
+        .fn()
+        .mockResolvedValue([
+          lockedProduct({ id: "prod-1" }),
+          lockedProduct({ id: "prod-2", name: "Quần" }),
+        ]),
+      decrementProductStock: vi
+        .fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false),
+    });
+
+    const service = createService();
+
+    await expect(
+      service.reserveStock(tx, [
+        { productId: "prod-1", quantity: 1 },
+        { productId: "prod-2", quantity: 1 },
+      ]),
+    ).rejects.toThrow("Stock conflict for product prod-2. Please retry.");
+
+    expect(tx.persistProductEvents).not.toHaveBeenCalled();
   });
 
   it("trừ kho cho từng item trong giỏ nhiều sản phẩm", async () => {
@@ -319,7 +352,23 @@ describe("StockReservationService.reserveStock", () => {
 
     expect(tx.decrementProductStock).toHaveBeenCalledTimes(2);
 
-    expect(tx.persistProductEvent).toHaveBeenCalledTimes(2);
+    expect(tx.persistProductEvents).toHaveBeenCalledTimes(1);
+    expect(tx.persistProductEvents).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          eventName: "ProductUpdated",
+          aggregateId: "prod-1",
+        }),
+        expect.objectContaining({
+          eventName: "ProductUpdated",
+          aggregateId: "prod-2",
+        }),
+      ],
+      new Map([
+        ["prod-1", 2],
+        ["prod-2", 2],
+      ]),
+    );
   });
 
   it("ghi nhận metric thành công, span attributes và thời gian từng stage", async () => {

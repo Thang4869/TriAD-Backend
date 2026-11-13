@@ -16,7 +16,10 @@ export interface CheckoutTransaction {
     quantity: number,
   ): Promise<boolean>;
 
-  persistProductEvent(event: DomainEvent, sourceVersion: number): Promise<void>;
+  persistProductEvents(
+    events: DomainEvent[],
+    sourceVersions: ReadonlyMap<string, number>,
+  ): Promise<void>;
 
   findDiscountByCode(code: string): Promise<DiscountRecord | null>;
 

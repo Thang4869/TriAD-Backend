@@ -16,7 +16,9 @@ describe("RedisTokenStore", () => {
 
   it("reads a token by key", async () => {
     vi.mocked(redis.get).mockResolvedValue("token-value");
-    await expect(new RedisTokenStore().get("token:key")).resolves.toBe("token-value");
+    await expect(new RedisTokenStore().get("token:key")).resolves.toBe(
+      "token-value",
+    );
     expect(redis.get).toHaveBeenCalledWith("token:key");
   });
 
@@ -34,20 +36,37 @@ describe("RedisTokenStore", () => {
 
   it("atomically returns and deletes an existing token", async () => {
     vi.mocked(redis.eval).mockResolvedValue("consumed");
-    await expect(new RedisTokenStore().getAndDelete("token:key")).resolves.toBe("consumed");
-    expect(redis.eval).toHaveBeenCalledWith(expect.stringContaining("redis.call('get'"), 1, "token:key");
+    await expect(new RedisTokenStore().getAndDelete("token:key")).resolves.toBe(
+      "consumed",
+    );
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('get'"),
+      1,
+      "token:key",
+    );
   });
 
   it("returns null when the atomic consume script returns false or a non-string", async () => {
     vi.mocked(redis.eval).mockResolvedValue(0);
-    await expect(new RedisTokenStore().getAndDelete("missing")).resolves.toBeNull();
+    await expect(
+      new RedisTokenStore().getAndDelete("missing"),
+    ).resolves.toBeNull();
   });
 
   it("returns true only when Redis accepts an NX write", async () => {
     const store = new RedisTokenStore();
-    vi.mocked(redis.set).mockResolvedValueOnce("OK").mockResolvedValueOnce(null);
+    vi.mocked(redis.set)
+      .mockResolvedValueOnce("OK")
+      .mockResolvedValueOnce(null);
     await expect(store.setIfAbsent("key", "value", 30)).resolves.toBe(true);
     await expect(store.setIfAbsent("key", "value", 30)).resolves.toBe(false);
-    expect(redis.set).toHaveBeenNthCalledWith(1, "key", "value", "EX", 30, "NX");
+    expect(redis.set).toHaveBeenNthCalledWith(
+      1,
+      "key",
+      "value",
+      "EX",
+      30,
+      "NX",
+    );
   });
 });

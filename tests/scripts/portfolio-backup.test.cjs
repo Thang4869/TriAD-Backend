@@ -333,3 +333,30 @@ test("retention preserves every archive when the newest same-day restore fails",
     fs.rmSync(temporary, { recursive: true, force: true });
   }
 });
+
+
+test("retention reports archive-named directories as protected non-regular entries", async () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "triad-retention-non-regular-"));
+  const directory = path.join(temporary, "archives");
+  const name = "triad-portfolio-20261113T020000000Z-00000010.dump.enc";
+  const archivePath = path.join(directory, name);
+
+  fs.mkdirSync(directory);
+  fs.mkdirSync(archivePath);
+  fs.writeFileSync(archivePath + ".verified.json", "{}");
+
+  try {
+    const inspected = await inspectRetention(directory);
+
+    assert.equal(inspected.candidates.length, 0);
+    assert.deepEqual(inspected.protectedFiles, [name]);
+    assert.deepEqual(inspected.protectedReasons, [
+      {
+        archive: name,
+        reason: "archive-or-receipt-not-regular-file",
+      },
+    ]);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});

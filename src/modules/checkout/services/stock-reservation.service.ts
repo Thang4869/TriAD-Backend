@@ -114,6 +114,9 @@ export class StockReservationService {
       }
     }
 
+    const productEvents = [];
+    const sourceVersions = new Map<string, number>();
+
     for (const item of cartItems) {
       const product = productMap.get(item.productId)!;
 
@@ -139,10 +142,12 @@ export class StockReservationService {
         );
       }
 
-      await tx.persistProductEvent(
-        new ProductUpdatedEvent(item.productId),
-        product.version + 1,
-      );
+      productEvents.push(new ProductUpdatedEvent(item.productId));
+      sourceVersions.set(item.productId, product.version + 1);
+    }
+
+    if (productEvents.length > 0) {
+      await tx.persistProductEvents(productEvents, sourceVersions);
     }
 
     return lockedProducts;

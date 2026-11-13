@@ -62,7 +62,10 @@ function createLogger(env = process.env, id = executionId()) {
       stage,
       message: redact(message),
     };
-    if (details) record.details = redact(typeof details === "string" ? details : JSON.stringify(details));
+    if (details)
+      record.details = redact(
+        typeof details === "string" ? details : JSON.stringify(details),
+      );
     stream.write(JSON.stringify(record) + "\n");
   };
   const close = () =>
@@ -168,7 +171,7 @@ function buildEvidence({
     mode === "backup"
       ? verifiedAt
       : previousSourceIsValid
-        ? (previousEvidence.sourceBackupAt || previousEvidence.verifiedAt || null)
+        ? previousEvidence.sourceBackupAt || previousEvidence.verifiedAt || null
         : null;
 
   return {
@@ -457,11 +460,9 @@ async function run(mode, env = process.env, options = {}) {
       archiveBytes: fs.statSync(encrypted).size,
     });
     if (options.writeReceipt !== false) {
-      fs.writeFileSync(
-        receiptPath,
-        JSON.stringify(evidence, null, 2),
-        { mode: 0o600 },
-      );
+      fs.writeFileSync(receiptPath, JSON.stringify(evidence, null, 2), {
+        mode: 0o600,
+      });
     }
     console.log(
       "PASS: encrypted archive restored into a disposable PostgreSQL 18 container",

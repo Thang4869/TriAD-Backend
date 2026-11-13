@@ -13,66 +13,66 @@ These results describe this local environment only. They are not production capa
 
 ## 2. Environment
 
-| Component | Configuration |
-|---|---|
-| Repository | TriAD Backend |
-| Git branch | main |
-| Benchmark date | 2026-11-11 |
-| Node.js | v24.14.0 |
-| k6 | v2.3.0 |
-| Docker Desktop | 4.87.0 |
-| Docker Engine | 29.7.2 |
-| PostgreSQL | `triad-perf-postgres`, host port 5544 |
-| Redis | `triad-perf-redis`, host port 6381 |
-| API | `http://127.0.0.1:5001` |
-| Database | `triad_perf` |
-| Benchmark run ID | `local-20261111` |
-| Virtual users | 5 |
-| Duration per workload | 2 minutes |
+| Component             | Configuration                         |
+| --------------------- | ------------------------------------- |
+| Repository            | TriAD Backend                         |
+| Git branch            | main                                  |
+| Benchmark date        | 2026-11-11                            |
+| Node.js               | v24.14.0                              |
+| k6                    | v2.3.0                                |
+| Docker Desktop        | 4.87.0                                |
+| Docker Engine         | 29.7.2                                |
+| PostgreSQL            | `triad-perf-postgres`, host port 5544 |
+| Redis                 | `triad-perf-redis`, host port 6381    |
+| API                   | `http://127.0.0.1:5001`               |
+| Database              | `triad_perf`                          |
+| Benchmark run ID      | `local-20261111`                      |
+| Virtual users         | 5                                     |
+| Duration per workload | 2 minutes                             |
 
 The API reported a Prisma connection pool of 13 connections.
 
 Container resource snapshots after the benchmark:
 
-| Container | CPU | Memory |
-|---|---:|---:|
+| Container  |    CPU |    Memory |
+| ---------- | -----: | --------: |
 | PostgreSQL | 41.99% | 168.9 MiB |
-| Redis | 1.13% | 80.11 MiB |
+| Redis      |  1.13% | 80.11 MiB |
 
 These are point-in-time Docker statistics, not averages over the benchmark duration.
 
 ## 3. Acceptance thresholds
 
-| Metric | Threshold |
-|---|---:|
-| Checkout p95 | < 1,500 ms |
-| Checkout p99 | < 3,000 ms |
-| Checkout failure rate | < 1% |
+| Metric                |  Threshold |
+| --------------------- | ---------: |
+| Checkout p95          | < 1,500 ms |
+| Checkout p99          | < 3,000 ms |
+| Checkout failure rate |       < 1% |
 
 The thresholds were kept unchanged for both workloads.
 
 ## 4. Baseline results
 
-| Metric | Result |
-|---|---:|
-| Virtual users | 5 |
-| Duration | 2 minutes |
-| Completed iterations | 3,371 |
-| Successful checkouts | 3,348 |
-| Failed checkouts | 23 |
-| Checkout success rate | 99.32% |
-| Checkout failure rate | 0.68% |
-| Successful checkouts/sec | 27.19 |
-| Checkout duration average | 151.04 ms |
-| Checkout duration median (p50) | 53.76 ms |
-| Checkout duration p90 | 197.34 ms |
-| Checkout duration p95 | 483.66 ms |
-| Checkout duration p99 | 3,430 ms |
-| Checkout duration maximum | 3,740 ms |
-| Final HTTP 409 conflicts | 23 |
-| Transaction conflicts | 841 |
-| Transaction retries | 818 |
-| Cart-add failures | 0 |
+| Metric                         |    Result |
+| ------------------------------ | --------: |
+| Virtual users                  |         5 |
+| Duration                       | 2 minutes |
+| Completed iterations           |     3,371 |
+| Successful checkouts           |     3,348 |
+| Failed checkouts               |        23 |
+| Checkout success rate          |    99.32% |
+| Checkout failure rate          |     0.68% |
+| Successful checkouts/sec       |     27.19 |
+| Checkout duration average      | 151.04 ms |
+| Checkout duration median (p50) |  53.76 ms |
+| Checkout duration p90          | 197.34 ms |
+| Checkout duration p95          | 483.66 ms |
+| Checkout duration p99          |  3,430 ms |
+| Checkout duration maximum      |  3,740 ms |
+| Final HTTP 409 conflicts       |        23 |
+| Transaction conflicts          |       841 |
+| Transaction retries            |       818 |
+| Cart-add failures              |         0 |
 
 Threshold evaluation:
 
@@ -84,26 +84,26 @@ Threshold evaluation:
 
 ## 5. Hot-product contention results
 
-| Metric | Result |
-|---|---:|
-| Virtual users | 5 |
-| Duration | 2 minutes |
-| Completed iterations | 6,384 |
-| Successful checkouts | 6,357 |
-| Failed checkouts | 27 |
-| Checkout success rate | 99.58% |
-| Checkout failure rate | 0.42% |
-| Successful checkouts/sec | 51.54 |
-| Checkout duration average | 64.66 ms |
-| Checkout duration median (p50) | 25.13 ms |
-| Checkout duration p90 | 61.88 ms |
-| Checkout duration p95 | 71.52 ms |
-| Checkout duration p99 | 903.24 ms |
-| Checkout duration maximum | 3,640 ms |
-| Final HTTP 409 conflicts | 27 |
-| Transaction conflicts | 430 |
-| Transaction retries | 403 |
-| Cart-add failures | 0 |
+| Metric                         |    Result |
+| ------------------------------ | --------: |
+| Virtual users                  |         5 |
+| Duration                       | 2 minutes |
+| Completed iterations           |     6,384 |
+| Successful checkouts           |     6,357 |
+| Failed checkouts               |        27 |
+| Checkout success rate          |    99.58% |
+| Checkout failure rate          |     0.42% |
+| Successful checkouts/sec       |     51.54 |
+| Checkout duration average      |  64.66 ms |
+| Checkout duration median (p50) |  25.13 ms |
+| Checkout duration p90          |  61.88 ms |
+| Checkout duration p95          |  71.52 ms |
+| Checkout duration p99          | 903.24 ms |
+| Checkout duration maximum      |  3,640 ms |
+| Final HTTP 409 conflicts       |        27 |
+| Transaction conflicts          |       430 |
+| Transaction retries            |       403 |
+| Cart-add failures              |         0 |
 
 Threshold evaluation:
 
@@ -115,17 +115,17 @@ Threshold evaluation:
 
 ## 6. Comparison
 
-| Metric | Baseline | Hot-product |
-|---|---:|---:|
-| Completed iterations | 3,371 | 6,384 |
-| Successful checkouts/sec | 27.19 | 51.54 |
-| Checkout failure rate | 0.68% | 0.42% |
-| p50 | 53.76 ms | 25.13 ms |
-| p95 | 483.66 ms | 71.52 ms |
-| p99 | 3,430 ms | 903.24 ms |
-| Transaction conflicts | 841 | 430 |
-| Transaction retries | 818 | 403 |
-| Final HTTP 409 | 23 | 27 |
+| Metric                   |  Baseline | Hot-product |
+| ------------------------ | --------: | ----------: |
+| Completed iterations     |     3,371 |       6,384 |
+| Successful checkouts/sec |     27.19 |       51.54 |
+| Checkout failure rate    |     0.68% |       0.42% |
+| p50                      |  53.76 ms |    25.13 ms |
+| p95                      | 483.66 ms |    71.52 ms |
+| p99                      |  3,430 ms |   903.24 ms |
+| Transaction conflicts    |       841 |         430 |
+| Transaction retries      |       818 |         403 |
+| Final HTTP 409           |        23 |          27 |
 
 The two workloads exercise different checkout patterns. Their results should not be interpreted as a controlled before-and-after comparison or proof that one workload is inherently faster.
 
@@ -183,15 +183,15 @@ No production load test was performed.
 
 The isolation fix was verified locally on 2026-11-12 against commit `df45cb9637418ca9f3e82c19cfaec28ff9418a44`. The benchmark used the existing dedicated local containers without recreating or deleting them:
 
-| Component | Configuration |
-|---|---|
-| k6 | v2.3.0 |
-| Node.js | v24.14.0 |
-| API | local compiled server on `http://127.0.0.1:5001` |
-| PostgreSQL | `triad-perf-postgres`, `postgres:16-alpine`, host port 5544 |
-| Redis | `triad-perf-redis`, `redis:7-alpine`, host port 6381, database 0 |
-| Database | `triad_perf` |
-| PostgreSQL/Redis state | Dedicated benchmark containers; no data or keys were deleted |
+| Component              | Configuration                                                    |
+| ---------------------- | ---------------------------------------------------------------- |
+| k6                     | v2.3.0                                                           |
+| Node.js                | v24.14.0                                                         |
+| API                    | local compiled server on `http://127.0.0.1:5001`                 |
+| PostgreSQL             | `triad-perf-postgres`, `postgres:16-alpine`, host port 5544      |
+| Redis                  | `triad-perf-redis`, `redis:7-alpine`, host port 6381, database 0 |
+| Database               | `triad_perf`                                                     |
+| PostgreSQL/Redis state | Dedicated benchmark containers; no data or keys were deleted     |
 
 The API readiness endpoint and metrics endpoint both returned HTTP 200. The API startup log confirmed the benchmark database URL, Redis URL and port 5001. The fixture seeder created additive, run-specific users and products using the existing `TRIAD_PERF_*` safety checks.
 
@@ -252,3 +252,34 @@ Raw post-fix artifacts were retained outside Git:
 - `%TEMP%\triad-checkout-contention-postfix-20261112.json`
 - `%TEMP%\triad-checkout-baseline-postfix-20261112.log`
 - `%TEMP%\triad-checkout-contention-postfix-20261112.log`
+
+## 12. Checkout concurrency/retry fix verification — 2026-11-14
+
+The residual 409s were caused by `SERIALIZABLE` transaction aborts under
+contention, not by exhausted inventory. Checkout already locks product rows
+with `FOR UPDATE`, checks the product version on the stock update, and applies
+discount usage conditionally. The checkout unit of work now defaults to
+`READ COMMITTED`, retaining those explicit row/conditional-write invariants
+while avoiding avoidable serialization aborts. Serializable mode remains
+available to the contention regression test, and genuinely reported database
+conflicts remain bounded and retryable.
+
+The verification used the existing dedicated `triad-perf-postgres` and
+`triad-perf-redis` containers, an isolated API on port 5001, additive
+run-specific fixtures, 10 VUs and 2 minutes per workload. The benchmark email
+worker was disabled. No containers, queues, rows or Redis keys were deleted.
+
+| Workload               | Iterations | Failures | Failure rate |       p95 |       p99 | Conflicts | Retries |
+| ---------------------- | ---------: | -------: | -----------: | --------: | --------: | --------: | ------: |
+| Baseline               |      6,943 |        0 |        0.00% | 186.50 ms | 281.03 ms |         0 |       0 |
+| Hot-product contention |      3,796 |        0 |        0.00% | 467.09 ms | 651.57 ms |         0 |       0 |
+
+Both workloads passed their configured latency and failure-rate thresholds.
+The benchmark acceptance target of a failure rate below 1% was met, with no
+observed transaction retries or final HTTP 409 responses. The raw k6 JSON
+outputs remain outside Git:
+
+- `%TEMP%\triad-reliability-baseline-20261114.json`
+- `%TEMP%\triad-reliability-contention-20261114.json`
+
+This is a local verification result, not a production capacity claim.

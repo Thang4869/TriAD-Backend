@@ -42,12 +42,26 @@ export class PrometheusMetricsAdapter implements MetricsPort {
         return;
 
       case "checkout.transaction.conflict":
-        checkoutTransactionConflicts.inc();
-        return;
+      case "checkout.transaction.retry": {
+        const category = labels?.category;
 
-      case "checkout.transaction.retry":
-        checkoutTransactionRetries.inc();
+        if (
+          category !== "transaction_conflict" &&
+          category !== "product_stock_conflict"
+        ) {
+          throw new Error(
+            `Metric "${metric}" requires a valid conflict category`,
+          );
+        }
+
+        const counter =
+          metric === "checkout.transaction.conflict"
+            ? checkoutTransactionConflicts
+            : checkoutTransactionRetries;
+
+        counter.inc({ category });
         return;
+      }
 
       case "saga.compensation": {
         const saga = labels?.saga;

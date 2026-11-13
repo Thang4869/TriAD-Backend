@@ -15,6 +15,7 @@ import {
   ValidationError,
   ResourceNotFoundError,
   ConflictError,
+  RetryableConflictError,
 } from "@shared/errors/application-error";
 import { IdempotencyConflictError } from "@modules/checkout/application/errors/idempotency-conflict.error";
 import type { MetricsPort } from "@shared/application/observability/metrics.port";
@@ -677,7 +678,10 @@ describe("CheckoutService", () => {
             callCount++;
 
             if (callCount === 1) {
-              throw new ConflictError("stock conflict");
+              throw new RetryableConflictError(
+                "Stock conflict",
+                "product_stock_conflict",
+              );
             }
 
             return fn(transaction);
@@ -692,9 +696,11 @@ describe("CheckoutService", () => {
       expect(callCount).toBe(2);
       expect(metrics.increment).toHaveBeenCalledWith(
         "checkout.transaction.conflict",
+        { category: "product_stock_conflict" },
       );
       expect(metrics.increment).toHaveBeenCalledWith(
         "checkout.transaction.retry",
+        { category: "product_stock_conflict" },
       );
       expect(metrics.observe).toHaveBeenCalledWith(
         "checkout.transaction.duration",
@@ -742,11 +748,17 @@ describe("CheckoutService", () => {
 
     it.each([
       [
-        new ConflictError("Stock conflict for product prod-1"),
+        new RetryableConflictError(
+          "Stock conflict for product prod-1",
+          "product_stock_conflict",
+        ),
         "product_stock_conflict",
       ],
       [
-        new ConflictError("Transaction conflict. Please retry."),
+        new RetryableConflictError(
+          "Transaction conflict. Please retry.",
+          "transaction_conflict",
+        ),
         "transaction_conflict",
       ],
       [new IdempotencyConflictError(), "idempotency_conflict"],
@@ -1019,7 +1031,10 @@ describe("CheckoutService", () => {
     it("throws ConflictError when decrementProductStock fails due to version mismatch", async () => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
 
-      const conflictError = new ConflictError("Stock conflict");
+      const conflictError = new RetryableConflictError(
+        "Stock conflict",
+        "product_stock_conflict",
+      );
 
       mockStockService.reserveStock = vi.fn().mockRejectedValue(conflictError);
 
@@ -1048,7 +1063,10 @@ describe("CheckoutService", () => {
       unitOfWork.run = vi.fn().mockImplementation(async () => {
         callCount++;
 
-        throw new ConflictError("stock conflict");
+        throw new RetryableConflictError(
+          "Stock conflict",
+          "product_stock_conflict",
+        );
       });
 
       const promise = service.checkout("user-1", baseInput);
@@ -1062,6 +1080,7 @@ describe("CheckoutService", () => {
       expect(metrics.increment).toHaveBeenCalledTimes(11);
       expect(metrics.increment).toHaveBeenLastCalledWith(
         "checkout.transaction.conflict",
+        { category: "product_stock_conflict" },
       );
     });
 
@@ -1089,6 +1108,16 @@ describe("CheckoutService", () => {
       await assertion;
 
       expect(transaction.incrementDiscountUsage).toHaveBeenCalled();
+      expect(transaction.incrementDiscountUsage).toHaveBeenCalledTimes(1);
+      expect(unitOfWork.run).toHaveBeenCalledTimes(1);
+      expect(metrics.increment).not.toHaveBeenCalledWith(
+        "checkout.transaction.retry",
+        { category: "product_stock_conflict" },
+      );
+      expect(metrics.increment).not.toHaveBeenCalledWith(
+        "checkout.transaction.retry",
+        { category: "transaction_conflict" },
+      );
     });
 
     it("retries transaction conflict with exponential backoff and jitter", async () => {
@@ -1100,7 +1129,12 @@ describe("CheckoutService", () => {
 
       unitOfWork.run = vi
         .fn()
-        .mockRejectedValueOnce(new ConflictError("Transaction conflict"))
+        .mockRejectedValueOnce(
+          new RetryableConflictError(
+            "Transaction conflict",
+            "transaction_conflict",
+          ),
+        )
         .mockImplementationOnce(
           async (fn: (tx: CheckoutTransaction) => Promise<unknown>) =>
             fn(transaction),
@@ -1117,6 +1151,14 @@ describe("CheckoutService", () => {
       await promise;
 
       expect(unitOfWork.run).toHaveBeenCalledTimes(2);
+      expect(metrics.increment).toHaveBeenCalledWith(
+        "checkout.transaction.conflict",
+        { category: "transaction_conflict" },
+      );
+      expect(metrics.increment).toHaveBeenCalledWith(
+        "checkout.transaction.retry",
+        { category: "transaction_conflict" },
+      );
 
       expect(randomSpy).toHaveBeenCalledTimes(1);
 

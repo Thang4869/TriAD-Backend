@@ -9,6 +9,10 @@ const configSchema = z
       .enum(["development", "test", "production"])
       .default("development"),
     PORT: z.string().default("5000").transform(Number),
+    DISABLE_EMAIL_WORKER: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     API_URL: z.string().url().optional(),
 
     DATABASE_URL: z.string().url().min(1, "DATABASE_URL is required"),

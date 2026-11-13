@@ -13,14 +13,17 @@ const NOOP_LOGGER = { write() {} };
 
 function localDateKey(value) {
   const date = value instanceof Date ? value : new Date(value);
-  if (!Number.isFinite(date.getTime())) throw new Error("Invalid backup timestamp");
+  if (!Number.isFinite(date.getTime()))
+    throw new Error("Invalid backup timestamp");
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-  const fields = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const fields = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
   return fields.year + "-" + fields.month + "-" + fields.day;
 }
 
@@ -117,7 +120,10 @@ async function inspectCandidate(directory, name) {
     return { candidate: null, reason: "receipt-archive-bytes-invalid" };
   if (!/^[a-f0-9]{64}$/.test(receipt.sha256 || ""))
     return { candidate: null, reason: "receipt-sha256-invalid" };
-  if (typeof receipt.sourceBackupAt !== "string" || typeof receipt.verifiedAt !== "string")
+  if (
+    typeof receipt.sourceBackupAt !== "string" ||
+    typeof receipt.verifiedAt !== "string"
+  )
     return { candidate: null, reason: "receipt-timestamp-missing" };
 
   const sourceBackupAt = Date.parse(receipt.sourceBackupAt);
@@ -197,20 +203,22 @@ function buildRetentionPlan(candidates) {
       };
     })
     .filter((group) => group.older.length > 0)
-    .sort((a, b) => a.day.localeCompare(b.day) || a.source.localeCompare(b.source));
+    .sort(
+      (a, b) => a.day.localeCompare(b.day) || a.source.localeCompare(b.source),
+    );
 }
 
 function sameCandidate(a, b) {
   return Boolean(
     a &&
-      b &&
-      a.archivePath === b.archivePath &&
-      a.source === b.source &&
-      a.day === b.day &&
-      a.sourceBackupAt === b.sourceBackupAt &&
-      a.sha256 === b.sha256 &&
-      a.archiveBytes === b.archiveBytes &&
-      a.verifiedAt === b.verifiedAt,
+    b &&
+    a.archivePath === b.archivePath &&
+    a.source === b.source &&
+    a.day === b.day &&
+    a.sourceBackupAt === b.sourceBackupAt &&
+    a.sha256 === b.sha256 &&
+    a.archiveBytes === b.archiveBytes &&
+    a.verifiedAt === b.verifiedAt,
   );
 }
 
@@ -256,8 +264,12 @@ async function runRetention({
       { writeReceipt: false },
     ),
 }) {
-  if (typeof dryRun !== "boolean") throw new Error("Retention mode must be explicit");
-  const backupDirectory = existingOutsideRepository(directory, "Backup directory");
+  if (typeof dryRun !== "boolean")
+    throw new Error("Retention mode must be explicit");
+  const backupDirectory = existingOutsideRepository(
+    directory,
+    "Backup directory",
+  );
   const recoveryKey = existingOutsideRepository(keyFile, "Recovery key");
   const keyStat = fs.lstatSync(recoveryKey);
   if (!keyStat.isFile() || keyStat.isSymbolicLink()) {
@@ -305,9 +317,10 @@ async function runRetention({
           keyFile: recoveryKey,
           candidate: group.keeper,
         });
-        const evidence = verification && verification.evidence
-          ? verification.evidence
-          : verification;
+        const evidence =
+          verification && verification.evidence
+            ? verification.evidence
+            : verification;
         if (
           !evidence ||
           evidence.result !== "PASS" ||
@@ -321,7 +334,9 @@ async function runRetention({
           Date.parse(evidence.verifiedAt) < group.keeper.sourceBackupAt ||
           localDateKey(evidence.sourceBackupAt) !== group.day
         )
-          throw new Error("Newest same-day archive failed retention evidence checks");
+          throw new Error(
+            "Newest same-day archive failed retention evidence checks",
+          );
 
         logger.write("INFO", "retention", "Newest same-day restore passed", {
           source: group.source,
@@ -334,7 +349,9 @@ async function runRetention({
           group.keeper.name,
         );
         if (!sameCandidate(currentKeeper, group.keeper)) {
-          throw new Error("Newest archive changed during retention verification");
+          throw new Error(
+            "Newest archive changed during retention verification",
+          );
         }
 
         for (const older of group.older) {
@@ -358,10 +375,20 @@ async function runRetention({
 
           if (dryRun) {
             planned.push(item);
-            logger.write("INFO", "retention", "Dry-run would remove older same-day archive", item);
+            logger.write(
+              "INFO",
+              "retention",
+              "Dry-run would remove older same-day archive",
+              item,
+            );
             continue;
           }
-          logger.write("WARN", "retention", "Removing older verified same-day archive", item);
+          logger.write(
+            "WARN",
+            "retention",
+            "Removing older verified same-day archive",
+            item,
+          );
 
           // Remove the receipt first: interruption can leave an archive behind,
           // but can never leave a PASS receipt for an archive already removed.
@@ -369,16 +396,27 @@ async function runRetention({
           try {
             fs.unlinkSync(current.archivePath);
             deleted.push(item);
-            logger.write("INFO", "retention", "Removed older archive and receipt", item);
+            logger.write(
+              "INFO",
+              "retention",
+              "Removed older archive and receipt",
+              item,
+            );
           } catch (error) {
             failures.push({
               archive: current.name,
-              reason: "Receipt removed but archive deletion failed: " + error.message,
+              reason:
+                "Receipt removed but archive deletion failed: " + error.message,
             });
-            logger.write("ERROR", "retention", "Receipt removed but archive deletion failed", {
-              archive: current.name,
-              error: error.message,
-            });
+            logger.write(
+              "ERROR",
+              "retention",
+              "Receipt removed but archive deletion failed",
+              {
+                archive: current.name,
+                error: error.message,
+              },
+            );
           }
         }
       } catch (error) {
@@ -386,12 +424,17 @@ async function runRetention({
           archive: group.keeper.name,
           reason: error && error.message ? error.message : String(error),
         });
-        logger.write("ERROR", "retention", "Same-day retention group preserved", {
-          archive: group.keeper.name,
-          source: group.source,
-          day: group.day,
-          error: error && error.message ? error.message : String(error),
-        });
+        logger.write(
+          "ERROR",
+          "retention",
+          "Same-day retention group preserved",
+          {
+            archive: group.keeper.name,
+            source: group.source,
+            day: group.day,
+            error: error && error.message ? error.message : String(error),
+          },
+        );
       }
     }
   } finally {
@@ -435,7 +478,12 @@ async function main() {
       logger,
     });
   } catch (error) {
-    logger.write("ERROR", "retention", "Retention execution failed", error.message);
+    logger.write(
+      "ERROR",
+      "retention",
+      "Retention execution failed",
+      error.message,
+    );
     throw error;
   } finally {
     await logger.close();
@@ -458,7 +506,9 @@ async function main() {
   for (const item of result.failures) {
     console.error("PRESERVED " + item.archive + ": " + item.reason);
   }
-  console.log("Protected unverified/unknown archives: " + result.protectedFiles.length);
+  console.log(
+    "Protected unverified/unknown archives: " + result.protectedFiles.length,
+  );
   for (const item of result.protectedReasons) {
     console.log("PROTECTED " + item.archive + ": " + item.reason);
   }

@@ -21,19 +21,59 @@ describe("PrometheusMetricsAdapter", () => {
   });
 
   it.each([
-    ["orders.placed", mocks.ordersPlaced],
-    ["stock.reservation.succeeded", mocks.stockReservationSucceeded],
-    ["stock.reservation.failed", mocks.stockReservationFailed],
-    ["checkout.saga.succeeded", mocks.checkoutSucceeded],
-    ["checkout.saga.failed", mocks.checkoutFailed],
-    ["checkout.transaction.conflict", mocks.checkoutTransactionConflicts],
-    ["checkout.transaction.retry", mocks.checkoutTransactionRetries],
-  ] as const)("increments %s", (metric, counter) => {
+    {
+      metric: "checkout.transaction.conflict",
+      counter: mocks.checkoutTransactionConflicts,
+      category: "transaction_conflict",
+    },
+    {
+      metric: "checkout.transaction.conflict",
+      counter: mocks.checkoutTransactionConflicts,
+      category: "product_stock_conflict",
+    },
+    {
+      metric: "checkout.transaction.retry",
+      counter: mocks.checkoutTransactionRetries,
+      category: "transaction_conflict",
+    },
+    {
+      metric: "checkout.transaction.retry",
+      counter: mocks.checkoutTransactionRetries,
+      category: "product_stock_conflict",
+    },
+  ] as const)(
+    "increments $metric with category $category",
+    ({ metric, counter, category }) => {
+      const adapter = new PrometheusMetricsAdapter();
+
+      adapter.increment(metric, { category });
+
+      expect(counter.inc).toHaveBeenCalledWith({ category });
+    },
+  );
+
+  it.each([
+    ["checkout.transaction.conflict", "invalid"],
+    ["checkout.transaction.conflict", ""],
+    ["checkout.transaction.conflict", undefined],
+    ["checkout.transaction.retry", "invalid"],
+    ["checkout.transaction.retry", ""],
+    ["checkout.transaction.retry", undefined],
+  ] as const)("rejects invalid category for %s: %s", (metric, category) => {
     const adapter = new PrometheusMetricsAdapter();
 
-    adapter.increment(metric);
+    expect(() =>
+      adapter.increment(metric, {
+        ...(category === undefined ? {} : { category }),
+      }),
+    ).toThrow(`Metric "${metric}" requires a valid conflict category`);
 
-    expect(counter.inc).toHaveBeenCalledTimes(1);
+    const counter =
+      metric === "checkout.transaction.conflict"
+        ? mocks.checkoutTransactionConflicts
+        : mocks.checkoutTransactionRetries;
+
+    expect(counter.inc).not.toHaveBeenCalled();
   });
 
   it("increments saga compensation with required labels", () => {

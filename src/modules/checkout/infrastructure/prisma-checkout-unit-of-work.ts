@@ -22,7 +22,7 @@ import type { SavedCheckoutOrder } from "../application/ports/checkout-models";
 import type { Order } from "@modules/orders/domain/order.entity";
 import type { DomainEvent } from "@shared/domain/events/domain-event";
 import { IdempotencyConflictError } from "../application/errors/idempotency-conflict.error";
-import { ConflictError } from "@shared/errors/application-error";
+import { RetryableConflictError } from "@shared/errors/application-error";
 import {
   describePrismaError,
   isPrismaSerializationConflict,
@@ -35,6 +35,7 @@ import {
 } from "@shared/infrastructure/money-number";
 
 const TRANSACTION_TIMEOUT_MS = 10_000;
+const DEFAULT_ISOLATION_LEVEL = Prisma.TransactionIsolationLevel.ReadCommitted;
 
 type PersistEvents = typeof persistEvents;
 
@@ -238,6 +239,7 @@ export class PrismaCheckoutUnitOfWork implements CheckoutUnitOfWork {
   constructor(
     private readonly persistTypedEvents: PersistEvents = persistEvents,
     private readonly metrics?: MetricsPort,
+    private readonly isolationLevel: Prisma.TransactionIsolationLevel = DEFAULT_ISOLATION_LEVEL,
   ) {}
 
   async run<T>(
@@ -255,7 +257,7 @@ export class PrismaCheckoutUnitOfWork implements CheckoutUnitOfWork {
             ),
           ),
         {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          isolationLevel: this.isolationLevel,
           timeout: TRANSACTION_TIMEOUT_MS,
         },
       );
@@ -273,7 +275,10 @@ export class PrismaCheckoutUnitOfWork implements CheckoutUnitOfWork {
         });
       }
       if (isPrismaSerializationConflict(error)) {
-        throw new ConflictError("Transaction conflict. Please retry.");
+        throw new RetryableConflictError(
+          "Transaction conflict. Please retry.",
+          "transaction_conflict",
+        );
       }
 
       throw error;

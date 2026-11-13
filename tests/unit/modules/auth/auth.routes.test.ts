@@ -54,14 +54,22 @@ vi.mock("@modules/auth/strategies/oauth2.strategy", () => ({
 import { authRoutes } from "@modules/auth/auth.routes";
 
 function routeHandler(path: string) {
-  const layer = (authRoutes as unknown as {
-    stack: Array<{
-      route?: {
-        path: string;
-        stack: Array<{ handle: (req: Request, res: Response, next: NextFunction) => unknown }>;
-      };
-    }>;
-  }).stack.find((entry) => entry.route?.path === path);
+  const layer = (
+    authRoutes as unknown as {
+      stack: Array<{
+        route?: {
+          path: string;
+          stack: Array<{
+            handle: (
+              req: Request,
+              res: Response,
+              next: NextFunction,
+            ) => unknown;
+          }>;
+        };
+      }>;
+    }
+  ).stack.find((entry) => entry.route?.path === path);
   if (!layer?.route) throw new Error(`Route not found: ${path}`);
   return layer.route.stack[0].handle;
 }
@@ -80,16 +88,23 @@ describe("authRoutes OAuth start handlers", () => {
   it.each([
     ["/google", "GOOGLE"],
     ["/facebook", "FACEBOOK"],
-  ] as const)("redirects %s when provider credentials are unavailable", async (path, _provider) => {
-    const redirect = vi.fn();
-    await routeHandler(path)({} as Request, { redirect } as unknown as Response, vi.fn());
+  ] as const)(
+    "redirects %s when provider credentials are unavailable",
+    async (path, _provider) => {
+      const redirect = vi.fn();
+      await routeHandler(path)(
+        {} as Request,
+        { redirect } as unknown as Response,
+        vi.fn(),
+      );
 
-    expect(redirect).toHaveBeenCalledWith(
-      "https://frontend.example?error=oauth_unavailable",
-    );
-    expect(mocks.issue).not.toHaveBeenCalled();
-    expect(mocks.authenticate).not.toHaveBeenCalled();
-  });
+      expect(redirect).toHaveBeenCalledWith(
+        "https://frontend.example?error=oauth_unavailable",
+      );
+      expect(mocks.issue).not.toHaveBeenCalled();
+      expect(mocks.authenticate).not.toHaveBeenCalled();
+    },
+  );
 
   it("issues Google state and starts authentication with profile and email scopes", async () => {
     mocks.config.GOOGLE_CLIENT_ID = "google-client";

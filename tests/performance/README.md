@@ -5,7 +5,7 @@ These k6 scenarios are for a **disposable local PostgreSQL/Redis environment**. 
 ## What is measured
 
 - `checkout-baseline.js`: each virtual user (VU) checks out an independent SKU.
-- `hot-product-contention.js`: all VUs check out the same SKU, exercising the product row lock, SERIALIZABLE transaction conflict handling and retry/backoff.
+- `hot-product-contention.js`: all VUs check out the same SKU, exercising the product row lock and bounded transaction conflict handling/retry.
 - k6 reports checkout duration p50/p95/p99, checkout throughput (successful checkouts/second), successful checkouts, HTTP failures and HTTP 409 conflicts.
 - The backend exposes Prometheus counters for transaction conflicts and retries. Each run prints the before/after delta as `CHECKOUT_CONTENTION_METRICS`.
 

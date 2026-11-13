@@ -11,7 +11,10 @@ import type {
   CheckoutTransaction,
   CheckoutUnitOfWork,
 } from "@modules/checkout/application/ports/checkout-transaction";
-import { ConflictError } from "@shared/errors/application-error";
+import {
+  ConflictError,
+  RetryableConflictError,
+} from "@shared/errors/application-error";
 import { Money } from "@shared/value-objects/money";
 import { PricingService } from "@modules/checkout/services/pricing.service";
 import { StockReservationService } from "@modules/checkout/services/stock-reservation.service";
@@ -84,7 +87,10 @@ class ConflictAfterWorkUnitOfWork implements CheckoutUnitOfWork {
     return new PrismaCheckoutUnitOfWork().run(async (tx) => {
       const result = await work(tx);
       if (this.attempts <= this.failures) {
-        throw new ConflictError("Injected transaction conflict");
+        throw new RetryableConflictError(
+          "Injected transaction conflict",
+          "transaction_conflict",
+        );
       }
       return result;
     });

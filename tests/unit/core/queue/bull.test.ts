@@ -138,6 +138,7 @@ describe("Bull queue infrastructure", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it("creates email and image queues with expected options", async () => {
@@ -180,6 +181,24 @@ describe("Bull queue infrastructure", () => {
 
     expect(createdWorkers).toHaveLength(0);
     expect(createdQueueEvents).toHaveLength(0);
+  });
+
+  it("keeps email worker disabled when configured", async () => {
+    vi.stubEnv("DISABLE_EMAIL_WORKER", "true");
+
+    const { startQueueInfrastructure, stopQueueInfrastructure } =
+      await import("@core/queue/bull");
+
+    startQueueInfrastructure(vi.fn());
+
+    expect(createdWorkers.map((worker) => worker.name)).toEqual(["image"]);
+
+    expect(createdQueueEvents.map((event) => event.name)).toEqual([
+      "email",
+      "image",
+    ]);
+
+    await stopQueueInfrastructure();
   });
 
   it("starts email and image workers with expected processors and concurrency", async () => {

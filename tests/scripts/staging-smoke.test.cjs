@@ -179,7 +179,10 @@ test("does not follow redirects to a login page or another deployment", async (t
 
 test("bounds requests to an unresponsive deployment", async (t) => {
   const { origin } = await fixture(t, { "/health/live": () => {} });
-  await assert.rejects(runStagingSmoke(origin, { frontendUrl: origin, timeoutMs: 50 }), /timed out/);
+  await assert.rejects(
+    runStagingSmoke(origin, { frontendUrl: origin, timeoutMs: 50 }),
+    /timed out/,
+  );
 });
 
 test("rejects invalid timeout configuration before making requests", async (t) => {

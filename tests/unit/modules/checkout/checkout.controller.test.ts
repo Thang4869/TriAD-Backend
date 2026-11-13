@@ -27,7 +27,9 @@ describe("CheckoutController", () => {
 
   it("quotes checkout without a discount code and disables caching", async () => {
     const quote = { subtotal: 100, total: 100 };
-    const service = { quote: vi.fn().mockResolvedValue(quote) } as unknown as CheckoutService;
+    const service = {
+      quote: vi.fn().mockResolvedValue(quote),
+    } as unknown as CheckoutService;
     const res = makeResponse();
 
     await new CheckoutController(service).quote(makeRequest(), res, vi.fn());
@@ -38,7 +40,9 @@ describe("CheckoutController", () => {
   });
 
   it("passes a string discount code to the quote service", async () => {
-    const service = { quote: vi.fn().mockResolvedValue({ total: 90 }) } as unknown as CheckoutService;
+    const service = {
+      quote: vi.fn().mockResolvedValue({ total: 90 }),
+    } as unknown as CheckoutService;
 
     await new CheckoutController(service).quote(
       makeRequest({ query: { discountCode: "SAVE10" } }),
@@ -50,7 +54,9 @@ describe("CheckoutController", () => {
   });
 
   it("ignores non-string discountCode query values", async () => {
-    const service = { quote: vi.fn().mockResolvedValue({ total: 100 }) } as unknown as CheckoutService;
+    const service = {
+      quote: vi.fn().mockResolvedValue({ total: 100 }),
+    } as unknown as CheckoutService;
 
     await new CheckoutController(service).quote(
       makeRequest({ query: { discountCode: ["SAVE10"] } }),
@@ -63,7 +69,9 @@ describe("CheckoutController", () => {
 
   it("creates checkout using the authenticated user and request body", async () => {
     const result = { orderId: "order-1" };
-    const service = { checkout: vi.fn().mockResolvedValue(result) } as unknown as CheckoutService;
+    const service = {
+      checkout: vi.fn().mockResolvedValue(result),
+    } as unknown as CheckoutService;
     const res = makeResponse();
 
     await new CheckoutController(service).checkout(
@@ -72,21 +80,31 @@ describe("CheckoutController", () => {
       vi.fn(),
     );
 
-    expect(service.checkout).toHaveBeenCalledWith("user-1", { paymentMethod: "COD" });
+    expect(service.checkout).toHaveBeenCalledWith("user-1", {
+      paymentMethod: "COD",
+    });
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({ success: true, data: result });
   });
 
   it("uses default pagination when page and limit are omitted", async () => {
-    const service = { getOrders: vi.fn().mockResolvedValue({ orders: [] }) } as unknown as CheckoutService;
+    const service = {
+      getOrders: vi.fn().mockResolvedValue({ orders: [] }),
+    } as unknown as CheckoutService;
 
-    await new CheckoutController(service).getOrders(makeRequest(), makeResponse(), vi.fn());
+    await new CheckoutController(service).getOrders(
+      makeRequest(),
+      makeResponse(),
+      vi.fn(),
+    );
 
     expect(service.getOrders).toHaveBeenCalledWith("user-1", 1, 10);
   });
 
   it("converts supplied pagination values to numbers", async () => {
-    const service = { getOrders: vi.fn().mockResolvedValue({ orders: [] }) } as unknown as CheckoutService;
+    const service = {
+      getOrders: vi.fn().mockResolvedValue({ orders: [] }),
+    } as unknown as CheckoutService;
 
     await new CheckoutController(service).getOrders(
       makeRequest({ query: { page: "3", limit: "25" } }),
@@ -99,7 +117,9 @@ describe("CheckoutController", () => {
 
   it("loads an order scoped to the authenticated user", async () => {
     const order = { id: "order-1" };
-    const service = { getOrder: vi.fn().mockResolvedValue(order) } as unknown as CheckoutService;
+    const service = {
+      getOrder: vi.fn().mockResolvedValue(order),
+    } as unknown as CheckoutService;
     const res = makeResponse();
 
     await new CheckoutController(service).getOrder(

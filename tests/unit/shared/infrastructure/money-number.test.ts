@@ -10,7 +10,9 @@ describe("toSafeMoneyNumber", () => {
     ["numeric string", "1250"],
     ["Decimal-like object", { toString: () => "1250" }],
   ])("converts a %s to a safe money number", (_label, value) => {
-    expect(toSafeMoneyNumber(value as number | string | { toString(): string })).toBe(1250);
+    expect(
+      toSafeMoneyNumber(value as number | string | { toString(): string }),
+    ).toBe(1250);
   });
 
   it("accepts the maximum safe integer", () => {

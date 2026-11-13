@@ -6,7 +6,14 @@ import type { OAuthStateStorePort } from "@modules/auth/application/ports/oauth-
 
 const originalEnv = { ...process.env };
 afterEach(() => {
-  for (const key of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_CALLBACK_URL", "FACEBOOK_APP_ID", "FACEBOOK_APP_SECRET", "FACEBOOK_CALLBACK_URL"]) {
+  for (const key of [
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_CALLBACK_URL",
+    "FACEBOOK_APP_ID",
+    "FACEBOOK_APP_SECRET",
+    "FACEBOOK_CALLBACK_URL",
+  ]) {
     if (originalEnv[key] === undefined) delete process.env[key];
     else process.env[key] = originalEnv[key];
   }
@@ -16,8 +23,13 @@ afterEach(() => {
 });
 
 function dependencies() {
-  const auth = { resolveOAuthIdentity: vi.fn(), generateTokens: vi.fn() } as unknown as AuthService;
-  const state = { consume: vi.fn().mockResolvedValue(true) } as unknown as OAuthStateStorePort;
+  const auth = {
+    resolveOAuthIdentity: vi.fn(),
+    generateTokens: vi.fn(),
+  } as unknown as AuthService;
+  const state = {
+    consume: vi.fn().mockResolvedValue(true),
+  } as unknown as OAuthStateStorePort;
   return { auth, state };
 }
 
@@ -74,7 +86,11 @@ describe("registerOAuthStrategies", () => {
     vi.mocked(state.consume).mockResolvedValueOnce(false);
     const invalidCallback = vi.fn();
     await strategy._stateStore.verify({}, "invalid-state", {}, invalidCallback);
-    expect(invalidCallback).toHaveBeenCalledWith(null, false, "oauth_state_invalid");
+    expect(invalidCallback).toHaveBeenCalledWith(
+      null,
+      false,
+      "oauth_state_invalid",
+    );
 
     const failure = new Error("state store unavailable");
     vi.mocked(state.consume).mockRejectedValueOnce(failure);
@@ -182,7 +198,10 @@ describe("registerOAuthStrategies", () => {
         "access",
         "refresh",
         provider === "google"
-          ? { id: "subject", emails: [{ value: "user@example.com", verified: true }] }
+          ? {
+              id: "subject",
+              emails: [{ value: "user@example.com", verified: true }],
+            }
           : { id: "subject", emails: [{ value: "user@example.com" }] },
         done,
       );
@@ -190,5 +209,4 @@ describe("registerOAuthStrategies", () => {
       expect(done).toHaveBeenCalledWith(failure, undefined);
     },
   );
-
 });

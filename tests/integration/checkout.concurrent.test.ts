@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import prisma from "@core/database/prisma";
+import { Prisma } from "@prisma/client";
 import { PrismaCheckoutUnitOfWork } from "@modules/checkout/infrastructure/prisma-checkout-unit-of-work";
 import { ConflictError } from "@shared/errors/application-error";
 
 describe("Checkout transaction contention (integration, real DB)", () => {
-  const unitOfWork = new PrismaCheckoutUnitOfWork();
+  const unitOfWork = new PrismaCheckoutUnitOfWork(
+    undefined,
+    undefined,
+    Prisma.TransactionIsolationLevel.Serializable,
+  );
 
   it("translates a real SERIALIZABLE write conflict into ConflictError", async () => {
     const suffix = `${Date.now()}-${Math.random()}`;

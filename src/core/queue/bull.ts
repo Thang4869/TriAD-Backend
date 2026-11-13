@@ -6,6 +6,7 @@ import {
   queueJobsFailed,
 } from "@core/metrics/metrics.registry";
 import { processEmail } from "@/jobs/email.job";
+import config from "@/config";
 
 export const emailQueue = new Queue("email", {
   connection: redis,
@@ -70,10 +71,14 @@ export function startQueueInfrastructure(imageProcessor: Processor): void {
 
   started = true;
 
-  emailWorker = new Worker("email", processEmail, {
-    connection: redis,
-    concurrency: 5,
-  });
+  if (config.DISABLE_EMAIL_WORKER) {
+    logger.info("Email worker disabled by configuration");
+  } else {
+    emailWorker = new Worker("email", processEmail, {
+      connection: redis,
+      concurrency: 5,
+    });
+  }
 
   imageWorker = new Worker("image", imageProcessor, {
     connection: redis,

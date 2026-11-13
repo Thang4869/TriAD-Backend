@@ -67,7 +67,11 @@ describe("PrismaProductCatalogReadRepository", () => {
 
   it("counts catalog rows using the supplied filter", async () => {
     mocks.count.mockResolvedValue(9);
-    await expect(new PrismaProductCatalogReadRepository().count({ isActive: true } as never)).resolves.toBe(9);
+    await expect(
+      new PrismaProductCatalogReadRepository().count({
+        isActive: true,
+      } as never),
+    ).resolves.toBe(9);
     expect(mocks.count).toHaveBeenCalledWith({ where: { isActive: true } });
   });
 
@@ -76,7 +80,9 @@ describe("PrismaProductCatalogReadRepository", () => {
       { category: "clothing", _count: { category: 3 } },
       { category: "shoes", _count: { category: 2 } },
     ]);
-    await expect(new PrismaProductCatalogReadRepository().groupByCategory()).resolves.toEqual([
+    await expect(
+      new PrismaProductCatalogReadRepository().groupByCategory(),
+    ).resolves.toEqual([
       { category: "clothing", count: 3 },
       { category: "shoes", count: 2 },
     ]);
@@ -89,9 +95,16 @@ describe("PrismaProductCatalogReadRepository", () => {
 
   it("searches active products with case-insensitive matching and maps results", async () => {
     mocks.findMany.mockResolvedValue([row]);
-    const result = await new PrismaProductCatalogReadRepository().search("shirt", 0, 5);
+    const result = await new PrismaProductCatalogReadRepository().search(
+      "shirt",
+      0,
+      5,
+    );
     expect(mocks.findMany).toHaveBeenCalledWith({
-      where: { isActive: true, searchText: { contains: "shirt", mode: "insensitive" } },
+      where: {
+        isActive: true,
+        searchText: { contains: "shirt", mode: "insensitive" },
+      },
       orderBy: { updatedAt: "desc" },
       skip: 0,
       take: 5,
@@ -101,9 +114,14 @@ describe("PrismaProductCatalogReadRepository", () => {
 
   it("counts search matches using the same active and text filters", async () => {
     mocks.count.mockResolvedValue(2);
-    await expect(new PrismaProductCatalogReadRepository().countSearch("shirt")).resolves.toBe(2);
+    await expect(
+      new PrismaProductCatalogReadRepository().countSearch("shirt"),
+    ).resolves.toBe(2);
     expect(mocks.count).toHaveBeenCalledWith({
-      where: { isActive: true, searchText: { contains: "shirt", mode: "insensitive" } },
+      where: {
+        isActive: true,
+        searchText: { contains: "shirt", mode: "insensitive" },
+      },
     });
   });
 });

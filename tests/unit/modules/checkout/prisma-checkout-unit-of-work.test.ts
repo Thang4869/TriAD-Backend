@@ -12,6 +12,21 @@ vi.mock("@core/database/prisma", () => ({
 describe("PrismaCheckoutUnitOfWork", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("uses read-committed isolation for checkout row-lock serialization", async () => {
+    vi.mocked(prisma.$transaction).mockResolvedValueOnce("ok");
+
+    await expect(
+      new PrismaCheckoutUnitOfWork().run(async () => "ok"),
+    ).resolves.toBe("ok");
+
+    expect(prisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+      }),
+    );
+  });
+
   it("translates Prisma P2034 transaction conflicts into ConflictError", async () => {
     const unitOfWork = new PrismaCheckoutUnitOfWork();
     const prismaError = new Prisma.PrismaClientKnownRequestError(

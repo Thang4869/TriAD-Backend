@@ -72,19 +72,25 @@ describe("PrismaOutboxRelayStore", () => {
   });
 
   it("renews only the ids returned by the database", async () => {
-    mockedPrisma.$queryRaw.mockResolvedValue([{ id: "outbox-1" }, { id: "outbox-3" }]);
+    mockedPrisma.$queryRaw.mockResolvedValue([
+      { id: "outbox-1" },
+      { id: "outbox-3" },
+    ]);
 
-    await expect(store.renewClaims("worker-1", ["outbox-1", "outbox-2", "outbox-3"], 60))
-      .resolves.toEqual(["outbox-1", "outbox-3"]);
+    await expect(
+      store.renewClaims("worker-1", ["outbox-1", "outbox-2", "outbox-3"], 60),
+    ).resolves.toEqual(["outbox-1", "outbox-3"]);
     expect(mockedPrisma.$queryRaw).toHaveBeenCalledTimes(1);
   });
 
   it("returns false when the claim is no longer owned or active", async () => {
     mockedPrisma.outboxEvent.updateMany.mockResolvedValue({ count: 0 });
 
-    await expect(store.updateClaimed("outbox-1", "other-worker", {
-      attempts: { increment: 1 },
-    })).resolves.toBe(false);
+    await expect(
+      store.updateClaimed("outbox-1", "other-worker", {
+        attempts: { increment: 1 },
+      }),
+    ).resolves.toBe(false);
   });
 
   it("normalizes an empty observability result", async () => {

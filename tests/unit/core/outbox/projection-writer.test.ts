@@ -47,11 +47,12 @@ describe("projection writer ordering", () => {
             oldUpdateStarted();
             await releaseOld;
           }
-          if (!row || (row.sourceVersion ?? -1) < where.sourceVersion.lt) {
-            row = { ...row, ...data } as typeof row;
-            return { count: 1 };
+          if (!row || (row.sourceVersion ?? -1) >= where.sourceVersion.lt) {
+            return { count: 0 };
           }
-          return { count: 0 };
+
+          row = { ...row, ...data } as typeof row;
+          return { count: 1 };
         },
         create: async ({ data }: { data: typeof row }) => {
           if (row) {
@@ -96,11 +97,11 @@ describe("projection writer ordering", () => {
           data: typeof row;
           where: { sourceVersion: { lt: number } };
         }) => {
-          if (!row || (row.sourceVersion ?? -1) < where.sourceVersion.lt) {
-            row = { ...row, ...data } as typeof row;
-            return { count: 1 };
+          if (!row || (row.sourceVersion ?? -1) >= where.sourceVersion.lt) {
+            return { count: 0 };
           }
-          return { count: 0 };
+          row = { ...row, ...data } as typeof row;
+          return { count: 1 };
         },
         create: async ({ data }: { data: typeof row }) => {
           if (row) {

@@ -103,7 +103,7 @@ function createTransaction(
 
     decrementProductStock: vi.fn().mockResolvedValue(true),
 
-    persistProductEvent: vi.fn().mockResolvedValue(undefined),
+    persistProductEvents: vi.fn().mockResolvedValue(undefined),
 
     findDiscountByCode: vi.fn().mockResolvedValue(null),
 

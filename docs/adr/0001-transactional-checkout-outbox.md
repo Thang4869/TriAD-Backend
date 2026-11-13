@@ -20,10 +20,13 @@ simplicity of one database transaction.
 ## Decision
 
 Keep checkout writes behind a \`CheckoutUnitOfWork\` with PostgreSQL
-\`Serializable\` isolation and an explicit retry boundary for transaction
-conflicts. Re-read the locked product row before pricing/reservation, and
-enforce unique user-scoped idempotency keys so that retries after a lost
-client response return an existing order without decrementing stock again.
+\`ReadCommitted\` isolation and explicit row-level locking for products.
+Stock changes use a locked, version-checked update and discount usage uses a
+conditional atomic update. This avoids serializable aborts under hot-product
+contention without weakening the inventory invariant. The checkout still has
+an explicit retry boundary for genuinely transient conflicts, and unique
+user-scoped idempotency keys ensure that retries after a lost client response
+return an existing order without decrementing stock again.
 
 Persist necessary domain events atomically to \`outbox_events\` alongside the
 corresponding aggregate changes. \`OutboxRelay\` and its handler tracker
@@ -55,9 +58,9 @@ compensation behavior are tested.
 - **Benefits:** enforceable single-database invariants, fewer partial-write
   states, explicit transaction boundaries and simpler operation for a
   modular monolith.
-- **Costs:** potential serializable retries under contention, database
-  dependence, durable outbox operation and eventual-consistency lag in
-  projections.
+- **Costs:** database dependence, durable outbox operation and
+  eventual-consistency lag in projections. A transaction conflict can still
+  require a bounded retry when PostgreSQL reports one.
 - **Control:** scoped \`Idempotency-Key\`, stock optimistic versions, retry
   bounds, integration tests for concurrent checkouts and recovery, and
   measurable projection lag/replay evidence.
@@ -68,9 +71,9 @@ compensation behavior are tested.
 ## Revisit when
 
 A real payment/settlement provider is in scope, transactions begin crossing
-independently committed stores, the lock/contention profile violates a
-measured SLO, or migration to separate deployable services is approved with
-incident response and observability support.
+independently committed stores, the explicit lock/conditional-write profile
+violates a measured SLO, or migration to separate deployable services is
+approved with incident response and observability support.
 
 ## Evidence
 

@@ -66,6 +66,19 @@ export class ConflictError extends ApplicationError {
   }
 }
 
+export type RetryableConflictCategory =
+  "transaction_conflict" | "product_stock_conflict";
+
+export class RetryableConflictError extends ConflictError {
+  constructor(
+    message: string,
+    public readonly category: RetryableConflictCategory,
+    context?: Record<string, unknown>,
+  ) {
+    super(message, context);
+  }
+}
+
 export class UnprocessableError extends ApplicationError {
   readonly code = "APPLICATION.UNPROCESSABLE";
 

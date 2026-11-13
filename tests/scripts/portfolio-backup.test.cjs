@@ -179,8 +179,13 @@ test("a new backup records its selected source and source backup timestamp", () 
   assert.equal(evidence.verifiedAt, "2026-11-10T02:00:00.000Z");
 });
 
-
-function makeRetentionFixture(directory, timestamp, source, suffix, options = {}) {
+function makeRetentionFixture(
+  directory,
+  timestamp,
+  source,
+  suffix,
+  options = {},
+) {
   const stamp = timestamp.replace(/[-:.]/g, "");
   const name = "triad-portfolio-" + stamp + "-" + suffix + ".dump.enc";
   const archivePath = path.join(directory, name);
@@ -193,7 +198,10 @@ function makeRetentionFixture(directory, timestamp, source, suffix, options = {}
     sourceBackupAt: timestamp,
     verifiedAt: new Date(Date.parse(timestamp) + 1000).toISOString(),
     postgresMajor: 18,
-    sha256: require("node:crypto").createHash("sha256").update(bytes).digest("hex"),
+    sha256: require("node:crypto")
+      .createHash("sha256")
+      .update(bytes)
+      .digest("hex"),
     archiveBytes: bytes.length,
     disposableRestore: true,
   };
@@ -210,27 +218,75 @@ test("retention groups by ICT calendar day and keeps unknown or unverified archi
   assert.equal(localDateKey("2026-11-13T16:59:59.000Z"), "2026-11-13");
   assert.equal(localDateKey("2026-11-13T17:00:00.000Z"), "2026-11-14");
 
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "triad-retention-plan-"));
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "triad-retention-plan-"),
+  );
   const directory = path.join(temporary, "archives");
   const keyFile = path.join(temporary, "recovery.key");
   fs.mkdirSync(directory);
   fs.writeFileSync(keyFile, "a".repeat(64), { mode: 0o600 });
 
   try {
-    const older = makeRetentionFixture(directory, "2026-11-13T00:00:00.000Z", "render", "00000001");
-    const middle = makeRetentionFixture(directory, "2026-11-13T00:30:00.000Z", "render", "00000002");
-    const newest = makeRetentionFixture(directory, "2026-11-13T01:00:00.000Z", "render", "00000003");
-    const neon = makeRetentionFixture(directory, "2026-11-13T01:10:00.000Z", "neon", "00000004");
-    const previousDay = makeRetentionFixture(directory, "2026-11-12T01:00:00.000Z", "render", "00000005");
-    const unknown = makeRetentionFixture(directory, "2026-11-13T01:20:00.000Z", "render", "00000006", { invalidSource: "archive" });
-    const unverified = path.join(directory, "triad-portfolio-20261113T013000000Z-00000007.dump.enc");
+    const older = makeRetentionFixture(
+      directory,
+      "2026-11-13T00:00:00.000Z",
+      "render",
+      "00000001",
+    );
+    const middle = makeRetentionFixture(
+      directory,
+      "2026-11-13T00:30:00.000Z",
+      "render",
+      "00000002",
+    );
+    const newest = makeRetentionFixture(
+      directory,
+      "2026-11-13T01:00:00.000Z",
+      "render",
+      "00000003",
+    );
+    const neon = makeRetentionFixture(
+      directory,
+      "2026-11-13T01:10:00.000Z",
+      "neon",
+      "00000004",
+    );
+    const previousDay = makeRetentionFixture(
+      directory,
+      "2026-11-12T01:00:00.000Z",
+      "render",
+      "00000005",
+    );
+    const unknown = makeRetentionFixture(
+      directory,
+      "2026-11-13T01:20:00.000Z",
+      "render",
+      "00000006",
+      { invalidSource: "archive" },
+    );
+    const unverified = path.join(
+      directory,
+      "triad-portfolio-20261113T013000000Z-00000007.dump.enc",
+    );
     fs.writeFileSync(unverified, "no receipt");
-    const badChecksum = makeRetentionFixture(directory, "2026-11-13T01:40:00.000Z", "render", "00000008");
+    const badChecksum = makeRetentionFixture(
+      directory,
+      "2026-11-13T01:40:00.000Z",
+      "render",
+      "00000008",
+    );
     const tamperedBytes = fs.readFileSync(badChecksum.archivePath);
     tamperedBytes[0] ^= 1;
     fs.writeFileSync(badChecksum.archivePath, tamperedBytes);
-    const wrongDate = makeRetentionFixture(directory, "2026-11-13T01:50:00.000Z", "render", "00000009");
-    const wrongDateReceipt = JSON.parse(fs.readFileSync(wrongDate.receiptPath, "utf8"));
+    const wrongDate = makeRetentionFixture(
+      directory,
+      "2026-11-13T01:50:00.000Z",
+      "render",
+      "00000009",
+    );
+    const wrongDateReceipt = JSON.parse(
+      fs.readFileSync(wrongDate.receiptPath, "utf8"),
+    );
     wrongDateReceipt.sourceBackupAt = "2026-11-12T01:50:00.000Z";
     fs.writeFileSync(wrongDate.receiptPath, JSON.stringify(wrongDateReceipt));
 
@@ -249,7 +305,10 @@ test("retention groups by ICT calendar day and keeps unknown or unverified archi
     assert.equal(verifiedCount, 1);
     assert.deepEqual(
       result.planned.map((item) => item.archive).sort(),
-      [path.basename(older.archivePath), path.basename(middle.archivePath)].sort(),
+      [
+        path.basename(older.archivePath),
+        path.basename(middle.archivePath),
+      ].sort(),
     );
     assert.equal(result.deleted.length, 0);
     for (const item of [older, middle, newest, neon, previousDay, unknown]) {
@@ -257,35 +316,65 @@ test("retention groups by ICT calendar day and keeps unknown or unverified archi
       assert.equal(fs.existsSync(item.receiptPath), true);
     }
     assert.equal(fs.existsSync(unverified), true);
-    assert.ok(result.protectedFiles.includes(path.basename(unknown.archivePath)));
+    assert.ok(
+      result.protectedFiles.includes(path.basename(unknown.archivePath)),
+    );
     assert.ok(result.protectedFiles.includes(path.basename(unverified)));
-    assert.ok(result.protectedFiles.includes(path.basename(badChecksum.archivePath)));
-    assert.ok(result.protectedFiles.includes(path.basename(wrongDate.archivePath)));
+    assert.ok(
+      result.protectedFiles.includes(path.basename(badChecksum.archivePath)),
+    );
+    assert.ok(
+      result.protectedFiles.includes(path.basename(wrongDate.archivePath)),
+    );
     const reasons = new Map(
       (await inspectRetention(directory)).protectedReasons.map((item) => [
         item.archive,
         item.reason,
       ]),
     );
-    assert.equal(reasons.get(path.basename(unknown.archivePath)), "receipt-source-missing-or-unsupported");
-    assert.equal(reasons.get(path.basename(unverified)), "receipt-missing-or-unavailable");
-    assert.equal(reasons.get(path.basename(badChecksum.archivePath)), "archive-checksum-mismatch");
-    assert.equal(reasons.get(path.basename(wrongDate.archivePath)), "archive-ict-date-mismatch");
+    assert.equal(
+      reasons.get(path.basename(unknown.archivePath)),
+      "receipt-source-missing-or-unsupported",
+    );
+    assert.equal(
+      reasons.get(path.basename(unverified)),
+      "receipt-missing-or-unavailable",
+    );
+    assert.equal(
+      reasons.get(path.basename(badChecksum.archivePath)),
+      "archive-checksum-mismatch",
+    );
+    assert.equal(
+      reasons.get(path.basename(wrongDate.archivePath)),
+      "archive-ict-date-mismatch",
+    );
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
 });
 
 test("retention apply deletes only older verified archives after keeper restore passes", async () => {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "triad-retention-apply-"));
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "triad-retention-apply-"),
+  );
   const directory = path.join(temporary, "archives");
   const keyFile = path.join(temporary, "recovery.key");
   fs.mkdirSync(directory);
   fs.writeFileSync(keyFile, "b".repeat(64), { mode: 0o600 });
 
   try {
-    const older = makeRetentionFixture(directory, "2026-11-13T02:00:00.000Z", "neon", "00000011");
-    const keeper = makeRetentionFixture(directory, "2026-11-13T03:00:00.000Z", "neon", "00000012");
+    const older = makeRetentionFixture(
+      directory,
+      "2026-11-13T02:00:00.000Z",
+      "neon",
+      "00000011",
+    );
+    const keeper = makeRetentionFixture(
+      directory,
+      "2026-11-13T03:00:00.000Z",
+      "neon",
+      "00000012",
+    );
     const result = await runRetention({
       directory,
       keyFile,
@@ -305,15 +394,27 @@ test("retention apply deletes only older verified archives after keeper restore 
 });
 
 test("retention preserves every archive when the newest same-day restore fails", async () => {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "triad-retention-fail-"));
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "triad-retention-fail-"),
+  );
   const directory = path.join(temporary, "archives");
   const keyFile = path.join(temporary, "recovery.key");
   fs.mkdirSync(directory);
   fs.writeFileSync(keyFile, "c".repeat(64), { mode: 0o600 });
 
   try {
-    const older = makeRetentionFixture(directory, "2026-11-13T04:00:00.000Z", "render", "00000021");
-    const keeper = makeRetentionFixture(directory, "2026-11-13T05:00:00.000Z", "render", "00000022");
+    const older = makeRetentionFixture(
+      directory,
+      "2026-11-13T04:00:00.000Z",
+      "render",
+      "00000021",
+    );
+    const keeper = makeRetentionFixture(
+      directory,
+      "2026-11-13T05:00:00.000Z",
+      "render",
+      "00000022",
+    );
     const result = await runRetention({
       directory,
       keyFile,
@@ -334,9 +435,10 @@ test("retention preserves every archive when the newest same-day restore fails",
   }
 });
 
-
 test("retention reports archive-named directories as protected non-regular entries", async () => {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "triad-retention-non-regular-"));
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "triad-retention-non-regular-"),
+  );
   const directory = path.join(temporary, "archives");
   const name = "triad-portfolio-20261113T020000000Z-00000010.dump.enc";
   const archivePath = path.join(directory, name);

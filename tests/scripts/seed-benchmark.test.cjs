@@ -2,12 +2,15 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { readConfiguration } = require("../../scripts/performance/seed-benchmark.cjs");
+const {
+  readConfiguration,
+} = require("../../scripts/performance/seed-benchmark.cjs");
 
 const validEnv = {
   TRIAD_PERF_CONFIRM: "I_UNDERSTAND_LOCAL_BENCHMARK_DATA",
   NODE_ENV: "development",
-  DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5544/triad_perf?schema=public",
+  DATABASE_URL:
+    "postgresql://postgres:postgres@127.0.0.1:5544/triad_perf?schema=public",
   TRIAD_PERF_RUN_ID: "local-20261110",
   TRIAD_PERF_USERS: "10",
   TRIAD_PERF_PASSWORD: "benchmark-only-password",
@@ -37,20 +40,24 @@ test("refuses production mode", () => {
 
 test("refuses any database other than triad_perf", () => {
   assert.throws(
-    () => readConfiguration({
-      ...validEnv,
-      DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/triad?schema=public",
-    }),
+    () =>
+      readConfiguration({
+        ...validEnv,
+        DATABASE_URL:
+          "postgresql://postgres:postgres@127.0.0.1:5432/triad?schema=public",
+      }),
     /database name must be triad_perf/,
   );
 });
 
 test("refuses a non-loopback database host", () => {
   assert.throws(
-    () => readConfiguration({
-      ...validEnv,
-      DATABASE_URL: "postgresql://user:password@db.example.com:5432/triad_perf",
-    }),
+    () =>
+      readConfiguration({
+        ...validEnv,
+        DATABASE_URL:
+          "postgresql://user:password@db.example.com:5432/triad_perf",
+      }),
     /host must be loopback/,
   );
 });

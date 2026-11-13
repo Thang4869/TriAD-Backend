@@ -3,6 +3,7 @@ import {
   ValidationError,
   ConflictError,
   ResourceNotFoundError,
+  RetryableConflictError,
 } from "@shared/errors/application-error";
 import { ICheckoutRepository } from "./application/ports/checkout.repository.port";
 import type {
@@ -43,6 +44,7 @@ export type CheckoutErrorCategory =
   | "transaction_conflict"
   | "product_stock_conflict"
   | "idempotency_conflict"
+  | "business_conflict"
   | "database_error"
   | "application_error"
   | "unknown";
@@ -52,10 +54,12 @@ export function classifyCheckoutError(error: unknown): CheckoutErrorCategory {
     return "idempotency_conflict";
   }
 
+  if (error instanceof RetryableConflictError) {
+    return error.category;
+  }
+
   if (error instanceof ConflictError) {
-    return error.message.startsWith("Stock conflict")
-      ? "product_stock_conflict"
-      : "transaction_conflict";
+    return "business_conflict";
   }
 
   if (error && typeof error === "object" && "code" in error) {
@@ -370,7 +374,7 @@ export class CheckoutService {
     } catch (error) {
       const durationMs = performance.now() - startedAt;
       const category = classifyCheckoutError(error);
-      const retryable = error instanceof ConflictError;
+      const retryable = error instanceof RetryableConflictError;
       const exhausted = retryable && retryCount >= MAX_RETRIES;
       const outcome = exhausted ? "exhausted" : retryable ? "retry" : "failure";
 
@@ -398,10 +402,13 @@ export class CheckoutService {
         durationMs: Math.round(durationMs),
       });
 
-      if (error instanceof ConflictError) {
-        safeIncrement(this.metrics, "checkout.transaction.conflict");
+      if (retryable) {
+        const labels = { category: error.category };
+
+        safeIncrement(this.metrics, "checkout.transaction.conflict", labels);
+
         if (retryCount < MAX_RETRIES) {
-          safeIncrement(this.metrics, "checkout.transaction.retry");
+          safeIncrement(this.metrics, "checkout.transaction.retry", labels);
         } else {
           throw error;
         }

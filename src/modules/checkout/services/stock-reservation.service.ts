@@ -3,7 +3,7 @@ import type { CheckoutTransaction } from "../application/ports/checkout-transact
 import {
   ResourceNotFoundError,
   ValidationError,
-  ConflictError,
+  RetryableConflictError,
 } from "@shared/errors/application-error";
 import type {
   TracerPort,
@@ -137,8 +137,9 @@ export class StockReservationService {
       }
 
       if (!success) {
-        throw new ConflictError(
+        throw new RetryableConflictError(
           `Stock conflict for product ${item.productId}. Please retry.`,
+          "product_stock_conflict",
         );
       }
 

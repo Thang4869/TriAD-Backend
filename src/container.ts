@@ -15,6 +15,7 @@ import { registerUsersModule } from "@/composition/register-users";
 import { registerWishlistModule } from "@/composition/register-wishlist";
 import { registerNotificationsModule } from "@/composition/register-notifications";
 import { registerDashboardModule } from "@/composition/register-dashboard";
+import { registerAdminAuditModule } from "@/composition/register-admin-audit";
 
 // Domain-event composition
 import { registerDomainEventHandlers } from "@/composition/register-domain-event-handlers";
@@ -29,6 +30,8 @@ import { createErrorHandler } from "@shared/middlewares/error-handler.middleware
 
 // Background jobs
 import { processImage } from "@/jobs/image-process.job";
+import { AuditService } from "@modules/admin/audit/application/audit.service";
+import type { NextFunction, Request, Response } from "express";
 
 // Composition root
 export const container = new Container();
@@ -47,6 +50,7 @@ registerUsersModule(container);
 registerWishlistModule(container);
 registerNotificationsModule(container);
 registerDashboardModule(container);
+registerAdminAuditModule(container);
 
 // 3. Domain events
 registerDomainEventHandlers(container);
@@ -80,6 +84,21 @@ export const dashboardController = container.resolve(
   TOKENS.DashboardController,
 );
 
+export const auditController = container.resolve(TOKENS.AuditController);
+
+export const auditDeniedAdminAttempt = (action: string) => {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    await container
+      .resolve<AuditService>(TOKENS.AuditService)
+      .recordDenied(
+        req,
+        action,
+        req.params.id ?? req.params.orderId ?? req.params.reviewId,
+      );
+    next();
+  };
+};
+
 // 6. Authentication and HTTP middleware
 export const oauthStateStore = container.resolve(TOKENS.OAuthStateStore);
 
@@ -103,4 +122,5 @@ export const imageJobProcessor = (job: Parameters<typeof processImage>[0]) =>
     job,
     container.resolve(TOKENS.ProductsRepository),
     container.resolve(TOKENS.ImageStorage),
+    container.resolve(TOKENS.AuditService),
   );

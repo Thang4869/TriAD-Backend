@@ -8,7 +8,11 @@ export class ProductImageService {
     private readonly imageProcessingQueue: ImageProcessingQueuePort,
   ) {}
 
-  async upload(productId: string, buffer: Buffer): Promise<{ queued: true }> {
+  async upload(
+    productId: string,
+    buffer: Buffer,
+    context?: { actorId?: string; actorRole?: string; requestId?: string },
+  ): Promise<{ queued: true }> {
     const exists = await this.repository.existsAndActive(productId);
 
     if (!exists) {
@@ -18,6 +22,7 @@ export class ProductImageService {
     await this.imageProcessingQueue.enqueueProductImage({
       productId,
       imageBuffer: buffer.toString("base64"),
+      ...context,
     });
 
     return { queued: true };

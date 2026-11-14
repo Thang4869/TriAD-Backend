@@ -5,9 +5,14 @@ import { OrderStatus } from "./domain/order-status";
 import { ROLES, Role } from "@shared/types/roles";
 import { asyncHandler } from "@shared/utils/async-handler";
 import { sendSuccess } from "@shared/utils/api-response";
+import { AuditService } from "@modules/admin/audit/application/audit.service";
+import { AUDIT_ACTIONS } from "@modules/admin/audit/application/audit.types";
 
 export class OrdersController {
-  constructor(private readonly service: IOrdersService) {}
+  constructor(
+    private readonly service: IOrdersService,
+    private readonly auditService?: AuditService,
+  ) {}
 
   getMyOrders = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req.user as { id: string }).id;
@@ -52,7 +57,19 @@ export class OrdersController {
       res.status(400).json({ success: false, error: "Invalid status" });
       return;
     }
-    const updated = await this.service.updateOrderStatus(orderId, status);
+    const operation = () => this.service.updateOrderStatus(orderId, status);
+    const updated = this.auditService
+      ? await this.auditService.recordMutation(
+          req,
+          {
+            action: AUDIT_ACTIONS.ORDER_STATUS_UPDATE,
+            targetType: "ORDER",
+            targetId: orderId,
+            metadata: { newStatus: status },
+          },
+          operation,
+        )
+      : await operation();
     sendSuccess(res, updated);
   });
 }

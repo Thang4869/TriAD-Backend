@@ -118,7 +118,11 @@ export class AdminProductService {
     return this.repository.setActiveWithEvents(id, true, entity);
   }
 
-  async uploadImage(productId: string, buffer: Buffer) {
-    return this.imageService.upload(productId, buffer);
+  async uploadImage(
+    productId: string,
+    buffer: Buffer,
+    context?: { actorId?: string; actorRole?: string; requestId?: string },
+  ) {
+    return this.imageService.upload(productId, buffer, context);
   }
 }

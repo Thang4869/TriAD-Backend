@@ -55,6 +55,9 @@ import type { ProductCatalogReadPort } from "@modules/products/application/produ
 import type { CheckoutUnitOfWork } from "@modules/checkout/application/ports/checkout-transaction";
 import type { TracerPort } from "@shared/application/observability/tracer.port";
 import type { MetricsPort } from "@shared/application/observability/metrics.port";
+import type { AuditRepository } from "@modules/admin/audit/application/audit.repository.port";
+import type { AuditService } from "@modules/admin/audit/application/audit.service";
+import type { AuditController } from "@modules/admin/audit/audit.controller";
 import { TokenService } from "@/modules/auth/services/token.service";
 import { TwoFactorService } from "@/modules/auth/services/two-factor.service";
 import { StockReservationService } from "@/modules/checkout/services/stock-reservation.service";
@@ -79,6 +82,7 @@ export const TOKENS = {
   NotificationsRepository: createToken<INotificationsRepository>(
     "NotificationsRepository",
   ),
+  AuditRepository: createToken<AuditRepository>("AuditRepository"),
 
   // Cross-cutting infra
   EmailQueue: createToken<EmailQueuePort>("EmailQueue"),
@@ -107,6 +111,7 @@ export const TOKENS = {
   NotificationsService: createToken<NotificationsService>(
     "NotificationsService",
   ),
+  AuditService: createToken<AuditService>("AuditService"),
   PricingService: createToken<PricingService>("PricingService"),
 
   // Controllers
@@ -122,6 +127,7 @@ export const TOKENS = {
   NotificationsController: createToken<NotificationsController>(
     "NotificationsController",
   ),
+  AuditController: createToken<AuditController>("AuditController"),
 
   // Domain event handlers
   ProjectionHandler: createToken<ProjectionHandler>("ProjectionHandler"),

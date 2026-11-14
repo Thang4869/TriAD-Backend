@@ -26,6 +26,7 @@ import { reviewRoutes } from "@modules/reviews/reviews.routes";
 import { notificationRoutes } from "@modules/notifications/notifications.routes";
 import { wishlistRoutes } from "@modules/wishlist/wishlist.routes";
 import { dashboardRoutes } from "@modules/admin/dashboard/dashboard.routes";
+import { auditRoutes } from "@modules/admin/audit/audit.routes";
 
 import { composeHealthRoutes } from "@/composition/create-health-routes";
 import { metricsMiddleware } from "@core/metrics/metrics.middleware";
@@ -137,6 +138,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/notifications", authMiddleware, notificationRoutes);
 app.use("/api/wishlist", authMiddleware, wishlistRoutes);
 app.use("/api/admin/dashboard", dashboardRoutes);
+app.use("/api/admin/audit-logs", auditRoutes);
 app.use("/health", composeHealthRoutes());
 if (!config.isProduction) {
   app.use("/metrics", metricsRoutes);

@@ -4,9 +4,14 @@ import { ValidationError } from "@shared/errors/application-error";
 import { asyncHandler } from "@shared/utils/async-handler";
 import { ROLES, Role } from "@shared/types/roles";
 import { sendSuccess, sendCreated } from "@shared/utils/api-response";
+import { AuditService } from "@modules/admin/audit/application/audit.service";
+import { AUDIT_ACTIONS } from "@modules/admin/audit/application/audit.types";
 
 export class ReviewsController {
-  constructor(private readonly service: ReviewsService) {}
+  constructor(
+    private readonly service: ReviewsService,
+    private readonly auditService?: AuditService,
+  ) {}
 
   getByProduct = asyncHandler(async (req: Request, res: Response) => {
     const { productId } = req.params;
@@ -40,7 +45,20 @@ export class ReviewsController {
     const userId = (req.user as { id: string }).id;
     const isAdmin = (req.user as { role?: Role })?.role === ROLES.ADMIN;
     const { reviewId } = req.params;
-    const result = await this.service.deleteReview(reviewId, userId, isAdmin);
+    const operation = () =>
+      this.service.deleteReview(reviewId, userId, isAdmin);
+    const result =
+      isAdmin && this.auditService
+        ? await this.auditService.recordMutation(
+            req,
+            {
+              action: AUDIT_ACTIONS.REVIEW_ADMIN_DELETE,
+              targetType: "REVIEW",
+              targetId: reviewId,
+            },
+            operation,
+          )
+        : await operation();
     sendSuccess(res, result);
   });
 

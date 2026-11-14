@@ -59,6 +59,7 @@ export function registerProductsModule(container: Container): void {
       new ProductsController(
         c.resolve(TOKENS.CatalogService),
         c.resolve(TOKENS.AdminProductService),
+        c.resolve(TOKENS.AuditService),
       ),
     Lifetime.Transient,
   );

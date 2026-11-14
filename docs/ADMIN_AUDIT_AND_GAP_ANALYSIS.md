@@ -1,156 +1,184 @@
-# Admin Audit & Gap Analysis
+# Admin Audit Log and Gap Analysis
 
-> **Repository:** `Thang4869/TriAD-Backend`  
-> **Tracking issue:** [#147 — Add an audit trail for sensitive administrative actions](https://github.com/Thang4869/TriAD-Backend/issues/147)  
-> **Baseline reviewed:** 2026-11-14  
-> **Status:** Discovery and design in progress; no Audit Log implementation has been merged.
+**Repository:** `Thang4869/TriAD-Backend`
+**Issue:** [#147 — Add an audit trail for sensitive administrative actions](https://github.com/Thang4869/TriAD-Backend/issues/147)
+**Assessment date:** 2026-11-14
+**Implementation branch:** `commit-14112026-2`
 
-## 1. Purpose
+## 1. Delivered audit capability
 
-This document is the working record for assessing and improving the TriAD Admin capabilities. It tracks the current state, security requirements, implementation decisions, verification evidence, and remaining work.
+The backend now persists `AdminAuditLog` records in `admin_audit_logs`. The
+forward-only migration is
+`20261114190000_admin_audit_logs/migration.sql`. Records contain actor ID and
+role, controlled action, target type/ID, outcome, request ID, server timestamp,
+and bounded metadata.
 
-The work is split into two related tracks:
+Audited actions:
 
-1. **Admin Audit Log:** establish durable, queryable records for sensitive administrative actions.
-2. **Admin Gap Analysis:** compare the existing backend and frontend administration experience against the needs of an e-commerce operations team, then create prioritized implementation issues.
+| Action                           | Outcome coverage | Target                     |
+| -------------------------------- | ---------------- | -------------------------- |
+| `PRODUCT_CREATE`                 | success/failure  | Product                    |
+| `PRODUCT_UPDATE`                 | success/failure  | Product                    |
+| `PRODUCT_DEACTIVATE`             | success/failure  | Product                    |
+| `PRODUCT_RESTORE`                | success/failure  | Product                    |
+| `PRODUCT_IMAGE_UPLOAD_REQUESTED` | success/failure  | Product                    |
+| `PRODUCT_IMAGE_PROCESSING`       | success/failure  | Product                    |
+| `ORDER_STATUS_UPDATE`            | success/failure  | Order                      |
+| `REVIEW_ADMIN_DELETE`            | success/failure  | Review                     |
+| `ADMIN_ACTION_DENIED`            | denied           | Requested protected action |
 
-The audit trail is a prerequisite for safely expanding sensitive administrative capabilities. It does not, by itself, make the Admin area complete.
+Owner review deletion is intentionally not classified as an Admin action.
+Read-only dashboard, product, order, and review lists are not mutation events.
+No dedicated Admin user-management mutations exist in the inspected backend.
 
-## 2. Working rules
+Metadata is allowlisted to changed field names, status values, queue/job
+markers, bounded reason text, and error class. Passwords, hashes, tokens,
+cookies, authorization headers, request/response bodies, image buffers, and
+unapproved fields are not persisted.
 
-- Inspect the existing architecture before introducing abstractions or dependencies.
-- Reuse the existing request/correlation ID and DI patterns where appropriate.
-- Record only the minimum information needed for accountability.
-- Never store passwords, password hashes, access/refresh tokens, cookies, authorization headers, TOTP secrets, or unnecessary personal data in audit records.
-- Distinguish **SUCCESS**, **FAILURE**, and **DENIED** outcomes; do not infer success merely because a route was invoked.
-- Define and test the audit-write failure policy before claiming the audit trail is durable.
-- Prefer transactionally consistent audit records for database mutations where the existing transaction boundary permits it. Explicitly document operations that cross external systems or queues.
-- Do not claim immutability, tamper-proofing, or compliance guarantees unless the implementation and threat model substantiate them.
-- Do not close Issue #147 until acceptance criteria and verification evidence are reviewed.
-- Record commit, PR, CI, local, and staging evidence as each milestone is completed.
+## 2. API
 
-## 3. Initial backend baseline
+`GET /api/admin/audit-logs`
 
-The following observations were made from the repository source on the default branch at baseline commit `cb3110c6934c738a2ddab381e8ec36d6858534e4`.
+- Requires authentication and the `ADMIN` role.
+- Query parameters: `page` (default 1), `limit` (default 50, maximum 100),
+  `actorId`, `action`, `targetType`, `targetId`, `outcome`, `from`, and `to`.
+- Results are sorted deterministically by `createdAt DESC, id DESC`.
+- Date filters are ISO timestamps and `from` cannot be later than `to`.
+- The response uses the existing `{ success, data }` contract and includes
+  `records`, `page`, `limit`, `total`, and `totalPages`.
+- There is no unrestricted export endpoint. Operators should page through this
+  endpoint using a short-lived Admin session and store any approved export in
+  the controlled security evidence location.
 
-| Area | Observed state | Initial assessment |
-|---|---|---|
-| Request correlation | `src/app.ts` already attaches a request ID to requests. | Reuse and verify propagation; do not create a competing ID mechanism. |
-| Admin product operations | Admin routes expose list, create, update, soft-delete, restore, and image upload operations. | Existing sensitive mutations need audit coverage. |
-| Admin order operations | Admin can list orders and update order status. | Status changes need audit coverage. |
-| Review moderation | Admin can list reviews; the delete operation supports owner/Admin authorization. | Audit Admin moderation separately from ordinary owner deletion. |
-| Admin dashboard | A protected statistics endpoint exists. | Read-only statistics are not mutation audit events. |
-| Admin user management | No dedicated Admin mutation routes were found in the initial route review. User routes expose self-service profile/password operations. | Verify frontend and complete backend route inventory before deciding missing capabilities. |
-| Audit persistence | No `AdminAuditLog` Prisma model or dedicated audit module was found in the initial search. | Persistence and application integration are not implemented at this baseline. |
-| Dependency injection | Modules are registered through composition functions and `src/container.ts`; tokens are centralized. | Follow existing DI/composition conventions. |
-| Domain events / transactions | Existing code uses Prisma transactions and an Outbox pattern in relevant workflows. | Inspect exact transaction boundaries before choosing the audit write strategy. |
+Denied authenticated non-admin attempts on protected mutation routes are
+recorded with fail-open behavior so an audit outage cannot turn the
+authorization middleware into an availability vulnerability. Unauthenticated
+requests stop at authentication and are not attributed to an actor.
 
-### 3.1 Initial auditable action inventory
+## 3. Consistency and failure semantics
 
-| Area | Action | Trigger | Notes |
-|---|---|---|---|
-| Products | `PRODUCT_CREATE` | Admin creates a product | Store target ID and safe change summary, not arbitrary request bodies. |
-| Products | `PRODUCT_UPDATE` | Admin updates a product | Allowlist changed field names; avoid personal or secret values. |
-| Products | `PRODUCT_DEACTIVATE` | Admin soft-deletes a product | Preserve the actual outcome. |
-| Products | `PRODUCT_RESTORE` | Admin restores a product | Preserve the actual outcome. |
-| Products | `PRODUCT_IMAGE_UPLOAD_REQUESTED` | Admin queues image processing | Distinguish accepted/queued from completed processing. |
-| Orders | `ORDER_STATUS_UPDATE` | Admin changes order status | Capture safe before/after status and target order ID. |
-| Reviews | `REVIEW_ADMIN_DELETE` | Admin deletes a review | Do not classify an ordinary owner deletion as an Admin action. |
-| Access control | `ADMIN_ACTION_DENIED` | Authenticated non-admin attempts a protected Admin operation | Define bounded event coverage and abuse/rate-limit considerations. |
+Business repositories retain their existing transaction boundaries. A mutation
+is executed first, and a `SUCCESS` record is written only after that operation
+resolves. If the operation fails, the service makes a best-effort `FAILURE`
+record and rethrows the original business error. Failed-event persistence must
+not mask the business error.
 
-This inventory is provisional. The final event catalog must be reconciled with all routes, service methods, authorization paths, and asynchronous workers.
+The audit write is currently a separate database operation from the business
+transaction. This is an explicit residual consistency risk: a committed
+mutation can temporarily lack its success record if the audit database is
+unavailable. The request remains successful and an error is emitted through the
+existing structured logger; silently claiming that the record exists is
+avoided. A future transactional unit-of-work can close this gap without
+changing the event contract.
 
-## 4. Audit record requirements
+Image processing carries actor and request context in the queue payload
+(never the audit metadata or image buffer). The request and worker completion
+are separate records sharing the request ID. A worker failure is rethrown for
+the queue retry/dead-letter policy, while a post-commit audit-write failure
+does not cause a successfully linked image to be processed again.
 
-Proposed minimum record fields:
+Rows are not tamper-proof or immutable. Database access controls, retention,
+backup, and restricted operational access remain required controls.
 
-- Stable audit record identifier.
-- Actor identifier, and actor role at the time of the action where available.
-- Action name from a controlled catalog.
-- Target type and target identifier.
-- Timestamp generated by the persistence layer or a trusted server clock.
-- Request/correlation identifier.
-- Outcome: `SUCCESS`, `FAILURE`, or `DENIED`.
-- Small, explicitly allowlisted metadata needed to explain the action.
+## 4. Migration discrepancy and recovery
 
-Do not store complete request/response bodies, credentials, authentication material, or unrestricted entity snapshots.
+The existing migration
+`20261003020000_outbox_maintenance_indexes/migration.sql` was not edited.
+Raw-byte SHA-256 verification found:
 
-## 5. Design decisions still required
+- Repository file: `9a334ef024b9ce6738b47a634f69d5535173be803d07e671bb965ac14fdebe b1`
+  (without the display-space typo: `...fdebe b1` is
+  `...fdebeb1`).
+- `_prisma_migrations.checksum`: `1a5f2fec4d4a9da667f2018f56817c95f92362a5c57df93f9a8174ad2f2cae09`.
+- Both expected Outbox indexes were already present.
 
-These decisions must be resolved from the actual repository implementation before coding:
+The evidence establishes a pre-existing migration-history metadata mismatch,
+not a need to rewrite the migration. The exact historical byte sequence that
+produced the stored checksum is not present in the current Git history, so the
+original editing/normalization step cannot be proven from this checkout.
 
-1. **Consistency boundary:** determine which mutations can write the audit record in the same Prisma transaction as the business change.
-2. **Failure recording:** determine how to record a failed mutation when its business transaction rolls back. A write inside the rolled-back transaction cannot preserve that failure record.
-3. **External/queued operations:** image upload currently queues processing. Define whether the audit event records request acceptance, worker completion, or both, and how later failures are correlated.
-4. **Audit storage failure:** choose and document fail-closed versus fail-open behavior for each action class. Sensitive administrative mutations should not silently proceed without the required audit guarantee.
-5. **Denied attempts:** determine which rejected requests are recorded, including authenticated non-admin attempts, without creating an unbounded log-amplification path.
-6. **Query/export authorization:** define the Admin-only read path, pagination, filters, maximum export size, and protection against exposing sensitive metadata.
-7. **Retention:** define retention duration, archival/deletion policy, operational ownership, and whether legal or security requirements impose a longer period.
-8. **Tamper resistance:** document the actual threat model and controls; do not describe ordinary database rows as immutable.
+Safe recovery used for this change:
 
-## 6. Admin Gap Analysis
+1. Do not edit the applied migration or `_prisma_migrations`.
+2. Do not reset, push, or apply an unrelated schema diff.
+3. Review a new migration containing only the missing audit table and five
+   indexes.
+4. Apply it with `prisma migrate deploy` to the local `triad` database.
+5. Verify `prisma migrate status` reports 17 migrations up to date and inspect
+   PostgreSQL indexes.
 
-### 6.1 Backend capability inventory
+Staging/production deployment still requires an explicitly approved
+environment-specific verification. If a future Prisma command rejects the old
+checksum, stop and use Prisma's documented migration-recovery procedure after
+DBA review; do not alter the checksum manually.
 
-| Capability | Initial finding | Follow-up |
-|---|---|---|
-| Dashboard statistics | Present | Review metric completeness, authorization, query performance, and operational usefulness. |
-| Product administration | Basic CRUD lifecycle and image upload present | Review category/stock management, validation, bulk operations, and audit coverage. |
-| Order administration | Listing and status update present | Review cancellation, refund, fulfillment, exception handling, and transition rules. |
-| Review moderation | Listing and deletion present | Review moderation states, reason capture, and audit coverage. |
-| User administration | No dedicated Admin mutation routes found in initial review | Inspect all routes/services and define safe user lifecycle and role-management requirements. |
-| Admin audit and security | Dedicated audit module/model not found in initial review | Implement under Issue #147. |
-| Reporting and exports | Not yet assessed | Inspect current APIs and business requirements before proposing endpoints. |
-| System operations | Not yet assessed | Determine whether operational health belongs in Admin UI or existing observability tooling. |
+## 5. Backend gap analysis
 
-### 6.2 Frontend capability inventory
+| Priority | Finding                                                                                                       | Evidence / recommendation                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| P0       | Audit success is not in the same transaction as every business mutation.                                      | Implement a shared transaction unit-of-work or an outbox-backed audit relay before claiming strict accountability. |
+| P1       | No Admin user lifecycle or role-management API was found.                                                     | Define least-privilege roles, MFA requirements, approval flow, and audit events before adding it.                  |
+| P1       | No retention, archival, or restricted export automation exists.                                               | Set an approved retention period and operational ownership; keep exports bounded and access logged.                |
+| P1       | Image request and worker completion are separate events.                                                      | Monitor queue retries/dead letters and alert on missing completion records.                                        |
+| P2       | Order administration exposes status changes but not refund, fulfillment exception, or cancellation workflows. | Add domain-approved workflows with explicit authorization and audit coverage.                                      |
+| P2       | Review moderation has deletion but no moderation reason/state model.                                          | Add reason capture and moderation states if operations require them.                                               |
+| P2       | Audit query has no UI, saved filters, or operator workflow.                                                   | Add an Admin audit screen after backend contract stabilization.                                                    |
+| P3       | No tamper-evident chaining or external WORM sink is configured.                                               | Consider a separate security control if the threat model requires it.                                              |
 
-**Not assessed yet.** The paired frontend repository must be reviewed before declaring which Admin screens or workflows exist or are missing.
+## 6. Frontend assessment (`Thang4869/TriAD-12`)
 
-Frontend review target: `Thang4869/TriAD-12`.
+The paired repository was inspected at its current source, including
+`src/modules/admin/AdminController.js`,
+`src/modules/admin/AdminProductController.js`,
+`src/modules/admin/AdminService.js`,
+`src/modules/admin/AdminRenderer.js`, the Admin dashboard/product HTML pages,
+and `src/shared/services/api.service.js`.
 
-Review at minimum:
-- Admin navigation and route protection.
-- Dashboard screens and data visualizations.
-- Product and image management workflows.
-- Order management and exception workflows.
-- Review moderation.
-- User management.
-- Audit log search/detail/export screens.
-- Loading, empty, error, and permission-denied states.
-- Accessibility, responsive behavior, and destructive-action confirmation.
+Observed capabilities:
 
-### 6.3 Prioritization rubric
+- Admin dashboard, statistics, recent order listing, and order status update.
+- Admin product listing, create/update, deactivate, and restore.
+- Client-side role gate plus backend requests with HttpOnly-cookie credentials
+  and CSRF handling.
 
-- **P0:** exploitable authorization/data-integrity issue or critical operational blocker.
-- **P1:** security/accountability control or essential Admin workflow.
-- **P2:** important operational capability or substantial usability gap.
-- **P3:** convenience, polish, or low-risk enhancement.
+Missing or mismatched capabilities:
 
-No new feature issue should be created until the gap is confirmed against both backend and frontend code.
+- No frontend audit-log query screen or API client method.
+- No review moderation screen.
+- No image-upload workflow in the inspected Admin product controller.
+- No Admin user-management UI.
+- Frontend product payload uses a single image URL field while backend supports
+  queued multipart image processing; this is an API/UI mismatch.
+- Several destructive actions rely on browser `confirm` and interpolated HTML;
+  add consistent confirmation, escaping, loading, empty, error, and
+  permission-denied states.
+- The client-side Admin gate is UX only; backend authorization remains the
+  security boundary.
 
-## 7. Implementation and verification roadmap
+## 7. Verification evidence
 
-| Phase | Deliverable | Status |
-|---|---|---|
-| 0 | Establish baseline and this tracking document | In progress |
-| 1 | Complete route/service/transaction inspection and finalize event catalog | Pending |
-| 2 | Approve audit schema, failure semantics, retention, and authorized query/export design | Pending |
-| 3 | Implement persistence, application integration, authorization, and operational documentation | Pending |
-| 4 | Add unit, integration, and end-to-end/security tests | Pending |
-| 5 | Verify CI, local migration, and isolated staging behavior | Pending |
-| 6 | Review evidence and close Issue #147 only when all criteria pass | Pending |
-| 7 | Complete backend + frontend Admin Gap Analysis | Pending |
-| 8 | Create prioritized Admin feature issues and implementation roadmap | Pending |
+| Check                                       | Result                                                          |
+| ------------------------------------------- | --------------------------------------------------------------- |
+| `npx prisma validate`                       | PASS                                                            |
+| Raw migration immutability comparison       | PASS: old file unchanged                                        |
+| `npx prisma migrate deploy` (local `triad`) | PASS: audit migration applied                                   |
+| `npx prisma migrate status`                 | PASS: 17 migrations up to date                                  |
+| PostgreSQL index inspection                 | PASS: primary key plus five indexes                             |
+| Focused AuditService unit tests             | PASS: 6 tests                                                   |
+| TypeScript typecheck                        | PASS                                                            |
+| Full unit/integration suite (`npm test`) | PASS: 165 files, 1,633 tests |
+| Full lint (`npm run lint`) | PASS |
+| Production build (`npm run build`) | PASS |
+| Architecture check (`npm run architecture:check`) | PASS |
+| Backend API E2E scenarios | NOT EXECUTED: no dedicated backend E2E harness is configured in this checkout |
+| CI | NOT EXECUTED: no remote CI run was triggered |
+| Staging/production                          | BLOCKED pending explicit authorization and environment evidence |
 
-## 8. Verification evidence log
+## 8. Remaining release blockers
 
-Add dated evidence here. Include exact commit/PR references and test commands/results; redact secrets and personal data.
-
-| Date | Commit / PR | Verification | Result |
-|---|---|---|---|
-| 2026-11-14 | Baseline `cb3110c6934c738a2ddab381e8ec36d6858534e4` | Initial source inspection | Discovery started; implementation not yet present. |
-
-## 9. Change log
-
-- **2026-11-14:** Created the initial working document and recorded the first-pass backend inventory. No application code or database schema was changed.
+Issue #147 should not be described as fully production-certified until the
+full existing unit/integration suites, isolated E2E scenarios, lint, build, and
+CI checks are run. Strict transactionally consistent audit persistence,
+retention/operational export policy, and the frontend audit UI remain follow-up
+work.

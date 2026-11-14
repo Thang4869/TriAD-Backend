@@ -18,7 +18,11 @@ export function registerReviewsModule(container: Container): void {
 
   container.register(
     TOKENS.ReviewsController,
-    (c) => new ReviewsController(c.resolve(TOKENS.ReviewsService)),
+    (c) =>
+      new ReviewsController(
+        c.resolve(TOKENS.ReviewsService),
+        c.resolve(TOKENS.AuditService),
+      ),
     Lifetime.Transient,
   );
 }

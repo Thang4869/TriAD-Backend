@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authMiddleware } from "@/container";
+import { authMiddleware, auditDeniedAdminAttempt } from "@/container";
 import { requireAdmin } from "@shared/middlewares/rbac.middleware";
 import { validate } from "@shared/middlewares/validation.middleware";
 import { ordersController } from "@/container";
@@ -21,6 +21,7 @@ router.get(
 );
 router.patch(
   "/admin/:orderId/status",
+  auditDeniedAdminAttempt("ORDER_STATUS_UPDATE"),
   requireAdmin,
   validate(updateOrderStatusSchema),
   ordersController.adminUpdateStatus,

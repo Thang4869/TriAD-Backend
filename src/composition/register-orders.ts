@@ -28,7 +28,11 @@ export function registerOrdersModule(container: Container): void {
 
   container.register(
     TOKENS.OrdersController,
-    (c) => new OrdersController(c.resolve(TOKENS.OrdersService)),
+    (c) =>
+      new OrdersController(
+        c.resolve(TOKENS.OrdersService),
+        c.resolve(TOKENS.AuditService),
+      ),
     Lifetime.Transient,
   );
 }

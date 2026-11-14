@@ -8,11 +8,14 @@ import {
   sendCreated,
   sendAccepted,
 } from "@shared/utils/api-response";
+import { AuditService } from "@modules/admin/audit/application/audit.service";
+import { AUDIT_ACTIONS } from "@modules/admin/audit/application/audit.types";
 
 export class ProductsController {
   constructor(
     private readonly catalogService: CatalogService,
     private readonly adminService: AdminProductService,
+    private readonly auditService?: AuditService,
   ) {}
 
   getAll = asyncHandler(async (req: Request, res: Response) => {
@@ -51,31 +54,95 @@ export class ProductsController {
   });
 
   adminCreate = asyncHandler(async (req: Request, res: Response) => {
-    const product = await this.adminService.create(req.body);
+    const product = this.auditService
+      ? await this.auditService.recordMutation(
+          req,
+          {
+            action: AUDIT_ACTIONS.PRODUCT_CREATE,
+            targetType: "PRODUCT",
+            targetId: (result) => result.id,
+            metadata: { changedFields: Object.keys(req.body) },
+          },
+          () => this.adminService.create(req.body),
+        )
+      : await this.adminService.create(req.body);
     sendCreated(res, product);
   });
 
   adminUpdate = asyncHandler(async (req: Request, res: Response) => {
-    const product = await this.adminService.update(req.params.id, req.body);
+    const product = this.auditService
+      ? await this.auditService.recordMutation(
+          req,
+          {
+            action: AUDIT_ACTIONS.PRODUCT_UPDATE,
+            targetType: "PRODUCT",
+            targetId: req.params.id,
+            metadata: { changedFields: Object.keys(req.body) },
+          },
+          () => this.adminService.update(req.params.id, req.body),
+        )
+      : await this.adminService.update(req.params.id, req.body);
     sendSuccess(res, product);
   });
 
   adminDelete = asyncHandler(async (req: Request, res: Response) => {
-    const product = await this.adminService.delete(req.params.id);
+    const product = this.auditService
+      ? await this.auditService.recordMutation(
+          req,
+          {
+            action: AUDIT_ACTIONS.PRODUCT_DEACTIVATE,
+            targetType: "PRODUCT",
+            targetId: req.params.id,
+          },
+          () => this.adminService.delete(req.params.id),
+        )
+      : await this.adminService.delete(req.params.id);
     sendSuccess(res, product, "Product deactivated successfully");
   });
 
   adminRestore = asyncHandler(async (req: Request, res: Response) => {
-    const product = await this.adminService.restore(req.params.id);
+    const product = this.auditService
+      ? await this.auditService.recordMutation(
+          req,
+          {
+            action: AUDIT_ACTIONS.PRODUCT_RESTORE,
+            targetType: "PRODUCT",
+            targetId: req.params.id,
+          },
+          () => this.adminService.restore(req.params.id),
+        )
+      : await this.adminService.restore(req.params.id);
     sendSuccess(res, product, "Product reactivated successfully");
   });
 
   adminUploadImage = asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw new ValidationError("Image file is required");
-    const result = await this.adminService.uploadImage(
-      req.params.id,
-      req.file.buffer,
-    );
+    const operation = () => {
+      const context = {
+        actorId: (req.user as { id: string } | undefined)?.id,
+        actorRole: (req.user as { role: string } | undefined)?.role,
+        requestId: req.requestId,
+      };
+      return context.actorId || context.actorRole || context.requestId
+        ? this.adminService.uploadImage(
+            req.params.id,
+            req.file!.buffer,
+            context,
+          )
+        : this.adminService.uploadImage(req.params.id, req.file!.buffer);
+    };
+    const result = this.auditService
+      ? await this.auditService.recordMutation(
+          req,
+          {
+            action: AUDIT_ACTIONS.PRODUCT_IMAGE_UPLOAD_REQUESTED,
+            targetType: "PRODUCT",
+            targetId: req.params.id,
+            metadata: { queued: true },
+          },
+          operation,
+        )
+      : await operation();
     sendAccepted(res, result, "Image queued for processing");
   });
 }

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authMiddleware } from "@/container";
+import { authMiddleware, auditDeniedAdminAttempt } from "@/container";
 import { requireAdmin } from "@shared/middlewares/rbac.middleware";
 import { validate } from "@shared/middlewares/validation.middleware";
 import {
@@ -40,34 +40,45 @@ router.get(
 );
 
 // Admin
-router.use("/admin", authMiddleware, requireAdmin);
+router.use("/admin", authMiddleware);
 router.get(
   "/admin/all",
+  requireAdmin,
   validate(adminGetProductsQuerySchema),
   productsController.adminGetAll,
 );
 router.post(
   "/admin",
+  auditDeniedAdminAttempt("PRODUCT_CREATE"),
+  requireAdmin,
   validate(createProductSchema),
   productsController.adminCreate,
 );
 router.put(
   "/admin/:id",
+  auditDeniedAdminAttempt("PRODUCT_UPDATE"),
+  requireAdmin,
   validate(updateProductSchema),
   productsController.adminUpdate,
 );
 router.delete(
   "/admin/:id",
+  auditDeniedAdminAttempt("PRODUCT_DEACTIVATE"),
+  requireAdmin,
   validate(deleteProductParamsSchema),
   productsController.adminDelete,
 );
 router.patch(
   "/admin/:id/restore",
+  auditDeniedAdminAttempt("PRODUCT_RESTORE"),
+  requireAdmin,
   validate(deleteProductParamsSchema),
   productsController.adminRestore,
 );
 router.post(
   "/admin/:id/images",
+  auditDeniedAdminAttempt("PRODUCT_IMAGE_UPLOAD_REQUESTED"),
+  requireAdmin,
   validate(deleteProductParamsSchema),
   uploadProductImage,
   validateUploadedImage,

@@ -27,6 +27,35 @@ describe("PrismaCheckoutUnitOfWork", () => {
     );
   });
 
+  it("locks checkout products in ascending id order", async () => {
+    const queryRaw = vi.fn().mockResolvedValue([]);
+
+    const tx = {
+      $queryRaw: queryRaw,
+    } as unknown as Prisma.TransactionClient;
+
+    vi.mocked(prisma.$transaction).mockImplementationOnce((async (
+      callback: (transaction: Prisma.TransactionClient) => Promise<unknown>,
+    ) => callback(tx)) as typeof prisma.$transaction);
+
+    const unitOfWork = new PrismaCheckoutUnitOfWork();
+
+    await unitOfWork.run(async (transaction) => {
+      await transaction.lockProductsForUpdate(["product-b", "product-a"]);
+    });
+
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+
+    const [queryTemplate] = queryRaw.mock.calls[0] ?? [];
+    const sql = Array.from(queryTemplate as TemplateStringsArray).join("?");
+
+    const orderByIndex = sql.indexOf("ORDER BY id ASC");
+    const forUpdateIndex = sql.indexOf("FOR UPDATE");
+
+    expect(orderByIndex).toBeGreaterThanOrEqual(0);
+    expect(forUpdateIndex).toBeGreaterThan(orderByIndex);
+  });
+
   it("translates Prisma P2034 transaction conflicts into ConflictError", async () => {
     const unitOfWork = new PrismaCheckoutUnitOfWork();
     const prismaError = new Prisma.PrismaClientKnownRequestError(

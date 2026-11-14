@@ -59,6 +59,7 @@ class PrismaCheckoutTransaction implements CheckoutTransaction {
       SELECT id, name, price, stock, version, "isActive"
       FROM products
       WHERE id = ANY(${productIds})
+      ORDER BY id ASC
       FOR UPDATE
     `;
 

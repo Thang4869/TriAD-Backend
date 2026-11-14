@@ -309,6 +309,26 @@ model OrderHistoryProjection {
   @@map("order_history_projection")
 }
 
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorRole  String
+  action     String
+  targetType String
+  targetId   String?
+  outcome    String
+  requestId  String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([requestId])
+  @@map("admin_audit_logs")
+}
+
 model AdminDashboardProjection {
   id                   String   @id
   totalGrossOrderValue Decimal  @default(0) @db.Decimal(18, 0)

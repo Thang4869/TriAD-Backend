@@ -14,7 +14,7 @@ export const auditQuerySchema = z.object({
         .default("50")
         .transform(Number)
         .pipe(z.number().int().min(1).max(100)),
-      actorId: z.string().uuid().optional(),
+      actorId: z.string().min(1).max(128).optional(),
       action: z
         .enum(Object.values(AUDIT_ACTIONS) as [string, ...string[]])
         .optional(),

@@ -100,7 +100,7 @@ jobs:
               return [pscustomobject]@{ UserId = $UserId; LogonType = $LogonType; RunLevel = $RunLevel }
             }
             function New-ScheduledTaskSettingsSet {
-              param($StartWhenAvailable, $MultipleInstances, $ExecutionTimeLimit)
+              param([switch]$StartWhenAvailable, $MultipleInstances, $ExecutionTimeLimit)
               return [pscustomobject]@{ StartWhenAvailable = $StartWhenAvailable; MultipleInstances = $MultipleInstances }
             }
             function Register-ScheduledTask {

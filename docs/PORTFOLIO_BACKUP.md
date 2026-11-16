@@ -114,7 +114,7 @@ syncing. This is a best-effort PC schedule, not managed cloud backup.
    daily **21:00 local time** Neon task:
 
    ```powershell
-   .\\scripts\\backup\\portfolio-backup.ps1 -Action InstallTask -Source neon
+   .\scripts\backup\portfolio-backup.ps1 -Action InstallTask -Source neon
    Get-ScheduledTask -TaskName 'TriAD Portfolio Backup Neon' | Select-Object TaskName, Actions
    Get-ScheduledTaskInfo -TaskName 'TriAD Portfolio Backup Neon'
    ```

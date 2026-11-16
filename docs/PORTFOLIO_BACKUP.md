@@ -14,10 +14,11 @@ Linux containers. No npm installation is needed for these backup scripts.
 - Source is restricted to the current PostgreSQL 18 staging external host,
   database and user. Transactions are read-only, TLS is required. A replacement
   Free instance needs a reviewed guard change.
-- Render and Neon are independent sources. Render remains the scheduled-task
-  source; Neon is configured separately and selected explicitly with
-  `BackupNeon`. Remote hosts, database names, roles, port 5432 and TLS query
-  parameters are allowlisted. The Neon guard accepts only `*.neon.tech`.
+- Render and Neon are independent sources with separate scheduled tasks. Render
+  continues to use `ProtectedUrl` and `Backup`; Neon is configured separately
+  through `ProtectedNeonUrl` and selected explicitly with `BackupNeon`. Remote
+  hosts, database names, roles, port 5432 and TLS query parameters are allowlisted.
+  The Neon guard accepts only `*.neon.tech`.
 - The source URL is entered with hidden input, encrypted with Windows DPAPI and
   stored outside git. Only the same Windows user/machine can decrypt this URL.
 - Custom-format pg_dump is encrypted using authenticated AES-256-GCM. A separate
@@ -109,7 +110,22 @@ syncing. This is a best-effort PC schedule, not managed cloud backup.
    Keep this checkout at its current path. Check `LastTaskResult = 0` and the
    latest receipt: registration alone is not proof a backup ran.
 
-7. After both existing tasks are present, preview and apply the three-hour
+7. After a real Neon backup has completed with **PASS**, install the separate
+   daily **21:00 local time** Neon task:
+
+   ```powershell
+   .\scripts\backup\portfolio-backup.ps1 -Action InstallTask -Source neon
+   Get-ScheduledTask -TaskName 'TriAD Portfolio Backup Neon' | Select-Object TaskName, Actions
+   Get-ScheduledTaskInfo -TaskName 'TriAD Portfolio Backup Neon'
+   ```
+
+   Installation requires the DPAPI-protected `ProtectedNeonUrl` and a receipt
+   containing `result: PASS` and `source: neon`. It creates
+   **TriAD Portfolio Backup Neon** with `-Action BackupNeon`; it does not modify
+   or replace **TriAD Portfolio Backup**. Keep the Render task until rollback
+   Issue #143 has been accepted.
+
+8. After both existing tasks are present, preview and apply the three-hour
    schedule. The script validates both task actions and their interactive,
    limited principals, then changes **triggers only**; actions, accounts and
    existing task settings (including wake behavior) are preserved:
@@ -122,7 +138,7 @@ syncing. This is a best-effort PC schedule, not managed cloud backup.
    - Render: **00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00**.
    - Neon: **00:20, 03:20, 06:20, 09:20, 12:20, 15:20, 18:20, 21:20**.
 
-8. Review retention in dry-run mode before enabling its daily task:
+9. Review retention in dry-run mode before enabling its daily task:
 
    ```powershell
    .\scripts\backup\portfolio-backup.ps1 -Action Retention

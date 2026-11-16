@@ -80,7 +80,8 @@ jobs:
 
             $script:registeredTask = $null
             function Get-ScheduledTask {
-              param([string]$TaskName, [string]$ErrorAction)
+              [CmdletBinding()]
+              param([string]$TaskName)
               if ($TaskName -eq 'TriAD Portfolio Backup') {
                 return [pscustomobject]@{ TaskName = $TaskName; Marker = 'existing-render-task' }
               }

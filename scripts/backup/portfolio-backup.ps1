@@ -3,6 +3,8 @@ param(
     [ValidateSet('Setup', 'SetupNeon', 'Backup', 'BackupNeon', 'Verify', 'InstallTask', 'RemoveTask', 'SetRecurringSchedule', 'Retention', 'InstallRetentionTask', 'RemoveRetentionTask')]
     [string]$Action,
     [string]$Archive,
+    [ValidateSet('render', 'neon')]
+    [string]$Source = 'render',
     [switch]$Apply
 )
 $ErrorActionPreference = 'Stop'
@@ -13,6 +15,7 @@ $scriptPath = $PSCommandPath
 $nodeScript = Join-Path $PSScriptRoot 'portfolio-backup.cjs'
 $retentionScript = Join-Path $PSScriptRoot 'portfolio-backup-retention.cjs'
 $taskName = 'TriAD Portfolio Backup'
+$neonTaskName = 'TriAD Portfolio Backup Neon'
 $retentionTaskName = 'TriAD Portfolio Backup Retention'
 $logDirectory = Join-Path $stateDirectory 'logs'
 $executionId = [guid]::NewGuid().ToString()
@@ -152,18 +155,49 @@ if ($Action -eq 'SetupNeon') {
     return
 }
 if ($Action -eq 'InstallTask') {
-    if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) { throw 'Task exists; inspect it instead of overwriting it.' }
-    if (-not (Get-ChildItem -LiteralPath $config.BackupDirectory -Filter '*.dump.enc.verified.json' -File)) {
+    $selectedTaskName = if ($Source -eq 'neon') { $neonTaskName } else { $taskName }
+    $backupAction = if ($Source -eq 'neon') { 'BackupNeon' } else { 'Backup' }
+
+    if (Get-ScheduledTask -TaskName $selectedTaskName -ErrorAction SilentlyContinue) {
+        throw ('Task already exists; inspect it instead of overwriting it: ' + $selectedTaskName)
+    }
+
+    $verifiedReceipts = @(Get-ChildItem -LiteralPath $config.BackupDirectory -Filter '*.dump.enc.verified.json' -File)
+    if ($Source -eq 'neon') {
+        if (-not $config.ProtectedNeonUrl) {
+            throw 'Run SetupNeon first; the protected Neon connection URL is missing.'
+        }
+
+        $hasNeonPassReceipt = $false
+        foreach ($receiptFile in $verifiedReceipts) {
+            try {
+                $receipt = Get-Content -LiteralPath $receiptFile.FullName -Raw | ConvertFrom-Json
+                if ($receipt.result -eq 'PASS' -and $receipt.source -eq 'neon') {
+                    $hasNeonPassReceipt = $true
+                    break
+                }
+            }
+            catch {
+                # Invalid receipts are not installation evidence.
+            }
+        }
+        if (-not $hasNeonPassReceipt) {
+            throw 'A verified Neon receipt with result PASS and source neon is required before installing the Neon task.'
+        }
+    }
+    elseif ($verifiedReceipts.Count -eq 0) {
         throw 'Run a successful Backup/Verify before installing the task.'
     }
+
     # Interactive principal: no account password saved, runs only while logged on.
     $taskAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
-        -Argument ('-NoProfile -File "' + $scriptPath + '" -Action Backup') -WorkingDirectory $PSScriptRoot
-    $trigger = New-ScheduledTaskTrigger -Daily -At '20:30'
+        -Argument ('-NoProfile -File "' + $scriptPath + '" -Action ' + $backupAction) -WorkingDirectory $PSScriptRoot
+    $triggerTime = if ($Source -eq 'neon') { '21:00' } else { '20:30' }
+    $trigger = New-ScheduledTaskTrigger -Daily -At $triggerTime
     $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
-    Register-ScheduledTask -TaskName $taskName -Action $taskAction -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
-    Write-Host 'Daily 20:30 LOCAL time. Requires logged-in user, running Docker and network access. This is best effort.'
+    Register-ScheduledTask -TaskName $selectedTaskName -Action $taskAction -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+    Write-Host ('Daily ' + $triggerTime + ' LOCAL time task installed for ' + $Source + '. Requires logged-in user, running Docker and network access. This is best effort.')
     return
 }
 if ($Action -eq 'InstallRetentionTask') {

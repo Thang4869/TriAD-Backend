@@ -57,6 +57,94 @@ jobs:
             $env:LOCALAPPDATA = $original
             Remove-Item -LiteralPath $temporary -Recurse -Force
           }
+      - name: Exercise Neon task installation with mocked Task Scheduler
+        shell: powershell
+        run: |
+          $original = $env:LOCALAPPDATA
+          $temporary = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString())
+          $stateDirectory = Join-Path $temporary 'TriAD-Backup'
+          $archiveDirectory = Join-Path $temporary 'archives'
+          New-Item -ItemType Directory -Path $stateDirectory, $archiveDirectory -Force | Out-Null
+          $env:LOCALAPPDATA = $temporary
+          try {
+            $settingsPath = Join-Path $stateDirectory 'settings.json'
+            $settings = @{
+              ProtectedUrl = 'render-protected-fixture'
+              ProtectedNeonUrl = $null
+              KeyPath = (Join-Path $stateDirectory 'recovery.key')
+              BackupDirectory = $archiveDirectory
+            }
+            $settings | ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding UTF8
+            $receiptPath = Join-Path $archiveDirectory 'neon-fixture.dump.enc.verified.json'
+            @{ result = 'PASS'; source = 'neon' } | ConvertTo-Json | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+
+            $script:registeredTask = $null
+            function Get-ScheduledTask {
+              param([string]$TaskName, [string]$ErrorAction)
+              if ($TaskName -eq 'TriAD Portfolio Backup') {
+                return [pscustomobject]@{ TaskName = $TaskName; Marker = 'existing-render-task' }
+              }
+              return $null
+            }
+            function New-ScheduledTaskAction {
+              param($Execute, $Argument, $WorkingDirectory)
+              return [pscustomobject]@{ Execute = $Execute; Arguments = $Argument; WorkingDirectory = $WorkingDirectory }
+            }
+            function New-ScheduledTaskTrigger {
+              param([switch]$Daily, $At)
+              return [pscustomobject]@{ At = $At }
+            }
+            function New-ScheduledTaskPrincipal {
+              param($UserId, $LogonType, $RunLevel)
+              return [pscustomobject]@{ UserId = $UserId; LogonType = $LogonType; RunLevel = $RunLevel }
+            }
+            function New-ScheduledTaskSettingsSet {
+              param($StartWhenAvailable, $MultipleInstances, $ExecutionTimeLimit)
+              return [pscustomobject]@{ StartWhenAvailable = $StartWhenAvailable; MultipleInstances = $MultipleInstances }
+            }
+            function Register-ScheduledTask {
+              param($TaskName, $Action, $Trigger, $Principal, $Settings)
+              $script:registeredTask = [pscustomobject]@{
+                TaskName = $TaskName
+                Action = $Action
+                Trigger = $Trigger
+                Principal = $Principal
+                Settings = $Settings
+              }
+            }
+
+            $rejectedMissingUrl = $false
+            try {
+              & ./scripts/backup/portfolio-backup.ps1 -Action InstallTask -Source neon
+            } catch {
+              $rejectedMissingUrl = $true
+            }
+            if (-not $rejectedMissingUrl) { throw 'Neon task accepted missing ProtectedNeonUrl' }
+            if ($script:registeredTask) { throw 'Task was registered without ProtectedNeonUrl' }
+
+            $settings.ProtectedNeonUrl = 'neon-protected-fixture'
+            $settings | ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding UTF8
+            @{ result = 'PASS'; source = 'render' } | ConvertTo-Json | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+            $rejectedWrongSource = $false
+            try {
+              & ./scripts/backup/portfolio-backup.ps1 -Action InstallTask -Source neon
+            } catch {
+              $rejectedWrongSource = $true
+            }
+            if (-not $rejectedWrongSource) { throw 'Neon task accepted a Render receipt' }
+            if ($script:registeredTask) { throw 'Task was registered without a Neon PASS receipt' }
+
+            @{ result = 'PASS'; source = 'neon' } | ConvertTo-Json | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+            & ./scripts/backup/portfolio-backup.ps1 -Action InstallTask -Source neon
+            if ($script:registeredTask.TaskName -ne 'TriAD Portfolio Backup Neon') { throw 'Incorrect Neon task name' }
+            if ($script:registeredTask.Action.Arguments -notmatch '-Action BackupNeon') { throw 'Neon task does not invoke BackupNeon' }
+            if ($script:registeredTask.Trigger.At -ne '21:00') { throw 'Incorrect initial Neon task time' }
+            $renderTask = Get-ScheduledTask -TaskName 'TriAD Portfolio Backup'
+            if ($renderTask.Marker -ne 'existing-render-task') { throw 'Existing Render task was changed or lost' }
+          } finally {
+            $env:LOCALAPPDATA = $original
+            Remove-Item -LiteralPath $temporary -Recurse -Force
+          }
   disposable-roundtrip:
     runs-on: ubuntu-latest
     timeout-minutes: 8

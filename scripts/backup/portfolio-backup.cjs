@@ -179,7 +179,7 @@ function restoreTargetEnvironment(value) {
     PGCONNECT_TIMEOUT: "15",
   };
   if (channelBinding) env.PGCHANNELBINDING = channelBinding;
-  if (Object.values(env).some((x) => /[\\r\\n\\0]/.test(x)))
+  if (Object.values(env).some((x) => /[\r\n\0]/.test(x)))
     throw new Error("Invalid restore destination environment value");
   return env;
 }

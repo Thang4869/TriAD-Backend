@@ -163,6 +163,7 @@ function restoreTargetEnvironment(value) {
     !url.password ||
     url.hash ||
     queryKeys.some((x) => !["sslmode", "channel_binding"].includes(x)) ||
+    new Set(queryKeys).size !== queryKeys.length ||
     sslMode !== "require" ||
     (channelBinding &&
       !["require", "prefer", "disable"].includes(channelBinding))
@@ -422,15 +423,19 @@ async function run(mode, env = process.env, options = {}) {
         { mode: 0o600 },
       );
       stage("remote-restore", "Restoring verified Render archive to the dedicated Neon restore branch");
-      docker([
-        "run", "--rm", "--network", "bridge",
-        "--env-file", targetEnv,
-        "--mount", "type=bind,source=" + restored + ",target=/restore.dump,readonly",
-        IMAGE, "pg_restore",
-        "--dbname=triad_staging",
-        "--clean", "--if-exists", "--no-owner", "--no-acl", "--exit-on-error",
-        "/restore.dump",
-      ]);
+      const restoreFd = fs.openSync(restored, "r");
+      try {
+        docker([
+          "run", "--rm", "-i", "--network", "bridge",
+          "--env-file", targetEnv,
+          IMAGE, "pg_restore",
+          "--dbname=triad_staging",
+          "--clean", "--if-exists", "--no-owner", "--no-acl", "--exit-on-error",
+          "-",
+        ], { stdio: [restoreFd, "pipe", "pipe"] });
+      } finally {
+        fs.closeSync(restoreFd);
+      }
       stage("schema-verification", "Checking restored Neon schema and migrations");
       const remoteCheck = docker([
         "run", "--rm", "--network", "bridge",

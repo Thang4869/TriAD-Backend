@@ -2,6 +2,8 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const {
   sourceEnvironment,
+  restoreTargetEnvironment,
+  assertRenderRestoreArchive,
   buildEvidence,
   classifyError,
   redact,
@@ -69,6 +71,65 @@ test("validates the independent Neon source without weakening Render guards", ()
   assert.throws(() =>
     sourceEnvironment(neon.replace("?sslmode=require", ""), "neon"),
   );
+});
+
+
+test("accepts only the dedicated Neon restore branch as a writable target", () => {
+  const target =
+    "postgresql://triad_staging_owner:secret@ep-withered-water-ao6migqk.c-2.ap-southeast-1.aws.neon.tech/triad_staging?sslmode=require&channel_binding=require";
+  const env = restoreTargetEnvironment(target);
+  assert.equal(env.PGHOST, "ep-withered-water-ao6migqk.c-2.ap-southeast-1.aws.neon.tech");
+  assert.equal(env.PGDATABASE, "triad_staging");
+  assert.equal(env.PGUSER, "triad_staging_owner");
+  assert.equal(env.PGSSLMODE, "require");
+  assert.equal(env.PGCHANNELBINDING, "require");
+  assert.equal(env.PGOPTIONS, undefined);
+
+  for (const value of [
+    target.replace("ep-withered-water-ao6migqk.c-", "ep-withered-water-ao6migqk-pooler.c-"),
+    target.replace("ep-withered-water-ao6migqk", "ep-small-frog-ao3ock8j"),
+    target.replace("/triad_staging?", "/production?"),
+    target.replace("triad_staging_owner", "triad_staging"),
+    target.replace("sslmode=require", "sslmode=disable"),
+    target.replace("&channel_binding=require", "&options=unsafe"),
+    target.replace(".tech/", ".tech:5433/"),
+    target.replace("?sslmode=require&channel_binding=require", "?channel_binding=require"),
+  ]) assert.throws(() => restoreTargetEnvironment(value));
+});
+
+test("requires a matching PASS Render archive receipt before remote restore", () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "triad-render-restore-"));
+  const archivePath = path.join(temporary, "source.dump.enc");
+  const receiptPath = archivePath + ".verified.json";
+  const bytes = Buffer.from("authenticated-encrypted-archive-fixture");
+  fs.writeFileSync(archivePath, bytes);
+  const receipt = {
+    result: "PASS",
+    source: "render",
+    database: "triad_staging",
+    postgresMajor: 18,
+    disposableRestore: true,
+    sourceBackupAt: "2026-11-19T20:00:12.497Z",
+    sha256: require("node:crypto").createHash("sha256").update(bytes).digest("hex"),
+    archiveBytes: bytes.length,
+  };
+  try {
+    fs.writeFileSync(receiptPath, JSON.stringify(receipt));
+    assert.deepEqual(assertRenderRestoreArchive(archivePath, receiptPath), {
+      sha256: receipt.sha256,
+      archiveBytes: bytes.length,
+      sourceBackupAt: receipt.sourceBackupAt,
+    });
+    const tampered = Buffer.from(bytes);
+    tampered[0] ^= 1;
+    fs.writeFileSync(archivePath, tampered);
+    assert.throws(() => assertRenderRestoreArchive(archivePath, receiptPath));
+    fs.writeFileSync(archivePath, bytes);
+    fs.writeFileSync(receiptPath, JSON.stringify({ ...receipt, source: "neon" }));
+    assert.throws(() => assertRenderRestoreArchive(archivePath, receiptPath));
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
 });
 
 test("classifies operational failures and redacts credentials", async () => {

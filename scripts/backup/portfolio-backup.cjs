@@ -445,9 +445,9 @@ async function run(mode, env = process.env, options = {}) {
       stage("remote-restore", "Restoring verified Render archive to the dedicated Neon restore branch");
       const restoreFd = fs.openSync(restored, "r");
       try {
-        docker(buildNeonRestoreArgs(targetEnv), {
-        stdio: [restoreFd, "pipe", "pipe"],
-      });
+          docker(buildNeonRestoreArgs(targetEnv), {
+          stdio: [restoreFd, "pipe", "pipe"],
+        });
       } finally {
         fs.closeSync(restoreFd);
       }
@@ -663,6 +663,7 @@ if (require.main === module)
 module.exports = {
   sourceEnvironment,
   restoreTargetEnvironment,
+  buildNeonRestoreArgs,
   assertRenderRestoreArchive,
   localBackupFile,
   buildEvidence,

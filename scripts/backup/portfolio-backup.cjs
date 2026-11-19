@@ -455,8 +455,8 @@ async function run(mode, env = process.env, options = {}) {
             AND to_regclass('public.outbox_events') IS NOT NULL
           )::text
           || '|' || (SELECT count(*) FROM information_schema.tables
-                     WHERE table_schema='public' AND table_type='BASE TABLE')
-          || '|' || (SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL);`,
+                     WHERE table_schema='public' AND table_type='BASE TABLE')::text
+          || '|' || (SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL)::text;`,
       ]);
       const result = remoteCheck.toString().trim().split("|");
       if (result[0] !== "true" || Number(result[1]) < 1 || Number(result[2]) < 1)

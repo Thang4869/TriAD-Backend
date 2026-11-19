@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   sourceEnvironment,
   restoreTargetEnvironment,
+  buildNeonRestoreArgs,
   assertRenderRestoreArchive,
   buildEvidence,
   classifyError,
@@ -95,6 +96,16 @@ test("accepts only the dedicated Neon restore branch as a writable target", () =
     target.replace(".tech/", ".tech:5433/"),
     target.replace("?sslmode=require&channel_binding=require", "?channel_binding=require"),
   ]) assert.throws(() => restoreTargetEnvironment(value));
+});
+
+test("builds Neon pg_restore arguments to consume the archive through stdin", () => {
+  const args = buildNeonRestoreArgs("C:\\secure\\restore-target.env");
+  const restoreIndex = args.indexOf("pg_restore");
+  assert.notEqual(restoreIndex, -1);
+  assert.equal(args.includes("-"), false);
+  assert.equal(args.at(-1), "--exit-on-error");
+  assert.equal(args[restoreIndex + 1], "--dbname=triad_staging");
+  assert.equal(args[args.indexOf("--env-file") + 1], "C:\\secure\\restore-target.env");
 });
 
 test("requires a matching PASS Render archive receipt before remote restore", () => {

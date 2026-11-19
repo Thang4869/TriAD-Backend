@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Setup', 'SetupNeon', 'Backup', 'BackupNeon', 'Verify', 'InstallTask', 'RemoveTask', 'SetRecurringSchedule', 'Retention', 'InstallRetentionTask', 'RemoveRetentionTask')]
+    [ValidateSet('Setup', 'SetupNeon', 'Backup', 'BackupNeon', 'RestoreNeon', 'Verify', 'InstallTask', 'RemoveTask', 'SetRecurringSchedule', 'Retention', 'InstallRetentionTask', 'RemoveRetentionTask')]
     [string]$Action,
     [string]$Archive,
     [ValidateSet('render', 'neon')]
@@ -233,7 +233,7 @@ if ($Action -eq 'Retention') {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     return
 }
-$names = @('PORTFOLIO_BACKUP_DATABASE_URL', 'PORTFOLIO_BACKUP_SOURCE', 'PORTFOLIO_BACKUP_KEY_FILE', 'PORTFOLIO_BACKUP_DIRECTORY', 'PORTFOLIO_BACKUP_ARCHIVE', 'PORTFOLIO_BACKUP_FIXTURE', 'PORTFOLIO_BACKUP_NETWORK')
+$names = @('PORTFOLIO_BACKUP_DATABASE_URL', 'PORTFOLIO_BACKUP_SOURCE', 'PORTFOLIO_BACKUP_KEY_FILE', 'PORTFOLIO_BACKUP_DIRECTORY', 'PORTFOLIO_BACKUP_ARCHIVE', 'PORTFOLIO_BACKUP_FIXTURE', 'PORTFOLIO_BACKUP_NETWORK', 'PORTFOLIO_BACKUP_RESTORE_DATABASE_URL', 'PORTFOLIO_BACKUP_RESTORE_TARGET')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $nodeExitCode = 0
@@ -244,10 +244,15 @@ try {
     $env:PORTFOLIO_BACKUP_NETWORK = $null
     $env:PORTFOLIO_BACKUP_KEY_FILE = $config.KeyPath
     $env:PORTFOLIO_BACKUP_DIRECTORY = $config.BackupDirectory
-    if ($Action -in @('Backup', 'BackupNeon')) {
-        $sourceConfig = if ($Action -eq 'BackupNeon') { 'ProtectedNeonUrl' } else { 'ProtectedUrl' }
+    if ($Action -in @('Backup', 'BackupNeon', 'RestoreNeon')) {
+        if ($Action -eq 'RestoreNeon' -and -not $Archive) {
+            throw 'Provide -Archive with the full verified Render archive path.'
+        }
+        $sourceConfig = if ($Action -in @('BackupNeon', 'RestoreNeon')) { 'ProtectedNeonUrl' } else { 'ProtectedUrl' }
         if (-not $config.$sourceConfig) { throw ('Run SetupNeon first for ' + $Action + '.') }
-        $env:PORTFOLIO_BACKUP_SOURCE = if ($Action -eq 'BackupNeon') { 'neon' } else { 'render' }
+        if ($Action -ne 'RestoreNeon') {
+            $env:PORTFOLIO_BACKUP_SOURCE = if ($Action -eq 'BackupNeon') { 'neon' } else { 'render' }
+        }
         $secret = ConvertTo-SecureString $config.$sourceConfig
         $pointer = [IntPtr]::Zero
 
@@ -261,8 +266,19 @@ try {
             }
             $secret.Dispose()
         }
-        Write-BackupLog 'INFO' 'execution' 'Starting Node backup process.'
-        & $nodeCommand $nodeScript backup
+
+        if ($Action -eq 'RestoreNeon') {
+            $env:PORTFOLIO_BACKUP_RESTORE_DATABASE_URL = $env:PORTFOLIO_BACKUP_DATABASE_URL
+            $env:PORTFOLIO_BACKUP_DATABASE_URL = $null
+            $env:PORTFOLIO_BACKUP_RESTORE_TARGET = 'triad-render-restore-20261120'
+            $env:PORTFOLIO_BACKUP_ARCHIVE = $Archive
+            Write-BackupLog 'INFO' 'execution' 'Starting guarded Neon restore process.'
+            & $nodeCommand $nodeScript restore-neon
+        }
+        else {
+            Write-BackupLog 'INFO' 'execution' 'Starting Node backup process.'
+            & $nodeCommand $nodeScript backup
+        }
     } else {
         if (-not $Archive) { throw 'Provide -Archive with the full encrypted backup path.' }
         $env:PORTFOLIO_BACKUP_DATABASE_URL = $null

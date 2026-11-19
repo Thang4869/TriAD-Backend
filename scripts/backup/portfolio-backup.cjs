@@ -211,6 +211,26 @@ function assertRenderRestoreArchive(archivePath, receiptPath) {
   return { sha256: digest, archiveBytes: bytes, sourceBackupAt: evidence.sourceBackupAt || null };
 }
 
+function buildNeonRestoreArgs(targetEnv) {
+  return [
+    "run",
+    "--rm",
+    "-i",
+    "--network",
+    "bridge",
+    "--env-file",
+    targetEnv,
+    IMAGE,
+    "pg_restore",
+    "--dbname=triad_staging",
+    "--clean",
+    "--if-exists",
+    "--no-owner",
+    "--no-acl",
+    "--exit-on-error",
+  ];
+}
+
 function buildEvidence({
   mode,
   sourceName,
@@ -425,14 +445,9 @@ async function run(mode, env = process.env, options = {}) {
       stage("remote-restore", "Restoring verified Render archive to the dedicated Neon restore branch");
       const restoreFd = fs.openSync(restored, "r");
       try {
-        docker([
-          "run", "--rm", "-i", "--network", "bridge",
-          "--env-file", targetEnv,
-          IMAGE, "pg_restore",
-          "--dbname=triad_staging",
-          "--clean", "--if-exists", "--no-owner", "--no-acl", "--exit-on-error",
-          "-",
-        ], { stdio: [restoreFd, "pipe", "pipe"] });
+          docker(buildNeonRestoreArgs(targetEnv), {
+          stdio: [restoreFd, "pipe", "pipe"],
+        });
       } finally {
         fs.closeSync(restoreFd);
       }
@@ -648,6 +663,7 @@ if (require.main === module)
 module.exports = {
   sourceEnvironment,
   restoreTargetEnvironment,
+  buildNeonRestoreArgs,
   assertRenderRestoreArchive,
   localBackupFile,
   buildEvidence,

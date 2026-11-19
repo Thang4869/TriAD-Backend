@@ -8,6 +8,7 @@ const { archive } = require("../acceptance/recovery-archive.cjs");
 
 const HOST = "dpg-dbcbq8ff3r2c739hbi3g-a.singapore-postgres.render.com";
 const NEON_HOST = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+neon\.tech$/i;
+const RESTORE_NEON_HOST = "ep-withered-water-ao6migqk.c-2.ap-southeast-1.aws.neon.tech";
 const IMAGE = "postgres:18-alpine";
 const LOG_RETENTION = 14;
 
@@ -148,6 +149,67 @@ function sourceEnvironment(value, sourceName = "render", fixture = false) {
     throw new Error("Invalid environment value");
   return env;
 }
+function restoreTargetEnvironment(value) {
+  const url = new URL(value);
+  const queryKeys = [...url.searchParams.keys()];
+  const sslMode = url.searchParams.get("sslmode");
+  const channelBinding = url.searchParams.get("channel_binding");
+  if (
+    !["postgres:", "postgresql:"].includes(url.protocol) ||
+    url.hostname !== RESTORE_NEON_HOST ||
+    (url.port && url.port !== "5432") ||
+    url.pathname !== "/triad_staging" ||
+    decodeURIComponent(url.username) !== "triad_staging_owner" ||
+    !url.password ||
+    url.hash ||
+    queryKeys.some((x) => !["sslmode", "channel_binding"].includes(x)) ||
+    sslMode !== "require" ||
+    (channelBinding &&
+      !["require", "prefer", "disable"].includes(channelBinding))
+  )
+    throw new Error("Unexpected Neon restore destination");
+  const env = {
+    PGHOST: url.hostname,
+    PGPORT: url.port || "5432",
+    PGDATABASE: "triad_staging",
+    PGUSER: "triad_staging_owner",
+    PGPASSWORD: decodeURIComponent(url.password),
+    PGSSLMODE: "require",
+    PGCONNECT_TIMEOUT: "15",
+  };
+  if (channelBinding) env.PGCHANNELBINDING = channelBinding;
+  if (Object.values(env).some((x) => /[\\r\\n\\0]/.test(x)))
+    throw new Error("Invalid restore destination environment value");
+  return env;
+}
+
+function assertRenderRestoreArchive(archivePath, receiptPath) {
+  if (!fs.existsSync(receiptPath))
+    throw new Error("A verified Render archive receipt is required");
+  let evidence;
+  try {
+    evidence = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+  } catch {
+    throw new Error("Render archive receipt is invalid");
+  }
+  const digest = crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(archivePath))
+    .digest("hex");
+  const bytes = fs.statSync(archivePath).size;
+  if (
+    evidence.result !== "PASS" ||
+    evidence.source !== "render" ||
+    evidence.database !== "triad_staging" ||
+    evidence.postgresMajor !== 18 ||
+    evidence.disposableRestore !== true ||
+    evidence.sha256 !== digest ||
+    evidence.archiveBytes !== bytes
+  )
+    throw new Error("Selected archive is not a matching verified Render backup");
+  return { sha256: digest, archiveBytes: bytes, sourceBackupAt: evidence.sourceBackupAt || null };
+}
+
 function buildEvidence({
   mode,
   sourceName,
@@ -241,8 +303,8 @@ async function run(mode, env = process.env, options = {}) {
   let fixture;
   const sourceName = env.PORTFOLIO_BACKUP_SOURCE || "render";
   try {
-    if (!["backup", "verify"].includes(mode))
-      throw new Error("Choose backup or verify");
+    if (!["backup", "verify", "restore-neon"].includes(mode))
+      throw new Error("Choose backup, verify or restore-neon");
     key = existingOutsideRepo(env.PORTFOLIO_BACKUP_KEY_FILE);
     if (!/^[a-f0-9]{64}$/.test(fs.readFileSync(key, "utf8").trim()))
       throw new Error("Invalid recovery key");
@@ -345,14 +407,84 @@ async function run(mode, env = process.env, options = {}) {
     }
     const restored = path.join(temporary, "restored.dump");
     await archive("decrypt", encrypted, restored, key);
-    // The restore destination is always a fresh, randomly named local container.
-    // No target URL, network exposure, application, worker or relay is accepted.
-    const targetEnv = path.join(temporary, "target.env");
+    if (mode === "restore-neon") {
+      if (env.PORTFOLIO_BACKUP_RESTORE_TARGET !== "triad-render-restore-20261120")
+        throw new Error("Explicit Neon restore target confirmation is required");
+      const receipt = assertRenderRestoreArchive(encrypted, receiptPath);
+      const targetEnvValues = restoreTargetEnvironment(env.PORTFOLIO_BACKUP_RESTORE_DATABASE_URL);
+      const targetEnv = path.join(temporary, "restore-target.env");
+      fs.writeFileSync(
+        targetEnv,
+        Object.entries(targetEnvValues).map(([k, v]) => k + "=" + v).join("\\n") + "\\n",
+        { mode: 0o600 },
+      );
+      stage("remote-restore", "Restoring verified Render archive to the dedicated Neon restore branch");
+      docker([
+        "run", "--rm", "--network", "bridge",
+        "--env-file", targetEnv,
+        "--mount", "type=bind,source=" + restored + ",target=/restore.dump,readonly",
+        IMAGE, "pg_restore",
+        "--dbname=triad_staging",
+        "--clean", "--if-exists", "--no-owner", "--no-acl", "--exit-on-error",
+        "/restore.dump",
+      ]);
+      stage("schema-verification", "Checking restored Neon schema and migrations");
+      const remoteCheck = docker([
+        "run", "--rm", "--network", "bridge",
+        "--env-file", targetEnv,
+        IMAGE, "psql", "--no-psqlrc", "--no-password",
+        "--dbname=triad_staging", "-At", "-v", "ON_ERROR_STOP=1",
+        "-c",
+        `SELECT
+          (
+            EXISTS (SELECT 1 FROM "_prisma_migrations" WHERE finished_at IS NOT NULL)
+            AND NOT EXISTS (
+              SELECT 1 FROM "_prisma_migrations"
+              WHERE finished_at IS NULL AND rolled_back_at IS NULL
+            )
+            AND to_regclass('public.users') IS NOT NULL
+            AND to_regclass('public.orders') IS NOT NULL
+            AND to_regclass('public.outbox_events') IS NOT NULL
+          )::text
+          || '|' || (SELECT count(*) FROM information_schema.tables
+                     WHERE table_schema='public' AND table_type='BASE TABLE')
+          || '|' || (SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL);`,
+      ]);
+      const result = remoteCheck.toString().trim().split("|");
+      if (result[0] !== "true" || Number(result[1]) < 1 || Number(result[2]) < 1)
+        throw new Error("Neon restored schema verification failed");
+      const restoreReceipt = {
+        result: "PASS",
+        source: "render",
+        target: "triad-render-restore-20261120",
+        targetHost: RESTORE_NEON_HOST,
+        database: "triad_staging",
+        restoredAt: new Date().toISOString(),
+        sourceBackupAt: receipt.sourceBackupAt,
+        sha256: receipt.sha256,
+        archiveBytes: receipt.archiveBytes,
+        postgresMajor: 18,
+        schemaVerified: true,
+        publicTables: Number(result[1]),
+        completedMigrations: Number(result[2]),
+      };
+      const restoreReceiptPath = encrypted + ".restored-neon.json";
+      if (fs.existsSync(restoreReceiptPath))
+        throw new Error("A Neon restore receipt already exists; refusing an unreviewed repeat restore");
+      fs.writeFileSync(restoreReceiptPath, JSON.stringify(restoreReceipt, null, 2), {
+        flag: "wx",
+        mode: 0o600,
+      });
+      console.log("PASS: verified Render archive restored and schema checked on the dedicated Neon restore branch");
+      stage("cleanup", "Remote Neon restore completed successfully");
+      return { encrypted, evidence: restoreReceipt };
+    } else {
+      const targetEnv = path.join(temporary, "target.env");
     fs.writeFileSync(
       targetEnv,
-      "POSTGRES_USER=test\nPOSTGRES_PASSWORD=" +
+      "POSTGRES_USER=test\n  POSTGRES_PASSWORD=" +
         crypto.randomBytes(24).toString("hex") +
-        "\nPOSTGRES_DB=triad_portfolio_verify\n",
+        "\n  POSTGRES_DB=triad_portfolio_verify\n  ",
       { mode: 0o600 },
     );
     targetStarted = true;
@@ -448,7 +580,8 @@ async function run(mode, env = process.env, options = {}) {
     ]);
     if (verified.toString().trim() !== "t")
       throw new Error("Restored schema verification failed");
-    stage("schema-verification", "Required schema verified");
+
+    }
     const evidence = buildEvidence({
       mode,
       sourceName,
@@ -507,6 +640,8 @@ if (require.main === module)
   });
 module.exports = {
   sourceEnvironment,
+  restoreTargetEnvironment,
+  assertRenderRestoreArchive,
   localBackupFile,
   buildEvidence,
   run,

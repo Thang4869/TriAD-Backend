@@ -86,15 +86,18 @@ remains: explicit Redis/frontend URLs, production CORS and JWT/TOTP/SMTP/Cloudin
 requirements; test defaults live only in `tests/setup-env.ts`. `API_EDGE_SECRET`
 is optional for direct/local modes, and if configured requires `TRUST_PROXY=0`.
 
-**Current status (2026-11-20):** Issue #141 remains open. This document does
-not contain a fresh 20 Nov npm audit result, so the historical zero counts
-above are not evidence of a clean current dependency graph. Re-run production
-and full-graph audits on the exact candidate commit, attach both JSON reports,
-and verify the blocking gate before closing the issue. Staging Cloudinary
-acceptance and hosted OTLP receiver/span proof remain separate acceptance
-items. This documentation update does not change packages, lockfiles,
-Render/Vercel configuration, or deployment state, and does not prove external
-SMTP delivery.
+**Current status (2026-11-20):** Issue #141 remains open. Backend main CI run
+[#44655433237](https://github.com/Thang4869/TriAD-Backend/actions/runs/44655433237)
+passed the configured high/critical dependency audit gate. This does not prove
+zero vulnerabilities across all severities, and the all-severity JSON artifact
+has not been reviewed for this update. Re-run production and full-graph audits
+on the exact candidate commit, attach both JSON reports, and inspect the full
+output before making a current vulnerability-count claim. Cloudinary staging
+upload acceptance passed on 24 Oct; hosted OTLP receiver/span proof remains
+outstanding. Hosted tracing remains disabled (`ENABLE_TRACING=false`) until
+that evidence is accepted. This documentation update changes no packages,
+lockfiles, hosting configuration or deployment state and does not prove SMTP
+delivery.
 
 ## Reproduce
 

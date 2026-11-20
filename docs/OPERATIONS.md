@@ -1,25 +1,42 @@
 # Operations Runbook
 
-## Free portfolio operating profile — 2026-11-20
+## Current staging and recovery status — 2026-11-20
 
-Owner chose no paid plans. Backup/recovery evidence and remaining acceptance
-gates are tracked in [PORTFOLIO_BACKUP.md](PORTFOLIO_BACKUP.md) and
-[RECOVERY_DRILL.md](RECOVERY_DRILL.md). The 20 Nov record includes scheduled
-Render and Neon backups at 03:00 and 03:20 ICT, a Render encrypted archive
-restored into a disposable PostgreSQL 18 container, and a Render archive
-restored and schema-checked on a dedicated Neon restore branch. These are
-distinct checks; neither establishes a seven-day recovery streak, production
-RTO/RPO, or a completed provider cutover.
+The staging database cutover to Neon is complete. The active staging application
+database is the dedicated Neon branch `triad-render-restore-20261120`, served by
+the live Render deployment `dep-dbvnl9bncjis738k178g` from backend source
+`606e9b2d218dcafe6adf474019fad0212d003065`. The previous Render PostgreSQL
+database is retained as rollback evidence/source; it is not the active app DB.
+The cutover and schema acceptance covered 19 tables and 16 Prisma migrations,
+with health/readiness, catalog, CSRF, cart and synthetic COD checkout smoke
+checks passing.
 
-Coverage from 14–19 Nov was uneven because the Windows host was not running
-during every scheduled window. The 09:20 ICT Neon attempt remains pending owner
-confirmation in the recorded evidence. The Render Free PostgreSQL expiry
-warning is recorded separately; current provider state must be checked before
-relying on that resource. No production datastore, plan, ACL, secret, or
-schedule is changed by this runbook update. Free Redis remains nonpersistent;
-no production RTO/RPO is promised. Issue #143 remains open until its stated
-backup streak and PostgreSQL replacement/export acceptance criteria are met. Full-runtime CI PR #227 passed;
-issue #143 remains open for the actual free-demo backup evidence.
+**Cutover completion is not backup/recovery acceptance.** Issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143)
+remains open. Still required: a fresh encrypted backup of the active Neon branch,
+a disposable restore of that post-cutover archive, repeatable unattended
+scheduled-run evidence, and owner confirmation of the 09:20 ICT Neon attempt.
+Coverage on 14–19 Nov was uneven because the Windows host was off during some
+scheduled windows. Do not infer a complete backup streak from the configured
+cadence. Free Redis persistence remains disabled/limited; no proven PITR,
+guaranteed RTO/RPO or production SLO is claimed.
+
+Latest repository heads and CI evidence:
+- Backend `main`: `8995647`; CI run [#44655433237](https://github.com/Thang4869/TriAD-Backend/actions/runs/44655433237) passed all jobs.
+- Frontend `main`: `0779307`; CI run [#44655347922](https://github.com/Thang4869/TriAD-12/actions/runs/44655347922) passed all three jobs.
+- Backend staging source remains `606e9b2`; do not confuse the deployed source SHA with the later docs-only main head.
+
+Issue [#141](https://github.com/Thang4869/TriAD-Backend/issues/141) remains open:
+Cloudinary upload acceptance passed on 24 Oct, while hosted OTLP receiver/span
+proof remains outstanding. Hosted tracing remains disabled
+(`ENABLE_TRACING=false`) until that proof is accepted. Dependency CI's
+high/critical gate passed in the latest backend run; this is not a claim of
+zero vulnerabilities at every severity. SMTP delivery and repeatable performance
+and mutation evidence remain separate acceptance items.
+
+The Render Free PostgreSQL expiry warning was recorded for 20 Nov 2026. The
+provider's final state must be checked before relying on the old resource; this
+runbook does not claim that it has expired. This documentation-only update
+changes no production resource, database, secret, schedule or hosting setting.
 
 ## Acceptance — historical snapshot 2026-10-24
 
@@ -29,33 +46,20 @@ interpreted as a current deployment, configuration, or backup status.
 
 ## Recovery evidence update — 2026-11-20
 
-- Render and Neon scheduled backups were reported at 03:00 and 03:20 ICT.
-- The Render encrypted archive passed a disposable PostgreSQL 18 restore and
-  schema verification.
-- A Render archive also passed restore and schema verification on a dedicated
-  Neon restore branch. This does not prove an independent offline-key restore
-  or a production cutover.
-- Backup coverage during 14–19 Nov was uneven because the Windows machine was
-  powered off during some scheduled windows; do not count those dates as a
-  complete eight-backup-per-day streak.
-- The 09:20 ICT Neon backup attempt is not marked successful until the owner
-  confirms its outcome.
-- Issue #143 remains open pending seven consecutive successful daily backup /
-  restore days for both sources and acceptance of the Free PostgreSQL
-  replacement/export plan.
-
-Do not change production resources or scheduled jobs as part of documentation
-maintenance.
-
-Latest verified code: backend [#225](https://github.com/Thang4869/TriAD-Backend/pull/225), main `c1ff0af`; frontend [#37](https://github.com/Thang4869/TriAD-12/pull/37) plus mandatory regression [#38](https://github.com/Thang4869/TriAD-12/pull/38), main `ac87f6f`. Render workspace/service were confirmed before changes; only the existing `triad-api-staging` service was updated.
-
-- **#140 / live ingress:** Render `dep-dbdqtrrncjis73d6rbj0` is live with the authenticated API gate and `TRUST_PROXY=0`. Canonical Vercel `dpl_A37F825mNaY4hWLPqpjTZgxNUo19` (`ac87f6f`) is READY with its matching server-only credential. Direct `/api/products` and forged edge headers return **403**; Vercel returns **200** despite forged XFF/edge inputs; `/health/live` and `/health/ready` return **200**. Private app-log correlation of native markers `TriAD-Edge-Canary/work-mode/a,b` and GitHub-hosted Playwright shows stable identities under XFF spoofing, distinct real network-source identities, and no `::1` collapse. Actual addresses/secrets are not published. Shared public NATs intentionally share IP-wide limits; the synthetic NAT fixture is labeled accordingly.
-- **Auth after rollout:** [trusted frontend main #40008818747](https://github.com/Thang4869/TriAD-12/actions/runs/40008818747) at `ac87f6f` SUCCESS: **6/6 hosted tests, zero skips**, including mandatory direct-origin rejection and the dedicated-account cookie/CSRF/refresh/logout journey. The earlier #40007506209 attempt failed with HTTP 503 after the proxy merge arrived before the canonical secret was configured; setting the server-only secret and redeploying fixed that configuration failure. The conditional direct-edge test was removed by frontend #38; skipped cases are not counted as accepted proof.
-- **Hosted 429 / source isolation:** [#40009749100](https://github.com/Thang4869/TriAD-Backend/actions/runs/40009749100) PASS: 100 accepted GETs then 429; two different forged XFF/edge inputs remain 429 (103 requests total, 15.020 s). A separate source returned 200 with 99/100 remaining at 19:14:53 UTC, while the tested source's exhausted window had not reset (47 seconds remaining at 19:14:14 UTC). Private Render log correlation confirms distinct identities. The address-free `hosted-ingress-429-evidence` artifact records counts/timing; no accounts or business data were mutated.
-- **#84 / disposable process recovery:** [CI #40002408505](https://github.com/Thang4869/TriAD-Backend/actions/runs/40002408505), `815b15c`, PASS **1,387 tests/140 files**; both real HTTP SIGKILL cases (before commit, after commit/before response) PASS with one order, one stock/version change, one OrderPlaced event and replayed identity. Redis lease is shortened only in the fixture. [B7 #40002408535](https://github.com/Thang4869/TriAD-Backend/actions/runs/40002408535) physically pauses/stops its own Redis: idempotency returns 503 after approximately one second, never runs the rejected mutation and resumes without API restart. Existing real-Redis stale-owner fencing tests also PASS.
-- **#102 / actual Compose:** [Production Compose #40002408473](https://github.com/Thang4869/TriAD-Backend/actions/runs/40002408473) PASS on the same source tree, with sanitized artifact: config, production build, migration service, collector, DB/cache/queue readiness, catalog/protected-route smoke and SIGTERM exit 0. See [runbook](PRODUCTION_COMPOSE_ACCEPTANCE.md). [Backend main CI #40007517274](https://github.com/Thang4869/TriAD-Backend/actions/runs/40007517274) also PASS.
-
-Environment changes use hosting-managed secret configuration; secret values are never committed. Vercel's production target here serves the **staging project**, not a production customer environment. The deployment remains on Free infrastructure. These results do not establish hosted checkout process-crash recovery, worker durability, real RPO/RTO, email/image delivery, or completion of #143. Historical sections below preserve their original environment/date and do not override this current evidence.
+- The staging app now uses the dedicated Neon branch
+  `triad-render-restore-20261120`; the Render PostgreSQL database is retained
+  as rollback evidence/source, not as the active app database.
+- Cutover verification covered 19 tables and 16 Prisma migrations, plus
+  health/readiness, catalog, CSRF, cart and synthetic COD checkout smoke.
+- Historical Render archive restores into disposable PostgreSQL 18 and a
+  dedicated Neon restore branch remain useful evidence, but neither is a fresh
+  post-cutover backup/restore of the active Neon branch.
+- Fresh encrypted backup of the active Neon branch and disposable restore remain
+  outstanding. The 09:20 ICT attempt is pending owner confirmation.
+- Scheduled cadence is not proof of successful unattended runs. Coverage
+  during 14–19 Nov was uneven because the Windows PC was off during some windows.
+- Free Redis persistence is disabled/limited; do not claim durable queue state,
+  PITR, guaranteed RTO/RPO or production SLO.
 
 ## Recovery gate #143 — work started 2026-10-24
 

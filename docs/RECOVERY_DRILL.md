@@ -9,10 +9,14 @@ backup/restore and Windows scheduling were subsequently exercised by the owner;
 see the dated 2026-11-20 addendum below. No production RTO/RPO or persistent
 Free Redis guarantee is claimed.
 
-**Current status (2026-11-20):** Issue #143 remains open. Local encrypted backup
-and disposable-restore evidence exists, but seven consecutive successful daily
-backup/restore days for both sources and the Free PostgreSQL replacement/export
-acceptance are not yet established by the evidence recorded here.
+**Current status (2026-11-20):** staging database cutover to dedicated Neon
+branch `triad-render-restore-20261120` is complete; the former Render PostgreSQL
+is retained as rollback evidence/source, not the active app DB. Issue #143
+remains open because a fresh encrypted backup of the active Neon branch and a
+disposable restore of that post-cutover archive are still required, alongside
+repeatable unattended scheduled-run evidence. The 09:20 ICT attempt is pending
+owner confirmation. Free Redis durability, PITR and guaranteed RTO/RPO are not
+established.
 
 **Historical baseline (2026-10-18):** The isolated PostgreSQL drill is merged and passed on `main` in [CI run #39116584480](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480) ([restore-drill job](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480/job/117643501456)). This proves the CI fixture only; deployed recovery evidence for issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143), including RTO/RPO, remains **OPEN**.
 
@@ -154,7 +158,7 @@ No paid resource, schedule, secret, IP allowlist or live datastore has been
 changed by this candidate. Keep #143 open even if the full-runtime CI passes.
 
 
-## Owner-operated backup and restore update — 2026-11-20
+## Owner-operated backup, cutover and restore update — 2026-11-20
 
 This update supersedes only the earlier statements that the first real backup
 and Windows scheduling were still pending. It preserves the historical CI and
@@ -173,17 +177,17 @@ local-drill measurements above; those measurements are not hosted RTO/RPO.
 - Backup coverage from 14–19 November was uneven because the Windows PC was
   not running during every scheduled window. The configured three-hour cadence
   must not be represented as eight successful backups on every date.
-- At the time of this update, the next Neon attempt at **09:20 ICT** was still
-  awaiting verification. Record it only after checking the actual archive and
-  its PASS receipt.
-- The recorded Render Free PostgreSQL expiry is **2026-11-20 13:24:50 UTC
-  (20:24:50 ICT)**. This file does not establish whether export, replacement,
-  cutover, or retirement subsequently occurred. Confirm the provider state
-  before relying on the old resource or following the replacement runbook.
+- The **09:20 ICT** Neon attempt remains pending owner confirmation. Record it
+  only after checking the actual archive and its PASS receipt.
+- The old Render Free PostgreSQL resource had an expiry warning for
+  **2026-11-20 13:24:50 UTC (20:24:50 ICT)**. Its final provider state is not
+  asserted here; verify the provider before relying on it. The staging app's
+  database cutover to Neon is complete, with the Render DB retained as rollback
+  evidence/source.
 
-Issue #143 remains open until the current owner-selected acceptance criteria
-are evidenced, including seven consecutive successful daily backup/restore
-days for both Render and Neon and the Free PostgreSQL replacement/export plan.
-Do not claim hosted cutover, guaranteed RTO/RPO, or durable Free Redis/worker
-state from the local disposable restore. No hosted resource or schedule was
+Issue #143 remains open until a fresh encrypted backup of the active Neon
+branch is restored into a disposable target and repeatable unattended scheduled
+runs are evidenced. Historical backup streak gaps remain; do not claim a seven-
+day streak. The completed staging cutover is distinct from full recovery
+acceptance. Do not claim guaranteed RTO/RPO or durable Free Redis/worker state. No hosted resource or schedule was
 changed by this documentation update.

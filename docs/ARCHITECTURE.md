@@ -62,7 +62,7 @@ Catalog, order history and dashboard have dedicated projection tables. Query ada
 
 ### ADR-004: Saga orchestration
 
-Saga state machines and persistence adapters exist for future payment and cancellation orchestration, but **production checkout currently uses a Serializable database transaction with transactional outbox**. The Saga is not invoked by the current production checkout request. Per-step timeout/retry and compensation are design/implementation components that require production adapter wiring and end-to-end failure tests before they can be claimed as an active production path.
+Saga state machines and persistence adapters exist for future payment and cancellation orchestration, but **production checkout currently uses a PostgreSQL ReadCommitted transaction with explicit row-level locks, conditional stock/version updates and transactional outbox**. The Saga is not invoked by the current production checkout request. Per-step timeout/retry and compensation are design/implementation components that require production adapter wiring and end-to-end failure tests before they can be claimed as an active production path.
 
 ### ADR-005: Hexagonal boundaries
 
@@ -88,8 +88,8 @@ sequenceDiagram
   participant Relay as OutboxRelay
 
   API->>Service: checkout(userId, input)
-  Service->>DB: begin Serializable transaction
-  Service->>Stock: reserve stock
+  Service->>DB: begin ReadCommitted transaction
+  Service->>Stock: lock stock rows and conditionally reserve
   Service->>DB: create order and items
   Service->>Outbox: persist domain events
   Service->>DB: clear cart

@@ -26,6 +26,10 @@ function redact(value) {
     .replace(/\b[a-f0-9]{64}\b/gi, "[REDACTED_KEY]");
 }
 
+function isNeonAttverMetadata(content) {
+  return /^\s*ALTER\s+TABLE\s+ONLY\s+public\.(?:"(?:[^"]|"")+"|[a-z_][a-z0-9_$]*)\s+ALTER\s+COLUMN\s+(?:"(?:[^"]|"")+"|[a-z_][a-z0-9_$]*)\s+SET\s*\(\s*pg_attver\s*=\s*[0-9]+\s*\);\s*$/i.test(content);
+}
+
 function stripNeonAttverMetadata(sql) {
   if (typeof sql !== "string")
     throw new TypeError("SQL input must be a string");
@@ -47,9 +51,7 @@ function stripNeonAttverMetadata(sql) {
         return true;
       }
 
-      return !/^\s*ALTER\s+TABLE\s+ONLY\s+public\._prisma_migrations\s+ALTER\s+COLUMN\s+[a-z_][a-z0-9_]*\s+SET\s*\(\s*pg_attver\s*=\s*[0-9]+\s*\);\s*$/i.test(
-        content,
-      );
+      return !isNeonAttverMetadata(content);
     })
     .join("");
 }
@@ -71,8 +73,7 @@ function stripNeonAttverMetadataFile(inputPath, outputPath) {
     let pending = Buffer.alloc(0);
     let copyData = false;
 
-    const metadataPattern =
-      /^\s*ALTER\s+TABLE\s+ONLY\s+public\._prisma_migrations\s+ALTER\s+COLUMN\s+[a-z_][a-z0-9_]*\s+SET\s*\(\s*pg_attver\s*=\s*[0-9]+\s*\);\s*$/i;
+    const metadataPattern = isNeonAttverMetadata;
 
     function processLine(line) {
       const content = line.toString("utf8").replace(/\r?\n$/, "");
@@ -90,7 +91,7 @@ function stripNeonAttverMetadataFile(inputPath, outputPath) {
         return;
       }
 
-      if (metadataPattern.test(content)) {
+      if (metadataPattern(content)) {
         diagnostics.metadataLinesRemoved += 1;
         return;
       }

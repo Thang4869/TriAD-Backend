@@ -34,6 +34,8 @@ test("strips only Neon pg_attver metadata outside COPY data", () => {
     metadataWithSpacing,
     "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN checksum SET (pg_attver=43031960);",
     "ALTER TABLE ONLY public.users ALTER COLUMN id SET (pg_attver=123);",
+    "ALTER TABLE ONLY public.admin_audit_logs ALTER COLUMN id SET (pg_attver=44023960);",
+    'ALTER TABLE ONLY public."admin_audit_logs" ALTER COLUMN "actorId" SET (pg_attver=44023960);',
     "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN id SET (fillfactor=80);",
     "COPY public._prisma_migrations (id) FROM stdin;",
     metadata,
@@ -53,7 +55,9 @@ test("strips only Neon pg_attver metadata outside COPY data", () => {
     /ALTER TABLE ONLY public\._prisma_migrations ALTER COLUMN checksum SET \(pg_attver=/,
   );
   assert.match(filtered, /CREATE TABLE public\._prisma_migrations/);
-  assert.match(filtered, /public\.users ALTER COLUMN id SET \(pg_attver=123\)/);
+  assert.doesNotMatch(filtered, /public\.users ALTER COLUMN id SET \(pg_attver=123\)/);
+  assert.doesNotMatch(filtered, /public\.admin_audit_logs ALTER COLUMN id SET \(pg_attver=44023960\)/);
+  assert.doesNotMatch(filtered, /public\."admin_audit_logs" ALTER COLUMN "actorId" SET \(pg_attver=44023960\)/);
   assert.match(filtered, /SET \(fillfactor=80\)/);
   assert.match(filtered, /COPY public\._prisma_migrations/);
   assert.match(filtered, /pg_attver=43031960/);
@@ -78,6 +82,8 @@ test("streaming filter preserves COPY data and removes only Neon metadata", () =
   const sql = [
     metadata,
     metadataWithSpacing,
+    "ALTER TABLE ONLY public.admin_audit_logs ALTER COLUMN id SET (pg_attver=44023960);",
+    'ALTER TABLE ONLY public."admin_audit_logs" ALTER COLUMN "actorId" SET (pg_attver=44023960);',
     "COPY public._prisma_migrations (id) FROM stdin;",
     metadata,
     "pg_attver=43031960",
@@ -91,7 +97,7 @@ test("streaming filter preserves COPY data and removes only Neon metadata", () =
     const diagnostics = stripNeonAttverMetadataFile(inputPath, outputPath);
 
     const filtered = fs.readFileSync(outputPath, "utf8");
-    assert.equal(diagnostics.metadataLinesRemoved, 3);
+    assert.equal(diagnostics.metadataLinesRemoved, 5);
     assert.equal(diagnostics.attverLinesRemaining, 0);
     assert.deepEqual(diagnostics.unmatchedAttverSamples, []);
     assert.equal(filtered.includes(metadataWithSpacing), false);

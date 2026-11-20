@@ -1,18 +1,18 @@
 # TriAD Backend — Work Checklist
 
-**Cập nhật:** 2026-10-24 (đối chiếu code và trình duyệt staging thực tế) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
+**Cập nhật:** 2026-11-20 (đối chiếu trạng thái GitHub và bằng chứng vận hành được cung cấp) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
 
 **Trạng thái:** `[ ]` Chưa hoàn thành · `[~]` Đang làm / đã có code nhưng thiếu nghiệm thu · `[B]` Cần môi trường, dữ liệu hoặc quyết định bổ sung. Không tự chuyển sang hoàn thành chỉ vì CI xanh. Trong lúc chờ staging cloud, có thể thực hiện `production-like` trên máy cá nhân (Docker Compose) và ghi chính xác loại môi trường.
 
 ## Làm tiếp — Hoàn tất nghiệm thu staging
 
-**Thứ tự tiếp theo:** hoàn tất lưu khóa + kế hoạch Free PostgreSQL của recovery (#143) → dependency/config (#141) → order read-after-write (#139). Proxy/Redis #140, crash/retry #84 và production Compose #102 đã có bằng chứng nghiệm thu ngày 24/10/2026; xem mục mới nhất trong OPERATIONS.md. Cookie/CSRF #90 đã nghiệm thu và đóng với bằng chứng thực tế ngày 23/10/2026. Chuẩn bị yêu cầu backup/hosting song song; OAuth/PayPal theo các mục riêng sau khi các gate checkout đã đạt.
+**Thứ tự tiếp theo:** tiếp tục recovery portfolio (#143) → dependency/config và hosted OTLP acceptance (#141) → release hygiene (#149) → portfolio/demo evidence (#150). Các issue đã đóng được theo dõi tại GitHub, không giữ lại trong checklist điều hành này. Proxy/Redis #140, crash/retry #84, production Compose #102 và Cookie/CSRF #90 đã có bằng chứng nghiệm thu; xem OPERATIONS.md.
 
 - [~] **Nghiệm thu môi trường còn lại:** Cookie/CSRF #90 đã nghiệm thu trên HTTPS (5/5 Playwright thực tế, không skipped); tiếp tục kiểm tra upload Cloudinary và worker/relay thực tế; hoàn tất recovery dưới đây. Gói Free chỉ phù hợp thử chức năng, không chứng minh độ bền queue hoặc khả năng chạy worker liên tục. [Bằng chứng staging và giới hạn hiện tại](OPERATIONS.md#deployed-staging-evidence--2026-10-22).
 
 ## P0 — Ưu tiên làm trước
 
-- [~] **[#143 — Recovery portfolio miễn phí](https://github.com/Thang4869/TriAD-Backend/issues/143):** Full-runtime recovery CI PASS (PR #227), local Windows **backup PostgreSQL Render thật → mã hóa → restore PostgreSQL 18 → kiểm tra schema PASS** ngày 24/10/2026. Task Scheduler 20:30 đã cài; chạy thử bằng `Start-ScheduledTask` trả `LastTaskResult = 0`, bản backup mới có biên nhận `PASS` (`disposableRestore = true`). **Còn thiếu:** xác nhận bản sao `recovery.key` độc lập/offline và phương án export/thay PostgreSQL Free trước **20/11/2026**. Chưa nghiệm thu độ tin cậy chạy tự động qua nhiều ngày hoặc cutover hosted; Redis Free không lưu bền. [Bằng chứng/giới hạn](PORTFOLIO_BACKUP.md).
+- [~] **[#143 — Recovery portfolio miễn phí](https://github.com/Thang4869/TriAD-Backend/issues/143):** Full-runtime recovery CI PASS (PR #227). Owner-provided evidence: Render và Neon đều có backup lúc **03:00 và 03:20 ICT ngày 20/11/2026**; archive Render đã được restore vào disposable PostgreSQL 18 và trả `PASS`. Bản sao archive và recovery key offline đã được kiểm chứng trước đó. **Còn thiếu:** chuỗi bảy ngày backup/restore liên tiếp cho cả hai nguồn và xác nhận kế hoạch export/thay PostgreSQL Free trước thời hạn 20/11. Các ngày 14–19 có khoảng trống do PC không hoạt động; lịch dự kiến không đồng nghĩa đã chạy đủ. Chưa có bằng chứng cutover hosted hoặc RTO/RPO được đo. Redis Free không lưu bền. [Bằng chứng/giới hạn](PORTFOLIO_BACKUP.md).
 
 Đã nghiệm thu/đóng: [Backend #90](https://github.com/Thang4869/TriAD-Backend/issues/90) và [Frontend #23](https://github.com/Thang4869/TriAD-12/issues/23). Source-only cookie/CSRF: backend PR #217–#219; live Render `dep-dbdm9n8ae00c738mhi10` (`d986ced`) và frontend Vercel (`7e345a3`). [Playwright trên HTTPS thật #39967055295](https://github.com/Thang4869/TriAD-12/actions/runs/39967055295) **5/5 PASS, 0 SKIPPED**, cả 3 jobs PASS; nội dung và giới hạn nghiệm thu [ghi tại OPERATIONS.md](OPERATIONS.md#deployed-https-cookie-and-csrf-acceptance--2026-10-23). Bằng chứng gate proxy, Redis outage và nghiệm thu lại cookie sau rollout được ghi trong mục 24/10/2026 tại OPERATIONS.md.
 
@@ -20,8 +20,6 @@
 
 - [~] **[#141 — Dependency/config](https://github.com/Thang4869/TriAD-Backend/issues/141):** Config fail-closed đã merge ở PR #230. Đợt tiếp theo nâng Multer 2.5.0, Zod 4.6.7 (kèm migration DTO/error API), Nodemailer 10.2.1, cập nhật transitive production và tooling ESLint/Testcontainers/Vitest bằng npm. Audit local ngày **24/10/2026: production và full graph đều 0 lỗ hổng**. Kiểm thử multipart/Sharp, SMTP sink và phân trang; cần CI đúng PR head nghiệm thu integration/container/FE↔BE. **Còn thiếu:** upload Cloudinary và OTLP staging thực tế; chưa triển khai dependency mới lên hosting. Testcontainers yêu cầu Node >=22.22. [Audit và giới hạn](DEPENDENCY_SECURITY_AUDIT.md).
 
-- [~] **[#148 — OpenAPI/FE route](https://github.com/Thang4869/TriAD-Backend/issues/148):** Thêm schema request/response và negative-case contract cho auth/product/cart/checkout/orders; xác định source of truth Zod; chuyển FE sang canonical `/api/orders` nếu còn alias, xác minh FE↔BE E2E trước deprecation.
-- [ ] **[#139 — Order read-after-write](https://github.com/Thang4869/TriAD-Backend/issues/139):** Quyết định eventual consistency hay read-your-writes; định nghĩa độ trễ cho phép, bounded authoritative fallback (nếu cần), UI pending state và behavior khi projection lỗi; integration test delay ngay sau checkout.
 
 ## OAuth — Google trước, Facebook sau; chuẩn bị tài khoản song song
 
@@ -33,9 +31,6 @@
 
 - [B] **PayPal — chuẩn bị bên ngoài:** Tạo REST app sandbox và tài khoản người mua/người bán thử; lưu credentials riêng. Đăng ký webhook khi đã có endpoint HTTPS thực tế.
 - [ ] **PayPal — triển khai sau các P0 checkout:** Hiện chỉ hỗ trợ COD, chưa có PayPal adapter/API. Thiết kế create/capture/refund và trạng thái thanh toán; xác thực chữ ký webhook, idempotency và đối chiếu order/amount/currency; kiểm thử hủy, lỗi/timeout, webhook trùng/đến muộn và không nhân đôi order/trừ stock. Đây là phần cần viết code, không chỉ chờ credentials; chưa tự wire Saga vào runtime khi chưa có bằng chứng end-to-end.
-- [~] **[#144 — k6 contention](https://github.com/Thang4869/TriAD-Backend/issues/144):** Đã có benchmark scripts và đã thực hiện lần benchmark đầu tiên với baseline checkout và hot-product concurrent scenarios; đã ghi dataset, máy/CPU/RAM, duration, p50/p95/p99, throughput, conflict/retry/error rate và threshold. Đang sửa lỗi cô lập scenario (namespace biến môi trường và idempotency key); chưa nghiệm thu benchmark sau bản vá. Giữ Issue #144 mở.
-- [ ] **[#145 — Mutation testing](https://github.com/Thang4869/TriAD-Backend/issues/145):** Thiết lập mutation runner phù hợp Vitest, giới hạn ban đầu ở Money/Order/Cart/Product và core services; báo cáo surviving mutants, threshold sau baseline và CI artifact.
-- [ ] **[#147 — Admin audit](https://github.com/Thang4869/TriAD-Backend/issues/147):** Xác định admin actions; lưu actor/action/target/outcome/request ID không chứa token/PII dư; test authorization, audit write failure, retention và authorized export.
 - [~] **[#149 — Release hygiene](https://github.com/Thang4869/TriAD-Backend/issues/149):** Kiểm tra SECURITY/CONTRIBUTING/LICENSE/.env.example/CHANGELOG, onboarding sạch, metadata/topics, thực hiện release/tag dry-run hoặc release thật với SHA và SemVer được xác minh.
 - [B] **[#150 — Portfolio/demo](https://github.com/Thang4869/TriAD-Backend/issues/150):** Public HTTPS demo (có thể dùng subdomain miễn phí), protected/static OpenAPI, kiểm tra login→product→cart→checkout và rollback; chỉ đưa test counts, coverage, k6, RTO/RPO vào CV nếu có artifact tái lập.
 
@@ -48,7 +43,7 @@
 
 ## Điều kiện đóng mục
 
-Đóng từng mục khi **tất cả acceptance criteria của issue** được kiểm chứng: commit SHA + PR, CI hiện hành PASS, test hoặc runbook có lệnh/môi trường/ngày chạy/kết quả, không làm lộ secrets. Đối với bài chạy local, ghi rõ **local production-like PASS**, không gắn nhãn **deployed staging PASS**. Sau khi đóng, **xóa dòng khỏi checklist này**; lịch sử nằm ở issue/PR.
+Chỉ giữ issue còn mở hoặc công việc chưa có acceptance evidence trong checklist. Khi issue đóng, không chép lại vào đây; lịch sử nằm tại issue/PR. Đóng từng mục khi **tất cả acceptance criteria** được kiểm chứng bằng commit SHA, PR, CI hiện hành và bằng chứng test/runbook có môi trường, ngày chạy, kết quả. Với bài chạy local, ghi rõ **local production-like PASS**, không gắn nhãn **deployed staging PASS**.
 
 **Các lệnh kiểm tra code thường dùng:** `npm run typecheck`, `npm run lint`, `npm run architecture:check`, `npm test`, `npm run build` và các workflow CI đang áp dụng. Với các bài load/recovery phải đính kèm artifacts và thiết lập test.
 

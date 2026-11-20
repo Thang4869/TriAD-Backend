@@ -88,9 +88,12 @@ test("streaming filter preserves COPY data and removes only Neon metadata", () =
   try {
     fs.writeFileSync(inputPath, sql);
 
-    stripNeonAttverMetadataFile(inputPath, outputPath);
+    const diagnostics = stripNeonAttverMetadataFile(inputPath, outputPath);
 
     const filtered = fs.readFileSync(outputPath, "utf8");
+    assert.equal(diagnostics.metadataLinesRemoved, 3);
+    assert.equal(diagnostics.attverLinesRemaining, 0);
+    assert.deepEqual(diagnostics.unmatchedAttverSamples, []);
     assert.equal(filtered.includes(metadataWithSpacing), false);
 
     assert.equal(
@@ -100,6 +103,28 @@ test("streaming filter preserves COPY data and removes only Neon metadata", () =
     assert.match(filtered, /COPY public\._prisma_migrations/);
     assert.match(filtered, /pg_attver=43031960/);
     assert.match(filtered, /\\\./);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("reports unmatched pg_attver SQL without altering it", () => {
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "triad-sql-filter-unmatched-"),
+  );
+  const inputPath = path.join(temporary, "input.sql");
+  const outputPath = path.join(temporary, "output.sql");
+  const unmatched =
+    "ALTER TABLE public._prisma_migrations ALTER COLUMN id SET (pg_attver = 43031960);";
+
+  try {
+    fs.writeFileSync(inputPath, unmatched + "\n");
+    const diagnostics = stripNeonAttverMetadataFile(inputPath, outputPath);
+
+    assert.equal(diagnostics.metadataLinesRemoved, 0);
+    assert.equal(diagnostics.attverLinesRemaining, 1);
+    assert.deepEqual(diagnostics.unmatchedAttverSamples, [unmatched]);
+    assert.equal(fs.readFileSync(outputPath, "utf8"), unmatched + "\n");
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }

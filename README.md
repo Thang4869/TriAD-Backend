@@ -12,7 +12,7 @@ TriAD is an independently developed **backend-focused portfolio project**, share
 ![Node.js](https://img.shields.io/badge/Node.js-22-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.3%2B-blue)
 ![Prisma](https://img.shields.io/badge/Prisma-5.22-2D3748)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%20%2F%2018-336791)
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D)
 ![BullMQ](https://img.shields.io/badge/BullMQ-5-red)
 ![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-configurable-blue)
@@ -28,7 +28,7 @@ Frontend repository: [Thang4869/TriAD-12](https://github.com/Thang4869/TriAD-12)
 
 | Engineering concern   | What the repository implements                                                     | Where to verify                                                                                                                                   |
 | --------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Checkout consistency  | Serializable PostgreSQL transaction, locked stock pricing and idempotent retry     | [Checkout integration tests](tests/integration/checkout.recovery-consistency.test.ts), [ADR-0001](docs/adr/0001-transactional-checkout-outbox.md) |
+| Checkout consistency  | Read Committed transaction, row-level stock locks and conditional version/stock updates     | [Checkout integration tests](tests/integration/checkout.recovery-consistency.test.ts), [ADR-0001](docs/adr/0001-transactional-checkout-outbox.md) |
 | Durable side effects  | Transactional Outbox, handler tracker, lease recovery and dead letters             | [Outbox recovery tests](tests/integration/auth.registration-process-crash.test.ts), [durability runbook](docs/EVENT_DURABILITY.md)                |
 | Read-side consistency | CQRS read models, monotonic source versions and rebuild tools                      | [Projection ordering tests](tests/integration/projection.ordering.test.ts), [operations](docs/OPERATIONS.md)                                      |
 | Recovery operations   | Isolated PostgreSQL backup/restore and read-model rebuild job                      | [Recovery drill](docs/RECOVERY_DRILL.md), [CI workflow](.github/workflows/ci.yml)                                                                 |
@@ -118,7 +118,7 @@ src/
 
 - Application services coordinate domain behavior and infrastructure ports.
 - Checkout uses a dedicated **`CheckoutUnitOfWork`**.
-- `PrismaCheckoutUnitOfWork` runs the checkout write path inside a PostgreSQL **`Serializable` transaction**, including stock locking/decrement, discount usage, order creation, order items, cart cleanup, and Outbox persistence.
+- `PrismaCheckoutUnitOfWork` runs the checkout write path inside a PostgreSQL **`ReadCommitted` transaction** with explicit row-level locks and conditional stock/version updates, including stock locking/decrement, discount usage, order creation, order items, cart cleanup, and Outbox persistence.
 - Idempotency is enforced at the HTTP middleware boundary and at business-critical service/database boundaries where appropriate.
 - Application ports keep external systems and persistence concerns outside domain logic.
 
@@ -158,7 +158,7 @@ Projection updates use source-version-aware ordering so stale events cannot over
 | Transactional Outbox          | `outbox_events` + `outbox_handler_log` + relay             | ✅ Implemented          |
 | Idempotency                   | Redis + `Idempotency-Key` + DB constraints where required  | ✅ Implemented          |
 | Optimistic Locking            | Version-based conditional updates                          | ✅ Implemented          |
-| Checkout transaction boundary | `CheckoutUnitOfWork` + PostgreSQL Serializable transaction | ✅ Implemented          |
+| Checkout transaction boundary | `CheckoutUnitOfWork` + PostgreSQL ReadCommitted transaction and row locks | ✅ Implemented          |
 | Stock protection              | Locking / version checks / retryable conflict handling     | ✅ Implemented          |
 | 2FA (TOTP)                    | Speakeasy + encrypted secret                               | ✅ Implemented          |
 | Refresh token rotation        | Family-based rotation + revocation                         | ✅ Implemented          |
@@ -492,7 +492,7 @@ flowchart TB
 flowchart TD
     Request[Checkout Request] --> Idempotency[Idempotency Validation]
     Idempotency --> UoW[CheckoutUnitOfWork]
-    UoW --> Tx[PostgreSQL Serializable Transaction]
+    UoW --> Tx[PostgreSQL ReadCommitted Transaction]
 
     Tx --> Lock[Lock / Validate Stock]
     Lock --> Pricing[Pricing / Discount Validation]
@@ -528,7 +528,7 @@ stateDiagram-v2
 Implemented reliability evidence includes:
 
 - Checkout concurrency and conflict handling.
-- PostgreSQL Serializable transaction boundaries.
+- PostgreSQL ReadCommitted transaction boundaries with explicit row locks and conditional writes.
 - Idempotency replay and payload-mismatch protection.
 - Redis-backed idempotency integration tests.
 - Outbox retry, lease, handler-tracker, crash-window, replay, and dead-letter behavior.
@@ -576,4 +576,4 @@ This project is an educational engineering reference and portfolio work, **not a
 
 ## Production-readiness acceptance gates
 
-This portfolio documents implementation and CI evidence separately from environmental verification. The [Current work checklist](docs/TriAD-Backend-Improvement-Checklist.md) tracks the remaining independent review, staging restore and RTO/RPO drills, proxy/security verification, load and mutation reports, observability, demo and interview evidence. No end-to-end production acceptance is claimed simply because automated CI passes.
+This portfolio documents implementation and CI evidence separately from environmental verification. The [Current work checklist](docs/TriAD-Backend-Improvement-Checklist.md) tracks the remaining active-Neon backup and disposable-restore acceptance, hosted OTLP span proof, SMTP delivery, repeatable performance/mutation evidence, RTO/RPO/SLO measurement, and demo/interview evidence. Proxy/security verification has separate accepted evidence; do not list it as an open gate. No end-to-end production acceptance is claimed simply because automated CI passes.

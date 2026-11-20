@@ -25,10 +25,13 @@ const url =
 test("strips only Neon pg_attver metadata outside COPY data", () => {
   const metadata =
     "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN id SET (pg_attver=43031960);";
+  const metadataWithSpacing =
+    "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN id SET (pg_attver = 43031960);";
 
   const sql = [
     "CREATE TABLE public._prisma_migrations (id text);",
     metadata,
+    metadataWithSpacing,
     "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN checksum SET (pg_attver=43031960);",
     "ALTER TABLE ONLY public.users ALTER COLUMN id SET (pg_attver=123);",
     "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN id SET (fillfactor=80);",
@@ -39,6 +42,7 @@ test("strips only Neon pg_attver metadata outside COPY data", () => {
   ].join("\n");
 
   const filtered = stripNeonAttverMetadata(sql);
+  assert.equal(filtered.includes(metadataWithSpacing), false);
 
   assert.equal(
     filtered.split("\n").filter((line) => line === metadata).length,
@@ -68,9 +72,12 @@ test("streaming filter preserves COPY data and removes only Neon metadata", () =
 
   const metadata =
     "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN id SET (pg_attver=43031960);";
+  const metadataWithSpacing =
+    "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN id SET (pg_attver = 43031960);";
 
   const sql = [
     metadata,
+    metadataWithSpacing,
     "COPY public._prisma_migrations (id) FROM stdin;",
     metadata,
     "pg_attver=43031960",
@@ -84,6 +91,7 @@ test("streaming filter preserves COPY data and removes only Neon metadata", () =
     stripNeonAttverMetadataFile(inputPath, outputPath);
 
     const filtered = fs.readFileSync(outputPath, "utf8");
+    assert.equal(filtered.includes(metadataWithSpacing), false);
 
     assert.equal(
       filtered.split("\n").filter((line) => line === metadata).length,

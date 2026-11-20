@@ -47,7 +47,7 @@ function stripNeonAttverMetadata(sql) {
         return true;
       }
 
-      return !/^ALTER TABLE ONLY public\._prisma_migrations ALTER COLUMN [a-z_][a-z0-9_]* SET \(pg_attver=[0-9]+\);[ \t]*\r?$/.test(
+      return !/^\s*ALTER\s+TABLE\s+ONLY\s+public\._prisma_migrations\s+ALTER\s+COLUMN\s+[a-z_][a-z0-9_]*\s+SET\s*\(\s*pg_attver\s*=\s*[0-9]+\s*\);\s*$/i.test(
         content,
       );
     })
@@ -66,7 +66,7 @@ function stripNeonAttverMetadataFile(inputPath, outputPath) {
     let copyData = false;
 
     const metadataPattern =
-      /^ALTER TABLE ONLY public\._prisma_migrations ALTER COLUMN [a-z_][a-z0-9_]* SET \(pg_attver=[0-9]+\);[ \t]*$/;
+      /^\s*ALTER\s+TABLE\s+ONLY\s+public\._prisma_migrations\s+ALTER\s+COLUMN\s+[a-z_][a-z0-9_]*\s+SET\s*\(\s*pg_attver\s*=\s*[0-9]+\s*\);\s*$/i;
 
     function processLine(line) {
       const content = line.toString("utf8").replace(/\r?\n$/, "");

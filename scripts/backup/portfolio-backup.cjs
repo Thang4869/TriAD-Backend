@@ -57,6 +57,12 @@ function stripNeonAttverMetadata(sql) {
 function stripNeonAttverMetadataFile(inputPath, outputPath) {
   const inputFd = fs.openSync(inputPath, "r");
   let outputFd;
+  const diagnostics = {
+    linesScanned: 0,
+    metadataLinesRemoved: 0,
+    attverLinesRemaining: 0,
+    unmatchedAttverSamples: [],
+  };
 
   try {
     outputFd = fs.openSync(outputPath, "w", 0o600);
@@ -70,13 +76,11 @@ function stripNeonAttverMetadataFile(inputPath, outputPath) {
 
     function processLine(line) {
       const content = line.toString("utf8").replace(/\r?\n$/, "");
+      diagnostics.linesScanned += 1;
 
       if (copyData) {
         fs.writeSync(outputFd, line);
-
-        if (content === "\\.") {
-          copyData = false;
-        }
+        if (content === "\\.") copyData = false;
         return;
       }
 
@@ -86,41 +90,40 @@ function stripNeonAttverMetadataFile(inputPath, outputPath) {
         return;
       }
 
-      if (!metadataPattern.test(content)) {
-        fs.writeSync(outputFd, line);
+      if (metadataPattern.test(content)) {
+        diagnostics.metadataLinesRemoved += 1;
+        return;
       }
+
+      if (/\bpg_attver\b/i.test(content)) {
+        diagnostics.attverLinesRemaining += 1;
+        if (diagnostics.unmatchedAttverSamples.length < 5)
+          diagnostics.unmatchedAttverSamples.push(content.slice(0, 500));
+      }
+
+      fs.writeSync(outputFd, line);
     }
 
     while (true) {
       const bytesRead = fs.readSync(inputFd, buffer, 0, buffer.length, null);
-
       if (bytesRead === 0) break;
 
-      pending = Buffer.concat([
-        pending,
-        buffer.subarray(0, bytesRead),
-      ]);
-
+      pending = Buffer.concat([pending, buffer.subarray(0, bytesRead)]);
       let newlineIndex;
-
       while ((newlineIndex = pending.indexOf(0x0a)) !== -1) {
         processLine(pending.subarray(0, newlineIndex + 1));
         pending = pending.subarray(newlineIndex + 1);
       }
     }
 
-    if (pending.length > 0) {
-      processLine(pending);
-    }
+    if (pending.length > 0) processLine(pending);
   } finally {
     fs.closeSync(inputFd);
-
-    if (outputFd !== undefined) {
-      fs.closeSync(outputFd);
-    }
+    if (outputFd !== undefined) fs.closeSync(outputFd);
   }
-}
 
+  return diagnostics;
+}
 function classifyError(error) {
   const message = String(error && error.message ? error.message : error);
   if (
@@ -672,7 +675,24 @@ async function run(mode, env = process.env, options = {}) {
 
     docker(["cp", `${target}:${containerSqlPath}`, sqlPath]);
 
-    stripNeonAttverMetadataFile(sqlPath, filteredSqlPath);
+    const filterDiagnostics = stripNeonAttverMetadataFile(
+      sqlPath,
+      filteredSqlPath,
+    );
+    logger.write(
+      "INFO",
+      "disposable-restore",
+      "Restore SQL metadata filter completed",
+      filterDiagnostics,
+    );
+    if (filterDiagnostics.attverLinesRemaining > 0) {
+      logger.write(
+        "WARN",
+        "disposable-restore",
+        "Unmatched pg_attver lines remain outside COPY data",
+        filterDiagnostics.unmatchedAttverSamples,
+      );
+    }
 
     const sqlFd = fs.openSync(filteredSqlPath, "r");
 

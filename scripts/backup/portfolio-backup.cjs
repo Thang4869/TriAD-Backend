@@ -91,7 +91,7 @@ function stripNeonAttverMetadataFile(inputPath, outputPath) {
         return;
       }
 
-      if (metadataPattern.test(content)) {
+      if (metadataPattern(content)) {
         diagnostics.metadataLinesRemoved += 1;
         return;
       }

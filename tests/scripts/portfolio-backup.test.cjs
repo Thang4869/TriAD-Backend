@@ -8,6 +8,8 @@ const {
   buildEvidence,
   classifyError,
   redact,
+  stripNeonAttverMetadata,
+  stripNeonAttverMetadataFile,
   createLogger,
 } = require("../../scripts/backup/portfolio-backup.cjs");
 const {
@@ -20,6 +22,81 @@ const os = require("node:os");
 const path = require("node:path");
 const url =
   "postgresql://triad_staging:private@dpg-dbcbq8ff3r2c739hbi3g-a.singapore-postgres.render.com/triad_staging";
+test("strips only Neon pg_attver metadata outside COPY data", () => {
+  const metadata =
+    "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN id SET (pg_attver=43031960);";
+
+  const sql = [
+    "CREATE TABLE public._prisma_migrations (id text);",
+    metadata,
+    "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN checksum SET (pg_attver=43031960);",
+    "ALTER TABLE ONLY public.users ALTER COLUMN id SET (pg_attver=123);",
+    "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN id SET (fillfactor=80);",
+    "COPY public._prisma_migrations (id) FROM stdin;",
+    metadata,
+    "pg_attver=43031960",
+    "\\.",
+  ].join("\n");
+
+  const filtered = stripNeonAttverMetadata(sql);
+
+  assert.equal(
+    filtered.split("\n").filter((line) => line === metadata).length,
+    1,
+  );
+  assert.doesNotMatch(
+    filtered,
+    /ALTER TABLE ONLY public\._prisma_migrations ALTER COLUMN checksum SET \(pg_attver=/,
+  );
+  assert.match(filtered, /CREATE TABLE public\._prisma_migrations/);
+  assert.match(filtered, /public\.users ALTER COLUMN id SET \(pg_attver=123\)/);
+  assert.match(filtered, /SET \(fillfactor=80\)/);
+  assert.match(filtered, /COPY public\._prisma_migrations/);
+  assert.match(filtered, /pg_attver=43031960/);
+  assert.match(filtered, /\\\./);
+
+  assert.throws(() => stripNeonAttverMetadata(null), TypeError);
+});
+
+test("streaming filter preserves COPY data and removes only Neon metadata", () => {
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "triad-sql-filter-"),
+  );
+
+  const inputPath = path.join(temporary, "input.sql");
+  const outputPath = path.join(temporary, "output.sql");
+
+  const metadata =
+    "ALTER TABLE ONLY public._prisma_migrations ALTER COLUMN id SET (pg_attver=43031960);";
+
+  const sql = [
+    metadata,
+    "COPY public._prisma_migrations (id) FROM stdin;",
+    metadata,
+    "pg_attver=43031960",
+    "\\.",
+    metadata,
+  ].join("\n");
+
+  try {
+    fs.writeFileSync(inputPath, sql);
+
+    stripNeonAttverMetadataFile(inputPath, outputPath);
+
+    const filtered = fs.readFileSync(outputPath, "utf8");
+
+    assert.equal(
+      filtered.split("\n").filter((line) => line === metadata).length,
+      1,
+    );
+    assert.match(filtered, /COPY public\._prisma_migrations/);
+    assert.match(filtered, /pg_attver=43031960/);
+    assert.match(filtered, /\\\./);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
 test("only backs up the selected external portfolio database over required TLS", () => {
   const env = sourceEnvironment(url + "?sslmode=require");
   assert.equal(env.PGSSLMODE, "require");

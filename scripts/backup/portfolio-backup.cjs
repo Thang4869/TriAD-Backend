@@ -26,6 +26,101 @@ function redact(value) {
     .replace(/\b[a-f0-9]{64}\b/gi, "[REDACTED_KEY]");
 }
 
+function stripNeonAttverMetadata(sql) {
+  if (typeof sql !== "string")
+    throw new TypeError("SQL input must be a string");
+
+  const lines = sql.match(/[^\n]*\n|[^\n]+$/g) || [];
+  let copyData = false;
+
+  return lines
+    .filter((line) => {
+      const content = line.replace(/\r?\n$/, "");
+
+      if (copyData) {
+        if (content === "\\.") copyData = false;
+        return true;
+      }
+
+      if (/^COPY\b.*\bFROM stdin;$/.test(content)) {
+        copyData = true;
+        return true;
+      }
+
+      return !/^ALTER TABLE ONLY public\._prisma_migrations ALTER COLUMN [a-z_][a-z0-9_]* SET \(pg_attver=[0-9]+\);[ \t]*\r?$/.test(
+        content,
+      );
+    })
+    .join("");
+}
+
+function stripNeonAttverMetadataFile(inputPath, outputPath) {
+  const inputFd = fs.openSync(inputPath, "r");
+  let outputFd;
+
+  try {
+    outputFd = fs.openSync(outputPath, "w", 0o600);
+
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    let pending = Buffer.alloc(0);
+    let copyData = false;
+
+    const metadataPattern =
+      /^ALTER TABLE ONLY public\._prisma_migrations ALTER COLUMN [a-z_][a-z0-9_]* SET \(pg_attver=[0-9]+\);[ \t]*$/;
+
+    function processLine(line) {
+      const content = line.toString("utf8").replace(/\r?\n$/, "");
+
+      if (copyData) {
+        fs.writeSync(outputFd, line);
+
+        if (content === "\\.") {
+          copyData = false;
+        }
+        return;
+      }
+
+      if (/^COPY\b.*\bFROM stdin;$/.test(content)) {
+        copyData = true;
+        fs.writeSync(outputFd, line);
+        return;
+      }
+
+      if (!metadataPattern.test(content)) {
+        fs.writeSync(outputFd, line);
+      }
+    }
+
+    while (true) {
+      const bytesRead = fs.readSync(inputFd, buffer, 0, buffer.length, null);
+
+      if (bytesRead === 0) break;
+
+      pending = Buffer.concat([
+        pending,
+        buffer.subarray(0, bytesRead),
+      ]);
+
+      let newlineIndex;
+
+      while ((newlineIndex = pending.indexOf(0x0a)) !== -1) {
+        processLine(pending.subarray(0, newlineIndex + 1));
+        pending = pending.subarray(newlineIndex + 1);
+      }
+    }
+
+    if (pending.length > 0) {
+      processLine(pending);
+    }
+  } finally {
+    fs.closeSync(inputFd);
+
+    if (outputFd !== undefined) {
+      fs.closeSync(outputFd);
+    }
+  }
+}
+
 function classifyError(error) {
   const message = String(error && error.message ? error.message : error);
   if (
@@ -551,7 +646,13 @@ async function run(mode, env = process.env, options = {}) {
     if (!ready)
       throw new Error("Disposable restore database did not become ready");
     stage("disposable-restore", "Restoring archive into disposable database");
-    const fd = fs.openSync(restored, "r");
+
+    const sqlPath = path.join(temporary, "restore.sql");
+    const filteredSqlPath = path.join(temporary, "restore.filtered.sql");
+    const containerSqlPath = "/tmp/triad-restore.sql";
+
+    const archiveFd = fs.openSync(restored, "r");
+
     try {
       docker(
         [
@@ -559,18 +660,43 @@ async function run(mode, env = process.env, options = {}) {
           "-i",
           target,
           "pg_restore",
+          `--file=${containerSqlPath}`,
+          "--no-owner",
+          "--no-acl",
+        ],
+        { stdio: [archiveFd, "pipe", "pipe"] },
+      );
+    } finally {
+      fs.closeSync(archiveFd);
+    }
+
+    docker(["cp", `${target}:${containerSqlPath}`, sqlPath]);
+
+    stripNeonAttverMetadataFile(sqlPath, filteredSqlPath);
+
+    const sqlFd = fs.openSync(filteredSqlPath, "r");
+
+    try {
+      docker(
+        [
+          "exec",
+          "-i",
+          target,
+          "psql",
+          "--no-psqlrc",
+          "--no-password",
+          "-q",
           "-U",
           "test",
           "-d",
           "triad_portfolio_verify",
-          "--no-owner",
-          "--no-acl",
-          "--exit-on-error",
+          "-v",
+          "ON_ERROR_STOP=1",
         ],
-        { stdio: [fd, "pipe", "pipe"] },
+        { stdio: [sqlFd, "pipe", "pipe"] },
       );
     } finally {
-      fs.closeSync(fd);
+      fs.closeSync(sqlFd);
     }
     const verified = docker([
       "exec",
@@ -670,5 +796,7 @@ module.exports = {
   run,
   classifyError,
   redact,
+  stripNeonAttverMetadata,
+  stripNeonAttverMetadataFile,
   createLogger,
 };

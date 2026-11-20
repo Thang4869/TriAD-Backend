@@ -5,10 +5,14 @@
 not a paid datastore or cloud artifact quota. Full production-runtime CI passed
 [run 40060645424](https://github.com/Thang4869/TriAD-Backend/actions/runs/40060645424)
 in PR #227 (4,433 ms recovery, 498 ms committed-marker fixture gap). Real hosted
-backup/restore and Windows scheduling remain pending owner execution. No
-production RTO/RPO or persistent Free Redis guarantee is claimed.
+backup/restore and Windows scheduling were subsequently exercised by the owner;
+see the dated 2026-11-20 addendum below. No production RTO/RPO or persistent
+Free Redis guarantee is claimed.
 
-**Status (2026-10-24):** #143 has been reopened because hosted recovery acceptance is incomplete. The existing snapshot evidence remains valid within its original scope.
+**Current status (2026-11-20):** Issue #143 remains open. Local encrypted backup
+and disposable-restore evidence exists, but seven consecutive successful daily
+backup/restore days for both sources and the Free PostgreSQL replacement/export
+acceptance are not yet established by the evidence recorded here.
 
 **Historical baseline (2026-10-18):** The isolated PostgreSQL drill is merged and passed on `main` in [CI run #39116584480](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480) ([restore-drill job](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480/job/117643501456)). This proves the CI fixture only; deployed recovery evidence for issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143), including RTO/RPO, remains **OPEN**.
 
@@ -148,3 +152,38 @@ backup/restore and schedule evidence are still pending. Production RTO/RPO and
 hosted cutover are outside this demo acceptance.
 No paid resource, schedule, secret, IP allowlist or live datastore has been
 changed by this candidate. Keep #143 open even if the full-runtime CI passes.
+
+
+## Owner-operated backup and restore update — 2026-11-20
+
+This update supersedes only the earlier statements that the first real backup
+and Windows scheduling were still pending. It preserves the historical CI and
+local-drill measurements above; those measurements are not hosted RTO/RPO.
+
+- The owner reported successful Render and Neon backup runs at **03:00 and
+  03:20 ICT on 2026-11-20**.
+- A selected encrypted Render archive was restored into a disposable
+  PostgreSQL 18 container and its schema was checked successfully. The owner
+  reported a PASS result. This is a local archive verification, not a restore
+  into a replacement hosted database.
+- The owner previously verified an independent offline copy of the recovery
+  key and Render archive by hash and successfully restored the copied Render
+  archive. The Neon archive copy was hash-verified, but a separate restore of
+  that copy using the offline key was not evidenced in that earlier test.
+- Backup coverage from 14–19 November was uneven because the Windows PC was
+  not running during every scheduled window. The configured three-hour cadence
+  must not be represented as eight successful backups on every date.
+- At the time of this update, the next Neon attempt at **09:20 ICT** was still
+  awaiting verification. Record it only after checking the actual archive and
+  its PASS receipt.
+- The recorded Render Free PostgreSQL expiry is **2026-11-20 13:24:50 UTC
+  (20:24:50 ICT)**. This file does not establish whether export, replacement,
+  cutover, or retirement subsequently occurred. Confirm the provider state
+  before relying on the old resource or following the replacement runbook.
+
+Issue #143 remains open until the current owner-selected acceptance criteria
+are evidenced, including seven consecutive successful daily backup/restore
+days for both Render and Neon and the Free PostgreSQL replacement/export plan.
+Do not claim hosted cutover, guaranteed RTO/RPO, or durable Free Redis/worker
+state from the local disposable restore. No hosted resource or schedule was
+changed by this documentation update.

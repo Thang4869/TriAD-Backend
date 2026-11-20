@@ -15,7 +15,7 @@ TriAD is an independently developed **backend-focused portfolio project**, share
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D)
 ![BullMQ](https://img.shields.io/badge/BullMQ-5-red)
-![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-enabled-blue)
+![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-configurable-blue)
 ![Vitest](https://img.shields.io/badge/Vitest-tested-green)
 
 Backend repository: [Thang4869/TriAD-Backend](https://github.com/Thang4869/TriAD-Backend)
@@ -391,7 +391,7 @@ Prometheus-compatible metrics are exposed through `/metrics` outside production.
 
 ### Tracing
 
-OpenTelemetry tracing is initialized by the application and can export through the OTEL Collector. The development Compose stack includes Jaeger for local inspection.
+OpenTelemetry tracing is configurable and disabled in the current hosted staging configuration (ENABLE_TRACING=false). The development Compose stack includes an OTEL Collector and Jaeger for local inspection. Do not describe hosted tracing as active until a receiver, authentication, owner approval, and trace evidence have been verified; see [staging acceptance](docs/OTEL_STAGING_ACCEPTANCE.md).
 
 ### Logging
 

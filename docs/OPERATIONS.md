@@ -1,16 +1,51 @@
 # Operations Runbook
 
-## Free portfolio operating profile — 2026-10-24
+## Free portfolio operating profile — 2026-11-20
 
-Owner chose no paid plans. Use [PORTFOLIO_BACKUP.md](PORTFOLIO_BACKUP.md) for
-Windows local encrypted PostgreSQL backups with disposable restore verification.
-This is prepared tooling, not an activated backup: external IP access, local
-setup, first real PASS, independent key copy and Task Scheduler evidence are
-pending. No plan/ACL/secret/live datastore change was made. Free Redis remains
-nonpersistent; no production RTO/RPO is promised. Full-runtime CI PR #227 passed;
+Owner chose no paid plans. Backup/recovery evidence and remaining acceptance
+gates are tracked in [PORTFOLIO_BACKUP.md](PORTFOLIO_BACKUP.md) and
+[RECOVERY_DRILL.md](RECOVERY_DRILL.md). The 20 Nov record includes scheduled
+Render and Neon backups at 03:00 and 03:20 ICT, a Render encrypted archive
+restored into a disposable PostgreSQL 18 container, and a Render archive
+restored and schema-checked on a dedicated Neon restore branch. These are
+distinct checks; neither establishes a seven-day recovery streak, production
+RTO/RPO, or a completed provider cutover.
+
+Coverage from 14–19 Nov was uneven because the Windows host was not running
+during every scheduled window. The 09:20 ICT Neon attempt remains pending owner
+confirmation in the recorded evidence. The Render Free PostgreSQL expiry
+warning is recorded separately; current provider state must be checked before
+relying on that resource. No production datastore, plan, ACL, secret, or
+schedule is changed by this runbook update. Free Redis remains nonpersistent;
+no production RTO/RPO is promised. Issue #143 remains open until its stated
+backup streak and PostgreSQL replacement/export acceptance criteria are met. Full-runtime CI PR #227 passed;
 issue #143 remains open for the actual free-demo backup evidence.
 
-## Acceptance — 2026-10-24
+## Acceptance — historical snapshot 2026-10-24
+
+The environment and CI evidence in this section describes the 24 Oct 2026
+acceptance snapshot. It is retained as historical evidence and must not be
+interpreted as a current deployment, configuration, or backup status.
+
+## Recovery evidence update — 2026-11-20
+
+- Render and Neon scheduled backups were reported at 03:00 and 03:20 ICT.
+- The Render encrypted archive passed a disposable PostgreSQL 18 restore and
+  schema verification.
+- A Render archive also passed restore and schema verification on a dedicated
+  Neon restore branch. This does not prove an independent offline-key restore
+  or a production cutover.
+- Backup coverage during 14–19 Nov was uneven because the Windows machine was
+  powered off during some scheduled windows; do not count those dates as a
+  complete eight-backup-per-day streak.
+- The 09:20 ICT Neon backup attempt is not marked successful until the owner
+  confirms its outcome.
+- Issue #143 remains open pending seven consecutive successful daily backup /
+  restore days for both sources and acceptance of the Free PostgreSQL
+  replacement/export plan.
+
+Do not change production resources or scheduled jobs as part of documentation
+maintenance.
 
 Latest verified code: backend [#225](https://github.com/Thang4869/TriAD-Backend/pull/225), main `c1ff0af`; frontend [#37](https://github.com/Thang4869/TriAD-12/pull/37) plus mandatory regression [#38](https://github.com/Thang4869/TriAD-12/pull/38), main `ac87f6f`. Render workspace/service were confirmed before changes; only the existing `triad-api-staging` service was updated.
 

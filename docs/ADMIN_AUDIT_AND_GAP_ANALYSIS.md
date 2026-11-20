@@ -2,8 +2,15 @@
 
 **Repository:** `Thang4869/TriAD-Backend`
 **Issue:** [#147 — Add an audit trail for sensitive administrative actions](https://github.com/Thang4869/TriAD-Backend/issues/147)
-**Assessment date:** 2026-11-14
+**Implementation assessment:** 2026-11-14 (historical)
+**Document status review:** 2026-11-20
 **Implementation branch:** `commit-14112026-2`
+**Issue status:** [#147 closed as completed on 2026-11-15](https://github.com/Thang4869/TriAD-Backend/issues/147)
+
+> This document preserves the implementation-time assessment and verification
+> snapshot. Closing #147 records completion of its scoped acceptance criteria;
+> it does not mean every follow-up gap below is resolved or that the feature
+> has independent production certification.
 
 ## 1. Delivered audit capability
 
@@ -158,6 +165,11 @@ Missing or mismatched capabilities:
 
 ## 7. Verification evidence
 
+The results below are the implementation-time snapshot from 14 Nov 2026. They
+are not a fresh test run against the 20 Nov documentation branch or current
+main. Issue #147 was subsequently closed as completed on 15 Nov; this status
+review does not rerun the checks or change the deployed environment.
+
 | Check                                       | Result                                                          |
 | ------------------------------------------- | --------------------------------------------------------------- |
 | `npx prisma validate`                       | PASS                                                            |
@@ -175,10 +187,19 @@ Missing or mismatched capabilities:
 | CI | NOT EXECUTED: no remote CI run was triggered |
 | Staging/production                          | BLOCKED pending explicit authorization and environment evidence |
 
-## 8. Remaining release blockers
+## 8. Follow-up engineering gaps (outside the completed #147 scope)
 
-Issue #147 should not be described as fully production-certified until the
-full existing unit/integration suites, isolated E2E scenarios, lint, build, and
-CI checks are run. Strict transactionally consistent audit persistence,
-retention/operational export policy, and the frontend audit UI remain follow-up
-work.
+Issue #147 is closed as completed. The following are residual improvements,
+not grounds to relabel the issue as open:
+
+- Strict transactionally consistent audit persistence across every business
+  mutation remains a future reliability improvement; the current documented
+  best-effort failure semantics still apply.
+- Retention, archival, restricted export automation, and operational ownership
+  need an approved policy.
+- Frontend audit-log query UI and operator workflow remain follow-up work.
+- Review moderation, Admin user lifecycle, and broader order workflows require
+  separately scoped product/security decisions.
+- Production certification is not claimed by the issue's closure. Any new
+  deployment acceptance must use current environment evidence and exact-head
+  CI rather than this historical 14 Nov test table.

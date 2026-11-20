@@ -94,8 +94,9 @@ syncing. This is a best-effort PC schedule, not managed cloud backup.
    .\scripts\backup\portfolio-backup.ps1 -Action Backup
    ```
 
-   Earlier backups remain untouched on failure. The first real hosted backup is
-   **not proven** by the synthetic CI test.
+   Earlier backups remain untouched on failure. Synthetic CI validates the backup
+   tooling only; it does not replace the owner-provided real-hosted backup and
+   disposable-restore evidence recorded in the dated sections below.
 
 6. After the first PASS, install the daily **20:30 local time** task:
 
@@ -439,3 +440,41 @@ Free-tier PostgreSQL provides no PITR or guaranteed RTO/RPO here. Redis
 persistence remains disabled, so Redis queues, cache and ephemeral auth state
 are not covered by this PostgreSQL backup. Cloudinary objects, provider
 configuration, OAuth settings and secrets require separate recovery procedures.
+
+
+## Owner-operated backup status — 2026-11-20
+
+This dated update supplements the historical setup and acceptance records above;
+it does not rewrite earlier observations or imply that every scheduled trigger ran.
+
+- The owner reported successful Render and Neon backup runs at **03:00 and
+  03:20 ICT respectively on 2026-11-20**.
+- The owner subsequently restored the selected encrypted Render archive into
+  a disposable PostgreSQL 18 container. The command returned
+  `PASS: verified Render archive restored and schema checked on the dedicated Neon restore branch`
+  for the restore workflow, and the earlier encrypted-archive Verify workflow
+  also returned PASS. Keep the exact archive and receipt as the evidence pair;
+  do not overwrite them.
+- The owner reported that backup coverage from **14–19 November** was uneven:
+  some dates had only two successful snapshots because the Windows PC was off
+  during other scheduled windows. The intended eight-per-day cadence is not
+  evidence of eight successful runs. Do not count missed triggers as backups.
+- At the time of this update, the next Neon attempt at **09:20 ICT** was still
+  being awaited. Its result must be recorded only after the owner verifies the
+  archive and receipt.
+- The independent offline archive/key copy had previously been tested for the
+  Render archive. The Neon offline archive copy had been hash-verified, but a
+  separate restore of that Neon copy with the offline key was not evidenced in
+  that earlier test.
+- Issue #143 remains open until its current acceptance criteria are satisfied,
+  including seven consecutive successful daily backup/restore days for both
+  sources and a verified Free PostgreSQL replacement/export plan. Do not infer
+  a completed hosted cutover, production RTO/RPO, or continuous worker durability
+  from local disposable restores.
+
+The Render Free PostgreSQL expiry recorded by the provider was
+**2026-11-20 13:24:50 UTC (20:24:50 ICT)**. This document alone does not verify
+whether the database was replaced, exported, or retired after that deadline.
+Confirm the current provider state before using any old connection or cutover
+instruction. No database deletion, environment-variable rotation, deployment,
+or schedule change is authorized by this documentation update.

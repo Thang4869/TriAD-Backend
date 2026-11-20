@@ -1,6 +1,6 @@
 # OpenTelemetry SDK 2.x migration — B10
 
-**Review date:** 2026-10-15 · **Draft:** [PR #173](https://github.com/Thang4869/TriAD-Backend/pull/173)
+**Review date:** 2026-11-20 · **Merged:** [PR #173](https://github.com/Thang4869/TriAD-Backend/pull/173)
 
 ## Scope and implementation
 
@@ -37,6 +37,6 @@ The candidate audit on PR #173, _before Cloudinary PR #172 is merged_, reports:
 
 This is an audit of **PR #173 in isolation**, not a measured combined result of PR #172 + #173. Cloudinary remains old on PR #173 because each PR was branched independently from `main`. Do **not** claim zero high until the merged dependency graph is actually audited.
 
-**Required before merge:** standard CI typecheck/lint, unit/integration, tracing startup/shutdown smoke, production Docker runtime smoke, FE↔BE E2E, tracing enabled with a real OTLP collector, propagated trace IDs and sample spans in staging. Verify default tracing-disabled behavior remains safe. Confirm deployment Node version and establish a rollback plan; no live collector or performance claim exists yet.
+**Remaining hosted acceptance:** PR #173 is merged and its code-level migration is not a pending merge gate. Hosted staging still has `ENABLE_TRACING=false`. Before enabling it, configure an approved OTLP receiver, verify authentication and network reachability, capture propagated trace IDs and representative spans in staging, and record the evidence in [OTEL_STAGING_ACCEPTANCE.md](OTEL_STAGING_ACCEPTANCE.md). Keep tracing disabled until those checks pass; no hosted span receipt or tracing performance claim is asserted here.
 
 Official references: [OpenTelemetry JS SDK 2.x migration](https://github.com/open-telemetry/opentelemetry-js/blob/main/doc/upgrade-to-2.x.md) and [CVE-2026-44902 advisory](https://advisories.gitlab.com/npm/%40opentelemetry/auto-instrumentations-node/CVE-2026-44902/).

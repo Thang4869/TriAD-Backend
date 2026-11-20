@@ -5,15 +5,38 @@ Render/Vercel plan, PITR, persistent Redis or production availability objective
 is required for this demo. This explicitly weaker operating profile is not a
 production recovery certification.
 
+## Current staging topology and acceptance — 2026-11-20
+
+The staging application has completed its database cutover to the dedicated
+Neon branch `triad-render-restore-20261120`. The previous Render PostgreSQL
+database is retained as rollback evidence/source and is not the active app DB.
+The cutover verified 19 tables and 16 Prisma migrations. The backup script
+continues to support Render and Neon as explicitly selected sources; its
+`RestoreNeon` action targets a dedicated Neon restore branch.
+
+**Still open under Issue #143:** create a fresh encrypted backup from the active
+post-cutover Neon branch and restore that archive into a disposable PostgreSQL
+18 target; verify repeated unattended scheduled runs; obtain owner confirmation
+for the 09:20 ICT Neon attempt. Earlier Render archive restores do not substitute
+for this post-cutover Neon acceptance. Backup coverage from 14–19 Nov was uneven
+because the Windows host was not running during every scheduled window. The
+configured Render cadence (00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00,
+21:00 ICT) and Neon cadence 20 minutes later are intended schedules, not proof
+that every run occurred.
+
+Free Redis persistence remains limited/disabled. No PITR, guaranteed RTO/RPO,
+or full production recovery objective is established. This update does not
+change database resources, secrets, tasks or schedules.
+
 ## Implementation
 
 `scripts/backup/portfolio-backup.ps1` supports Windows PowerShell 5.1. It calls
 `scripts/backup/portfolio-backup.cjs` with Node.js 22+ and Docker Desktop using
 Linux containers. No npm installation is needed for these backup scripts.
 
-- Source is restricted to the current PostgreSQL 18 staging external host,
-  database and user. Transactions are read-only, TLS is required. A replacement
-  Free instance needs a reviewed guard change.
+- Source connections are restricted by explicit host/database/user allowlists.
+  Transactions are read-only and TLS is required. Render and Neon source guards
+  are separate; the active staging source is the dedicated Neon branch.
 - Render and Neon are independent sources with separate scheduled tasks. Render
   continues to use `ProtectedUrl` and `Backup`; Neon is configured separately
   through `ProtectedNeonUrl` and selected explicitly with `BackupNeon`. Remote
@@ -197,8 +220,10 @@ and their **own Windows PC** (not CI, no hosted restore):
   not yet an unattended 20:30 trigger across multiple days. Retention/off-device
   archive copies and an independent offline recovery-key copy remain to be
   confirmed by the owner.
-- PostgreSQL Free expiration is still **2026-11-20**; a replacement/export
-  plan is not yet confirmed. No hosted recovery cutover or guaranteed RTO/RPO.
+- Historical note: the old Render Free PostgreSQL resource had an expiry
+  warning dated 2026-11-20. Its final provider state is not asserted here;
+  check the provider before relying on it. The application cutover to Neon
+  is complete, but post-cutover Neon backup/restore acceptance is still open.
 
 Evidence is limited to owner-shared command output. Neither encrypted archives
 nor passwords, DPAPI settings, or recovery keys are committed or uploaded.

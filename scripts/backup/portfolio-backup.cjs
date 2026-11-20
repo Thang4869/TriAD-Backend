@@ -73,7 +73,7 @@ function stripNeonAttverMetadataFile(inputPath, outputPath) {
     let pending = Buffer.alloc(0);
     let copyData = false;
 
-    const metadataPattern = isNeonAttverMetadata;\s*$/i;
+    const metadataPattern = isNeonAttverMetadata;
 
     function processLine(line) {
       const content = line.toString("utf8").replace(/\r?\n$/, "");

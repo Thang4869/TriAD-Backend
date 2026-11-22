@@ -297,8 +297,7 @@ function assertRenderRestoreArchive(archivePath, receiptPath) {
     .update(fs.readFileSync(archivePath))
     .digest("hex");
   const bytes = fs.statSync(archivePath).size;
-  if (
-    evidence.result !== "PASS" ||
+  if (    evidence.result !== "PASS" ||
     evidence.source !== "render" ||
     evidence.database !== "triad_staging" ||
     evidence.postgresMajor !== 18 ||
@@ -310,7 +309,12 @@ function assertRenderRestoreArchive(archivePath, receiptPath) {
   return { sha256: digest, archiveBytes: bytes, sourceBackupAt: evidence.sourceBackupAt || null };
 }
 
-function beginNeonRestoreAttempt(archivePath, receiptPath, metadata) {
+function beginNeonRestoreAttempt(
+  archivePath,
+  receiptPath,
+  metadata,
+  targetHost = RESTORE_NEON_HOST,
+) {
   const markerPath = archivePath + ".restore-in-progress.json";
 
   if (fs.existsSync(receiptPath))
@@ -324,7 +328,10 @@ function beginNeonRestoreAttempt(archivePath, receiptPath, metadata) {
         {
           result: "IN_PROGRESS",
           target: "triad-render-restore-20261120",
+          targetHost,
+          database: "triad_staging",
           sha256: metadata.sha256,
+          archiveBytes: metadata.archiveBytes,
           startedAt: new Date().toISOString(),
         },
         null,
@@ -574,6 +581,7 @@ async function run(mode, env = process.env, options = {}) {
         encrypted,
         restoreReceiptPath,
         receipt,
+        RESTORE_NEON_HOST,
       );
       stage("remote-restore", "Restoring verified Render archive to the dedicated Neon restore branch");
       const restoreFd = fs.openSync(restored, "r");
@@ -597,8 +605,7 @@ async function run(mode, env = process.env, options = {}) {
             AND NOT EXISTS (
               SELECT 1 FROM "_prisma_migrations"
               WHERE finished_at IS NULL AND rolled_back_at IS NULL
-            )
-            AND to_regclass('public.users') IS NOT NULL
+            )            AND to_regclass('public.users') IS NOT NULL
             AND to_regclass('public.orders') IS NOT NULL
             AND to_regclass('public.outbox_events') IS NOT NULL
           )::text
@@ -634,7 +641,16 @@ async function run(mode, env = process.env, options = {}) {
       } finally {
         fs.closeSync(restoreReceiptFd);
       }
-      fs.rmSync(restoreAttemptPath);
+      try {
+        fs.rmSync(restoreAttemptPath);
+      } catch (error) {
+        logger.write(
+          "WARN",
+          "cleanup",
+          "Neon restore succeeded but attempt marker cleanup failed",
+          { markerPath: restoreAttemptPath, error: error.message },
+        );
+      }
       console.log("PASS: verified Render archive restored and schema checked on the dedicated Neon restore branch");
       stage("cleanup", "Remote Neon restore completed successfully");
       return { encrypted, evidence: restoreReceipt };

@@ -5,6 +5,7 @@ const {
   restoreTargetEnvironment,
   buildNeonRestoreArgs,
   assertRenderRestoreArchive,
+  beginNeonRestoreAttempt,
   buildEvidence,
   classifyError,
   redact,
@@ -254,6 +255,109 @@ test("requires a matching PASS Render archive receipt before remote restore", ()
     fs.writeFileSync(archivePath, bytes);
     fs.writeFileSync(receiptPath, JSON.stringify({ ...receipt, source: "neon" }));
     assert.throws(() => assertRenderRestoreArchive(archivePath, receiptPath));
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("creates a durable IN_PROGRESS marker before a Neon restore attempt", () => {
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "triad-neon-restore-attempt-"),
+  );
+  const archivePath = path.join(temporary, "verified.dump.enc");
+  const receiptPath = archivePath + ".restored-neon.json";
+  const metadata = { sha256: "a".repeat(64), archiveBytes: 1234 };
+
+  try {
+    fs.writeFileSync(archivePath, "verified archive");
+    const markerPath = beginNeonRestoreAttempt(
+      archivePath,
+      receiptPath,
+      metadata,
+    );
+    const marker = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+
+    assert.equal(marker.result, "IN_PROGRESS");
+    assert.equal(marker.target, "triad-render-restore-20261120");
+    assert.equal(marker.sha256, metadata.sha256);
+    assert.ok(Number.isFinite(Date.parse(marker.startedAt)));
+    assert.equal(fs.statSync(markerPath).mode & 0o777, 0o600);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("rejects a second Neon restore attempt without overwriting its marker", () => {
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "triad-neon-restore-retry-"),
+  );
+  const archivePath = path.join(temporary, "verified.dump.enc");
+  const receiptPath = archivePath + ".restored-neon.json";
+
+  try {
+    fs.writeFileSync(archivePath, "verified archive");
+    const markerPath = beginNeonRestoreAttempt(archivePath, receiptPath, {
+      sha256: "b".repeat(64),
+    });
+    const originalMarker = fs.readFileSync(markerPath, "utf8");
+
+    assert.throws(
+      () =>
+        beginNeonRestoreAttempt(archivePath, receiptPath, {
+          sha256: "c".repeat(64),
+        }),
+      { code: "EEXIST" },
+    );
+    assert.equal(fs.readFileSync(markerPath, "utf8"), originalMarker);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("refuses to begin a Neon restore when a completed receipt exists", () => {
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "triad-neon-restore-completed-"),
+  );
+  const archivePath = path.join(temporary, "verified.dump.enc");
+  const receiptPath = archivePath + ".restored-neon.json";
+  const markerPath = archivePath + ".restore-in-progress.json";
+
+  try {
+    fs.writeFileSync(archivePath, "verified archive");
+    fs.writeFileSync(receiptPath, JSON.stringify({ result: "PASS" }));
+
+    assert.throws(
+      () =>
+        beginNeonRestoreAttempt(archivePath, receiptPath, {
+          sha256: "d".repeat(64),
+        }),
+      /Neon restore already completed/,
+    );
+    assert.equal(fs.existsSync(markerPath), false);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("keeps the Neon restore marker when an attempt ends unresolved", () => {
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "triad-neon-restore-unresolved-"),
+  );
+  const archivePath = path.join(temporary, "verified.dump.enc");
+  const receiptPath = archivePath + ".restored-neon.json";
+  const markerPath = archivePath + ".restore-in-progress.json";
+
+  try {
+    fs.writeFileSync(archivePath, "verified archive");
+    assert.throws(() => {
+      beginNeonRestoreAttempt(archivePath, receiptPath, {
+        sha256: "e".repeat(64),
+      });
+      throw new Error("synthetic interrupted restore");
+    }, /synthetic interrupted restore/);
+
+    assert.equal(fs.existsSync(markerPath), true);
+    assert.equal(fs.existsSync(receiptPath), false);
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }

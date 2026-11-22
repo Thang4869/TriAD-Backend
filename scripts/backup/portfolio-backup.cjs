@@ -310,6 +310,43 @@ function assertRenderRestoreArchive(archivePath, receiptPath) {
   return { sha256: digest, archiveBytes: bytes, sourceBackupAt: evidence.sourceBackupAt || null };
 }
 
+function beginNeonRestoreAttempt(
+  archivePath,
+  receiptPath,
+  metadata,
+  targetHost = RESTORE_NEON_HOST,
+) {
+  const markerPath = archivePath + ".restore-in-progress.json";
+
+  if (fs.existsSync(receiptPath))
+    throw new Error("Neon restore already completed");
+
+  const fd = fs.openSync(markerPath, "wx", 0o600);
+  try {
+    fs.writeFileSync(
+      fd,
+      JSON.stringify(
+        {
+          result: "IN_PROGRESS",
+          target: "triad-render-restore-20261120",
+          targetHost,
+          database: "triad_staging",
+          sha256: metadata.sha256,
+          archiveBytes: metadata.archiveBytes,
+          startedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+
+  return markerPath;
+}
+
 function buildNeonRestoreArgs(targetEnv) {
   return [
     "run",
@@ -541,6 +578,12 @@ async function run(mode, env = process.env, options = {}) {
         Object.entries(targetEnvValues).map(([k, v]) => k + "=" + v).join("\n") + "\n",
         { mode: 0o600 },
       );
+      const restoreAttemptPath = beginNeonRestoreAttempt(
+        encrypted,
+        restoreReceiptPath,
+        receipt,
+        RESTORE_NEON_HOST,
+      );
       stage("remote-restore", "Restoring verified Render archive to the dedicated Neon restore branch");
       const restoreFd = fs.openSync(restored, "r");
       try {
@@ -590,10 +633,26 @@ async function run(mode, env = process.env, options = {}) {
         publicTables: Number(result[1]),
         completedMigrations: Number(result[2]),
       };
-      fs.writeFileSync(restoreReceiptPath, JSON.stringify(restoreReceipt, null, 2), {
-        flag: "wx",
-        mode: 0o600,
-      });
+      const restoreReceiptFd = fs.openSync(restoreReceiptPath, "wx", 0o600);
+      try {
+        fs.writeFileSync(
+          restoreReceiptFd,
+          JSON.stringify(restoreReceipt, null, 2) + "\n",
+        );
+        fs.fsyncSync(restoreReceiptFd);
+      } finally {
+        fs.closeSync(restoreReceiptFd);
+      }
+      try {
+        fs.rmSync(restoreAttemptPath);
+      } catch (error) {
+        logger.write(
+          "WARN",
+          "cleanup",
+          "Neon restore succeeded but attempt marker cleanup failed",
+          { markerPath: restoreAttemptPath, error: error.message },
+        );
+      }
       console.log("PASS: verified Render archive restored and schema checked on the dedicated Neon restore branch");
       stage("cleanup", "Remote Neon restore completed successfully");
       return { encrypted, evidence: restoreReceipt };
@@ -812,6 +871,7 @@ module.exports = {
   restoreTargetEnvironment,
   buildNeonRestoreArgs,
   assertRenderRestoreArchive,
+  beginNeonRestoreAttempt,
   localBackupFile,
   buildEvidence,
   run,

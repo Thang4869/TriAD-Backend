@@ -297,7 +297,8 @@ function assertRenderRestoreArchive(archivePath, receiptPath) {
     .update(fs.readFileSync(archivePath))
     .digest("hex");
   const bytes = fs.statSync(archivePath).size;
-  if (    evidence.result !== "PASS" ||
+  if (
+    evidence.result !== "PASS" ||
     evidence.source !== "render" ||
     evidence.database !== "triad_staging" ||
     evidence.postgresMajor !== 18 ||
@@ -605,7 +606,8 @@ async function run(mode, env = process.env, options = {}) {
             AND NOT EXISTS (
               SELECT 1 FROM "_prisma_migrations"
               WHERE finished_at IS NULL AND rolled_back_at IS NULL
-            )            AND to_regclass('public.users') IS NOT NULL
+            )
+            AND to_regclass('public.users') IS NOT NULL
             AND to_regclass('public.orders') IS NOT NULL
             AND to_regclass('public.outbox_events') IS NOT NULL
           )::text

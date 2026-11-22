@@ -279,7 +279,13 @@ test("creates a durable IN_PROGRESS marker before a Neon restore attempt", () =>
 
     assert.equal(marker.result, "IN_PROGRESS");
     assert.equal(marker.target, "triad-render-restore-20261120");
+    assert.equal(
+      marker.targetHost,
+      "ep-withered-water-ao6migqk.c-2.ap-southeast-1.aws.neon.tech",
+    );
+    assert.equal(marker.database, "triad_staging");
     assert.equal(marker.sha256, metadata.sha256);
+    assert.equal(marker.archiveBytes, metadata.archiveBytes);
     assert.ok(Number.isFinite(Date.parse(marker.startedAt)));
     assert.equal(fs.statSync(markerPath).mode & 0o777, 0o600);
   } finally {
@@ -297,8 +303,7 @@ test("rejects a second Neon restore attempt without overwriting its marker", () 
   try {
     fs.writeFileSync(archivePath, "verified archive");
     const markerPath = beginNeonRestoreAttempt(archivePath, receiptPath, {
-      sha256: "b".repeat(64),
-    });
+      sha256: "b".repeat(64),    });
     const originalMarker = fs.readFileSync(markerPath, "utf8");
 
     assert.throws(
@@ -597,8 +602,7 @@ test("retention groups by ICT calendar day and keeps unknown or unverified archi
     assert.equal(verifiedCount, 1);
     assert.deepEqual(
       result.planned.map((item) => item.archive).sort(),
-      [
-        path.basename(older.archivePath),
+      [        path.basename(older.archivePath),
         path.basename(middle.archivePath),
       ].sort(),
     );

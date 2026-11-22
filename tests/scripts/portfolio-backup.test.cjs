@@ -603,7 +603,8 @@ test("retention groups by ICT calendar day and keeps unknown or unverified archi
     assert.equal(verifiedCount, 1);
     assert.deepEqual(
       result.planned.map((item) => item.archive).sort(),
-      [        path.basename(older.archivePath),
+      [
+        path.basename(older.archivePath),
         path.basename(middle.archivePath),
       ].sort(),
     );

@@ -303,7 +303,8 @@ test("rejects a second Neon restore attempt without overwriting its marker", () 
   try {
     fs.writeFileSync(archivePath, "verified archive");
     const markerPath = beginNeonRestoreAttempt(archivePath, receiptPath, {
-      sha256: "b".repeat(64),    });
+      sha256: "b".repeat(64),
+    });
     const originalMarker = fs.readFileSync(markerPath, "utf8");
 
     assert.throws(

@@ -151,7 +151,7 @@ The original checkout key was composed only from run ID, VU and iteration. Becau
 
 The 23 baseline and 27 hot-product HTTP 409 responses are observed benchmark results. The report does not attribute those 409 responses to idempotency replay without response-level evidence; transaction conflicts and retries were also observed.
 
-The scripts are being corrected to use the `TRIAD_PERF_*` namespace and scenario-qualified keys (`runId-scenarioName-VU-iteration`). No post-fix benchmark has been run yet, so the results in this report remain the original 2026-11-11 measurements.
+The scripts were subsequently corrected to use the `TRIAD_PERF_*` namespace and scenario-qualified keys (`runId-scenarioName-VU-iteration`). The isolation fix and repeat runs are recorded in Sections 11 and 12 below. The results in Sections 1–10 remain the original 2026-11-11 measurements and are not retroactively rewritten.
 
 ## 9. Raw artifacts
 
@@ -162,22 +162,11 @@ The raw k6 JSON output files were retained in the Windows temporary directory an
 
 Run ID: `local-20261111`
 
-## 10. Conclusion and follow-up
+## 10. Original 2026-11-11 conclusion (historical; later local verification follows)
 
-**Overall status: PARTIAL PASS**
+**Original run status: PARTIAL PASS.** The hot-product workload met its configured thresholds, while the baseline failed p99 and both workloads recorded HTTP 409 responses. The original k6 environment/scenario warning and possible key collision were subsequently addressed; see Sections 11 and 12.
 
-- Hot-product contention meets all configured latency and failure-rate thresholds.
-- Baseline meets p95 and failure-rate thresholds but fails p99.
-- Residual HTTP 409 checkout failures remain in both workloads.
-- The k6 environment/scenario warning should be resolved before treating the benchmark as fully reproducible.
-
-Recommended follow-up:
-
-1. Complete the namespace and scenario-key isolation fix, then repeat both workloads.
-2. Investigate baseline p99 tail latency and residual HTTP 409 responses.
-3. Repeat under controlled conditions before making capacity or production-readiness claims.
-
-No production load test was performed.
+The 2026-11-14 local rerun in Section 12 passed both configured latency and failure-rate thresholds with zero observed failures, transaction conflicts or retries. Issue [#144](https://github.com/Thang4869/TriAD-Backend/issues/144) was closed as completed on 2026-11-14. These are reproducible local benchmark results only, not production capacity measurements or an approved production SLO.
 
 ## 11. Post-fix verification – Issue #144
 
@@ -254,6 +243,8 @@ Raw post-fix artifacts were retained outside Git:
 - `%TEMP%\triad-checkout-contention-postfix-20261112.log`
 
 ## 12. Checkout concurrency/retry fix verification — 2026-11-14
+
+**Issue #144:** closed as completed on 2026-11-14 after the local verification below.
 
 The residual 409s were caused by `SERIALIZABLE` transaction aborts under
 contention, not by exhausted inventory. Checkout already locks product rows

@@ -210,7 +210,7 @@ Coverage and reliability strategy includes:
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22.22+ (matches CI and the current Testcontainers requirement)
 - npm
 - Docker + Docker Compose
 - Git
@@ -554,7 +554,7 @@ Current limitations are explicit:
 - No real payment/refund provider is production-wired.
 - Prepared Saga orchestration is not the active production checkout path.
 - Cross-domain production CSRF/CORS/OAuth behavior still requires smoke verification on the deployed frontend/backend domains.
-- The full frontend-to-backend CI journey and production-image runtime smoke are implemented and run in GitHub Actions; deployed staging recovery, real external-service connectivity and measured RTO/RPO/SLO remain open.
+- The full frontend-to-backend CI journey and production-image runtime smoke are implemented and run in GitHub Actions. The selected free-demo backup, database replacement and post-cutover restore scope is accepted (see [recovery runbook](docs/RECOVERY_DRILL.md)); production-grade recovery guarantees, real external-service connectivity and measured RTO/RPO/SLO remain unproven.
 
 ---
 
@@ -576,4 +576,4 @@ This project is an educational engineering reference and portfolio work, **not a
 
 ## Production-readiness acceptance gates
 
-This portfolio documents implementation and CI evidence separately from environmental verification. The [Current work checklist](docs/TriAD-Backend-Improvement-Checklist.md) tracks the remaining active-Neon backup and disposable-restore acceptance, hosted OTLP span proof, SMTP delivery, repeatable performance/mutation evidence, RTO/RPO/SLO measurement, and demo/interview evidence. Proxy/security verification has separate accepted evidence; do not list it as an open gate. No end-to-end production acceptance is claimed simply because automated CI passes.
+This portfolio documents implementation and CI evidence separately from environmental verification. The [Current work checklist](docs/TriAD-Backend-Improvement-Checklist.md) tracks hosted OTLP span proof, SMTP delivery, repeatable performance/mutation evidence, production-grade recovery limits, RTO/RPO/SLO measurement, and demo/interview evidence. The selected free-demo backup/cutover/post-cutover restore acceptance is complete and documented in [the recovery runbook](docs/RECOVERY_DRILL.md). Proxy/security verification has separate accepted evidence; do not list it as an open gate. No end-to-end production acceptance is claimed simply because automated CI passes.

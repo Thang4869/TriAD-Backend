@@ -1,6 +1,6 @@
 # Operations Runbook
 
-## Current staging and recovery status — 2026-11-20
+## Current staging and recovery status — 2026-11-24
 
 The staging database cutover to Neon is complete. The active staging application
 database is the dedicated Neon branch `triad-render-restore-20261120`, served by
@@ -11,19 +11,20 @@ The cutover and schema acceptance covered 19 tables and 16 Prisma migrations,
 with health/readiness, catalog, CSRF, cart and synthetic COD checkout smoke
 checks passing.
 
-**Cutover completion is not backup/recovery acceptance.** Issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143)
-remains open. Still required: a fresh encrypted backup of the active Neon branch,
-a disposable restore of that post-cutover archive, repeatable unattended
-scheduled-run evidence, and owner confirmation of the 09:20 ICT Neon attempt.
-Coverage on 14–19 Nov was uneven because the Windows host was off during some
-scheduled windows. Do not infer a complete backup streak from the configured
-cadence. Free Redis persistence remains disabled/limited; no proven PITR,
-guaranteed RTO/RPO or production SLO is claimed.
+The selected free-demo recovery scope in Issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143)
+was marked **closed / completed** on 2026-11-20. The owner recorded a fresh
+encrypted backup of the active Neon branch and a successful disposable
+PostgreSQL 18 restore on 2026-11-21; details are in
+[PORTFOLIO_BACKUP.md](PORTFOLIO_BACKUP.md) and [RECOVERY_DRILL.md](RECOVERY_DRILL.md).
+The configured three-hour cadence is not proof of uninterrupted unattended
+runs. Multi-day schedule reliability remains unproven. Free Redis persistence
+remains disabled/limited; no PITR, guaranteed production RTO/RPO or production
+SLO is claimed.
 
 Latest repository heads and CI evidence:
-- Backend `main`: `8995647`; CI run [#44655433237](https://github.com/Thang4869/TriAD-Backend/actions/runs/44655433237) passed all jobs.
-- Frontend `main`: `0779307`; CI run [#44655347922](https://github.com/Thang4869/TriAD-12/actions/runs/44655347922) passed all three jobs.
-- Backend staging source remains `606e9b2`; do not confuse the deployed source SHA with the later docs-only main head.
+- Backend `main`: `4dbf1aa` (merge PR #298, 2026-11-22).
+- Frontend `main`: `7cd5d60` (merge PR #110, 2026-11-23).
+- Backend staging source remains `606e9b2`; do not confuse the deployed source SHA with the later repository heads. Historical CI run IDs below refer to their original SHAs, not these current heads.
 
 Issue [#141](https://github.com/Thang4869/TriAD-Backend/issues/141) remains open:
 Cloudinary upload acceptance passed on 24 Oct, while hosted OTLP receiver/span
@@ -44,7 +45,7 @@ The environment and CI evidence in this section describes the 24 Oct 2026
 acceptance snapshot. It is retained as historical evidence and must not be
 interpreted as a current deployment, configuration, or backup status.
 
-## Recovery evidence update — 2026-11-20
+## Historical recovery evidence snapshot — 2026-11-20 (superseded by 2026-11-21 evidence)
 
 - The staging app now uses the dedicated Neon branch
   `triad-render-restore-20261120`; the Render PostgreSQL database is retained
@@ -61,21 +62,23 @@ interpreted as a current deployment, configuration, or backup status.
 - Free Redis persistence is disabled/limited; do not claim durable queue state,
   PITR, guaranteed RTO/RPO or production SLO.
 
-## Recovery gate #143 — work started 2026-10-24
+## Historical recovery gate snapshot — 2026-10-24
 
-Issue #143 is reopened: the local 9.866-second recovery-only benchmark never
-established hosted backups, measured production RPO or full worker durability.
-The candidate full-runtime recovery workflow exercises PostgreSQL 18 snapshot
-restore, authenticated archive/key roundtrip, committed-write markers, AOF
-SIGKILL recovery, actual Outbox Relay/BullMQ/SMTP-sink processing, authenticated
-API and reversible isolated rollback. See [recovery runbook](RECOVERY_DRILL.md).
+At the time of this snapshot, Issue #143 had been reopened because the local
+9.866-second recovery-only benchmark did not establish hosted backups, measured
+production RPO or full worker durability. The full-runtime recovery workflow
+was being prepared to exercise PostgreSQL 18 snapshot restore, authenticated
+archive/key roundtrip, committed-write markers, AOF SIGKILL recovery, actual
+Outbox Relay/BullMQ/SMTP-sink processing, authenticated API and reversible
+isolated rollback. See [recovery runbook](RECOVERY_DRILL.md) for the later
+accepted free-demo evidence and the remaining production limitations.
 
-Live read-only inspection: the staging PostgreSQL is Free/PG18 and expires on
-2026-11-20; the staging Free Key Value has `persistenceMode=off`, despite
-`noeviction`. No managed Postgres backup or durable queue guarantee is available
-from this current Free configuration. No hosting upgrade, staging restore,
-backup schedule or external storage/key system has been provisioned. Those need
-owner decisions; a successful disposable CI result cannot close this gate.
+The 2026-10-24 live inspection found Free PostgreSQL 18 expiring on 2026-11-20
+and Free Key Value with `persistenceMode=off`, despite `noeviction`. Those are
+historical provider observations. The later Render-to-Neon cutover, local
+encrypted backup setup and post-cutover Neon restore are recorded in the current
+status above and [PORTFOLIO_BACKUP.md](PORTFOLIO_BACKUP.md). Free Redis still
+does not provide a persistent queue guarantee.
 
 ## First response
 
@@ -303,12 +306,12 @@ a crash, lost response or Redis failure. Changed-total rejection and transaction
 rollback have automated PostgreSQL integration coverage in PR #212 and the
 passing backend CI; those tests do not establish cloud fault-recovery acceptance.
 
-Still pending: explicit refresh/rotation and token replay after logout,
-negative CSRF cases, proxy client-IP/rate-limit behavior, Cloudinary upload,
-and worker/recovery drills. Keep the related checklist gates open until those
-checks have their own dated evidence. The GitHub state of #143 is currently
-closed, but its documented deployment/RPO/worker acceptance remains incomplete;
-do not infer a production recovery PASS from that state.
+At the time of this 2026-10-22 snapshot, refresh/rotation and token replay after
+logout, negative CSRF cases, proxy client-IP/rate-limit behavior, Cloudinary
+upload and worker/recovery drills were still pending. Issue #143's then-current
+closed state did not establish production RTO/worker durability. Later accepted
+free-demo recovery evidence is recorded at the top of this runbook; production
+guarantees remain outside that acceptance.
 
 #### CSRF HTTP boundary checks — 2026-10-22
 
@@ -654,8 +657,9 @@ persist data across restarts. `noeviction` prevents memory-pressure eviction,
 not restart data loss. This stack therefore does not prove continuous worker
 availability, durable queue recovery or production RTO/RPO. Choose persistent
 datastores and suitable always-running compute before accepting those gates.
-Require the full recovery evidence for #143 before accepting that gate;
-the GitHub issue state alone does not establish acceptance.
+The selected free-demo recovery scope for #143 is now accepted; that closure
+does not establish production-grade recovery, persistent Redis or measured
+RTO/RPO. Keep those limitations explicit.
 
 References: [Blueprint specification](https://render.com/docs/blueprint-spec),
 [Free-instance limits](https://render.com/docs/free), and

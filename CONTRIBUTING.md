@@ -6,7 +6,7 @@ Clean Architecture boundaries, transactional invariants and tests.
 
 ## Local development
 
-Use the Node.js version configured by CI (`22`), PostgreSQL and Redis.
+Use Node.js **22.22 or newer in the Node 22 line**, matching CI and the current Testcontainers minimum, plus PostgreSQL and Redis.
 Copy `.env.example` to a **local** `.env` file and provide the required
 secrets locally; never commit secrets.
 

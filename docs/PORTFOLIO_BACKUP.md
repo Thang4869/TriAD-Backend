@@ -5,7 +5,7 @@ Render/Vercel plan, PITR, persistent Redis or production availability objective
 is required for this demo. This explicitly weaker operating profile is not a
 production recovery certification.
 
-## Current staging topology and acceptance — 2026-11-20
+## Staging topology and free-demo acceptance — updated 2026-11-21
 
 The staging application has completed its database cutover to the dedicated
 Neon branch `triad-render-restore-20261120`. The previous Render PostgreSQL
@@ -14,15 +14,14 @@ The cutover verified 19 tables and 16 Prisma migrations. The backup script
 continues to support Render and Neon as explicitly selected sources; its
 `RestoreNeon` action targets a dedicated Neon restore branch.
 
-**Still open under Issue #143:** create a fresh encrypted backup from the active
-post-cutover Neon branch and restore that archive into a disposable PostgreSQL
-18 target; verify repeated unattended scheduled runs; obtain owner confirmation
-for the 09:20 ICT Neon attempt. Earlier Render archive restores do not substitute
-for this post-cutover Neon acceptance. Backup coverage from 14–19 Nov was uneven
-because the Windows host was not running during every scheduled window. The
-configured Render cadence (00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00,
-21:00 ICT) and Neon cadence 20 minutes later are intended schedules, not proof
-that every run occurred.
+**Historical status at the 2026-11-20 cutover:** Issue #143 was still open while
+the active Neon backup/restore evidence was pending. The owner recorded a fresh
+post-cutover Neon backup and disposable PostgreSQL 18 restore PASS on 2026-11-21
+in the issue comments; see the current acceptance addendum at the end of this
+file. Backup coverage from 14–19 Nov was uneven because the Windows host was not
+running during every scheduled window. The configured Render cadence (00:00,
+03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 ICT) and Neon cadence 20 minutes
+later are intended schedules, not proof that every run occurred.
 
 Free Redis persistence remains limited/disabled. No PITR, guaranteed RTO/RPO,
 or full production recovery objective is established. This update does not
@@ -146,8 +145,9 @@ syncing. This is a best-effort PC schedule, not managed cloud backup.
    Installation requires the DPAPI-protected `ProtectedNeonUrl` and a receipt
    containing `result: PASS` and `source: neon`. It creates
    **TriAD Portfolio Backup Neon** with `-Action BackupNeon`; it does not modify
-   or replace **TriAD Portfolio Backup**. Keep the Render task until rollback
-   Issue #143 has been accepted.
+   or replace **TriAD Portfolio Backup**. Keep the Render task while the old
+   Render database remains an approved rollback source; remove it only after
+   the owner explicitly approves retiring that source and its backup schedule.
 
 8. After both existing tasks are present, preview and apply the three-hour
    schedule. The script validates both task actions and their interactive,
@@ -323,12 +323,14 @@ To remove only the schedule and keep archives/keys:
 CI tests a synthetic PostgreSQL source and the Windows parser/DPAPI without live
 credentials. No archive/key/plaintext is uploaded. The initial **real** backup
 and user-triggered scheduled run were separately accepted on the owner's PC
-(see dated evidence above). Offline archive/key recovery is now verified for the
-Render archive using the independently held iPhone copy. Issue #143 remains open
-for seven consecutive successful daily backup/restore days from both Render and
-Neon, plus completion of the Free PostgreSQL replacement/export plan.
-Unattended daily reliability and hosted recovery are not guaranteed; paid
-production targets are not imposed.
+(see dated evidence above). Offline archive/key recovery was verified for the
+Render archive using the independently held iPhone copy. The 2026-11-10 audit's
+seven-day Render/Neon streak and replacement-plan gates are historical; the
+selected free-demo scope was later accepted and Issue #143 was closed as
+completed on 2026-11-20. The post-cutover Neon archive and disposable restore
+PASS were recorded on 2026-11-21 below. Multi-day unattended reliability,
+PITR and production RTO/RPO remain unproven; paid production targets are not
+imposed.
 
 References: [Render external access](https://render.com/docs/postgresql-creating-connecting#restricting-external-access),
 [Free hosting limits](https://render.com/docs/free).
@@ -498,8 +500,37 @@ it does not rewrite earlier observations or imply that every scheduled trigger r
   from local disposable restores.
 
 The Render Free PostgreSQL expiry recorded by the provider was
-**2026-11-20 13:24:50 UTC (20:24:50 ICT)**. This document alone does not verify
-whether the database was replaced, exported, or retired after that deadline.
-Confirm the current provider state before using any old connection or cutover
-instruction. No database deletion, environment-variable rotation, deployment,
-or schedule change is authorized by this documentation update.
+**2026-11-20 13:24:50 UTC (20:24:50 ICT)**. The 2026-11-20 cutover record and
+Issue #143 closure comment state that the old Render database was retained as a
+rollback source; verify its current provider state before relying on it. No
+claim of PITR, guaranteed RTO/RPO or multi-day unattended schedule reliability
+is made.
+
+
+## Post-cutover Neon backup and free-demo acceptance — 2026-11-21
+
+Issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143) is closed
+with GitHub state reason `completed` (2026-11-20). The owner subsequently
+recorded the final post-cutover backup/restore evidence in an issue comment on
+2026-11-21:
+
+- Active source: Neon staging database `triad_staging` on branch
+  `triad-render-restore-20261120`.
+- Scheduled action: `BackupNeon`, Task Scheduler run at 00:20 ICT on 2026-11-21;
+  `LastTaskResult = 0`.
+- Encrypted archive: `triad-portfolio-20261120T172009556Z-18b9b429.dump.enc`
+  (77,555 bytes), with a matching `.verified.json` receipt.
+- Structured logs record source validation, PostgreSQL dump, encryption,
+  integrity verification, disposable PostgreSQL 18 restore, required-schema
+  verification and cleanup. The restore returned PASS.
+- A previous 21:20 run failed during disposable restore with `pg_attver`; the
+  subsequent 00:20 run passed after the metadata compatibility filter was
+  applied.
+
+This completes the selected free-demo recovery scope: CI recovery exercise,
+independent encrypted backup/key custody, Render-to-Neon replacement and live
+staging validation, plus a post-cutover Neon backup restored into an isolated
+PostgreSQL 18 target. It does **not** establish PITR, persistent Free Redis,
+formal production RTO/RPO, or guaranteed unattended schedule reliability.
+The old Render PostgreSQL remains retained as rollback evidence/source; its
+retirement is not authorized by closing #143.

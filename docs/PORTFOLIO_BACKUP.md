@@ -221,9 +221,11 @@ and their **own Windows PC** (not CI, no hosted restore):
   archive copies and an independent offline recovery-key copy remain to be
   confirmed by the owner.
 - Historical note: the old Render Free PostgreSQL resource had an expiry
-  warning dated 2026-11-20. Its final provider state is not asserted here;
-  check the provider before relying on it. The application cutover to Neon
-  is complete, but post-cutover Neon backup/restore acceptance is still open.
+  warning dated 2026-11-20; verify its current provider state before relying on
+  it. The Render-to-Neon cutover completed on 2026-11-20, and the post-cutover
+  Neon backup plus disposable PostgreSQL 18 restore passed on 2026-11-21 (see
+  the final acceptance addendum below). The old Render database remains a
+  rollback source; its retirement is not implied.
 
 Evidence is limited to owner-shared command output. Neither encrypted archives
 nor passwords, DPAPI settings, or recovery keys are committed or uploaded.

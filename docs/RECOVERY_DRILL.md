@@ -9,14 +9,14 @@ backup/restore and Windows scheduling were subsequently exercised by the owner;
 see the dated 2026-11-20 addendum below. No production RTO/RPO or persistent
 Free Redis guarantee is claimed.
 
-**Current status (2026-11-20):** staging database cutover to dedicated Neon
+**Current status (2026-11-21):** staging database cutover to dedicated Neon
 branch `triad-render-restore-20261120` is complete; the former Render PostgreSQL
-is retained as rollback evidence/source, not the active app DB. Issue #143
-remains open because a fresh encrypted backup of the active Neon branch and a
-disposable restore of that post-cutover archive are still required, alongside
-repeatable unattended scheduled-run evidence. The 09:20 ICT attempt is pending
-owner confirmation. Free Redis durability, PITR and guaranteed RTO/RPO are not
-established.
+is retained as rollback evidence/source, not the active app DB. Issue #143 was
+closed as completed on 2026-11-20. The owner recorded a fresh encrypted backup
+of the active Neon branch and a successful disposable PostgreSQL 18 restore on
+2026-11-21 (see the final addendum). Multi-day unattended schedule reliability,
+Free Redis persistence, PITR and guaranteed production RTO/RPO remain
+unestablished; these are not claimed by the accepted free-demo scope.
 
 **Historical baseline (2026-10-18):** The isolated PostgreSQL drill is merged and passed on `main` in [CI run #39116584480](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480) ([restore-drill job](https://github.com/Thang4869/TriAD-Backend/actions/runs/39116584480/job/117643501456)). This proves the CI fixture only; deployed recovery evidence for issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143), including RTO/RPO, remains **OPEN**.
 
@@ -191,3 +191,27 @@ runs are evidenced. Historical backup streak gaps remain; do not claim a seven-
 day streak. The completed staging cutover is distinct from full recovery
 acceptance. Do not claim guaranteed RTO/RPO or durable Free Redis/worker state. No hosted resource or schedule was
 changed by this documentation update.
+
+
+## Post-cutover Neon restore and issue closure — 2026-11-21
+
+The owner recorded the final free-demo recovery evidence in the closing comment
+on [Issue #143](https://github.com/Thang4869/TriAD-Backend/issues/143):
+
+- Active source: Neon staging database `triad_staging` on branch
+  `triad-render-restore-20261120`.
+- `BackupNeon` ran through Task Scheduler at 00:20 ICT on 2026-11-21;
+  `LastTaskResult = 0`.
+- Encrypted archive `triad-portfolio-20261120T172009556Z-18b9b429.dump.enc`
+  (77,555 bytes) had a matching verification receipt.
+- The archive passed integrity verification and disposable PostgreSQL 18
+  restore, including required-schema checks and cleanup.
+- The preceding 21:20 attempt failed at restore with `pg_attver`; the later
+  attempt passed after the metadata compatibility filter was applied.
+
+Issue #143 was marked **closed / completed** on 2026-11-20. The accepted scope
+covers the selected free-demo backup/replacement/restore workflow and CI
+recovery evidence. It does not establish PITR, persistent deployed Free Redis,
+formal production RTO/RPO, or guaranteed multi-day unattended schedule
+reliability. The old Render PostgreSQL remains retained as rollback evidence;
+no retirement is implied by issue closure.

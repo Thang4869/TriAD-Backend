@@ -1,6 +1,6 @@
 # Operations Runbook
 
-## Current staging and recovery status — 2026-11-20
+## Current staging and recovery status — 2026-11-24
 
 The staging database cutover to Neon is complete. The active staging application
 database is the dedicated Neon branch `triad-render-restore-20261120`, served by
@@ -11,19 +11,20 @@ The cutover and schema acceptance covered 19 tables and 16 Prisma migrations,
 with health/readiness, catalog, CSRF, cart and synthetic COD checkout smoke
 checks passing.
 
-**Cutover completion is not backup/recovery acceptance.** Issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143)
-remains open. Still required: a fresh encrypted backup of the active Neon branch,
-a disposable restore of that post-cutover archive, repeatable unattended
-scheduled-run evidence, and owner confirmation of the 09:20 ICT Neon attempt.
-Coverage on 14–19 Nov was uneven because the Windows host was off during some
-scheduled windows. Do not infer a complete backup streak from the configured
-cadence. Free Redis persistence remains disabled/limited; no proven PITR,
-guaranteed RTO/RPO or production SLO is claimed.
+The selected free-demo recovery scope in Issue [#143](https://github.com/Thang4869/TriAD-Backend/issues/143)
+was marked **closed / completed** on 2026-11-20. The owner recorded a fresh
+encrypted backup of the active Neon branch and a successful disposable
+PostgreSQL 18 restore on 2026-11-21; details are in
+[PORTFOLIO_BACKUP.md](PORTFOLIO_BACKUP.md) and [RECOVERY_DRILL.md](RECOVERY_DRILL.md).
+The configured three-hour cadence is not proof of uninterrupted unattended
+runs. Multi-day schedule reliability remains unproven. Free Redis persistence
+remains disabled/limited; no PITR, guaranteed production RTO/RPO or production
+SLO is claimed.
 
 Latest repository heads and CI evidence:
-- Backend `main`: `8995647`; CI run [#44655433237](https://github.com/Thang4869/TriAD-Backend/actions/runs/44655433237) passed all jobs.
-- Frontend `main`: `0779307`; CI run [#44655347922](https://github.com/Thang4869/TriAD-12/actions/runs/44655347922) passed all three jobs.
-- Backend staging source remains `606e9b2`; do not confuse the deployed source SHA with the later docs-only main head.
+- Backend `main`: `4dbf1aa` (merge PR #298, 2026-11-22).
+- Frontend `main`: `7cd5d60` (merge PR #110, 2026-11-23).
+- Backend staging source remains `606e9b2`; do not confuse the deployed source SHA with the later repository heads. Historical CI run IDs below refer to their original SHAs, not these current heads.
 
 Issue [#141](https://github.com/Thang4869/TriAD-Backend/issues/141) remains open:
 Cloudinary upload acceptance passed on 24 Oct, while hosted OTLP receiver/span
@@ -44,7 +45,7 @@ The environment and CI evidence in this section describes the 24 Oct 2026
 acceptance snapshot. It is retained as historical evidence and must not be
 interpreted as a current deployment, configuration, or backup status.
 
-## Recovery evidence update — 2026-11-20
+## Historical recovery evidence snapshot — 2026-11-20 (superseded by 2026-11-21 evidence)
 
 - The staging app now uses the dedicated Neon branch
   `triad-render-restore-20261120`; the Render PostgreSQL database is retained
@@ -654,8 +655,9 @@ persist data across restarts. `noeviction` prevents memory-pressure eviction,
 not restart data loss. This stack therefore does not prove continuous worker
 availability, durable queue recovery or production RTO/RPO. Choose persistent
 datastores and suitable always-running compute before accepting those gates.
-Require the full recovery evidence for #143 before accepting that gate;
-the GitHub issue state alone does not establish acceptance.
+The selected free-demo recovery scope for #143 is now accepted; that closure
+does not establish production-grade recovery, persistent Redis or measured
+RTO/RPO. Keep those limitations explicit.
 
 References: [Blueprint specification](https://render.com/docs/blueprint-spec),
 [Free-instance limits](https://render.com/docs/free), and

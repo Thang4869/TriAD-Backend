@@ -6,8 +6,8 @@ not a paid datastore or cloud artifact quota. Full production-runtime CI passed
 [run 40060645424](https://github.com/Thang4869/TriAD-Backend/actions/runs/40060645424)
 in PR #227 (4,433 ms recovery, 498 ms committed-marker fixture gap). Real hosted
 backup/restore and Windows scheduling were subsequently exercised by the owner;
-see the dated 2026-11-20 addendum below. No production RTO/RPO or persistent
-Free Redis guarantee is claimed.
+see the dated 2026-11-20 and 2026-11-21 addenda below. No production RTO/RPO or
+persistent Free Redis guarantee is claimed.
 
 **Current status (2026-11-21):** staging database cutover to dedicated Neon
 branch `triad-render-restore-20261120` is complete; the former Render PostgreSQL

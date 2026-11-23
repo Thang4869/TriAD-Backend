@@ -56,4 +56,4 @@ Both SIGKILL cases PASS in the linked CI, with one durable order/stock change an
 
 Use synthetic accounts and orders. Record incident and recovery timestamps, HTTP status, Redis availability, and durable order identifiers in redacted form. Never attach raw idempotency keys, access tokens, request bodies or customer data.
 
-Issue #84 has the linked durable recovery and CI proof. Full hosted worker/infrastructure recovery remains tracked separately by #143; do not reinterpret these results as its completion.
+Issue #84 has the linked durable recovery and CI proof. The selected free-demo backup/replacement/restore scope tracked by [#143](https://github.com/Thang4869/TriAD-Backend/issues/143) was closed as completed on 2026-11-20. That closure does not establish persistent hosted Redis, guaranteed worker availability, PITR or production RTO/RPO; those remain explicit platform limitations.

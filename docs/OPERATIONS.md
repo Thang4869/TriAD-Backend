@@ -62,21 +62,23 @@ interpreted as a current deployment, configuration, or backup status.
 - Free Redis persistence is disabled/limited; do not claim durable queue state,
   PITR, guaranteed RTO/RPO or production SLO.
 
-## Recovery gate #143 — work started 2026-10-24
+## Historical recovery gate snapshot — 2026-10-24
 
-Issue #143 is reopened: the local 9.866-second recovery-only benchmark never
-established hosted backups, measured production RPO or full worker durability.
-The candidate full-runtime recovery workflow exercises PostgreSQL 18 snapshot
-restore, authenticated archive/key roundtrip, committed-write markers, AOF
-SIGKILL recovery, actual Outbox Relay/BullMQ/SMTP-sink processing, authenticated
-API and reversible isolated rollback. See [recovery runbook](RECOVERY_DRILL.md).
+At the time of this snapshot, Issue #143 had been reopened because the local
+9.866-second recovery-only benchmark did not establish hosted backups, measured
+production RPO or full worker durability. The full-runtime recovery workflow
+was being prepared to exercise PostgreSQL 18 snapshot restore, authenticated
+archive/key roundtrip, committed-write markers, AOF SIGKILL recovery, actual
+Outbox Relay/BullMQ/SMTP-sink processing, authenticated API and reversible
+isolated rollback. See [recovery runbook](RECOVERY_DRILL.md) for the later
+accepted free-demo evidence and the remaining production limitations.
 
-Live read-only inspection: the staging PostgreSQL is Free/PG18 and expires on
-2026-11-20; the staging Free Key Value has `persistenceMode=off`, despite
-`noeviction`. No managed Postgres backup or durable queue guarantee is available
-from this current Free configuration. No hosting upgrade, staging restore,
-backup schedule or external storage/key system has been provisioned. Those need
-owner decisions; a successful disposable CI result cannot close this gate.
+The 2026-10-24 live inspection found Free PostgreSQL 18 expiring on 2026-11-20
+and Free Key Value with `persistenceMode=off`, despite `noeviction`. Those are
+historical provider observations. The later Render-to-Neon cutover, local
+encrypted backup setup and post-cutover Neon restore are recorded in the current
+status above and [PORTFOLIO_BACKUP.md](PORTFOLIO_BACKUP.md). Free Redis still
+does not provide a persistent queue guarantee.
 
 ## First response
 
@@ -304,12 +306,12 @@ a crash, lost response or Redis failure. Changed-total rejection and transaction
 rollback have automated PostgreSQL integration coverage in PR #212 and the
 passing backend CI; those tests do not establish cloud fault-recovery acceptance.
 
-Still pending: explicit refresh/rotation and token replay after logout,
-negative CSRF cases, proxy client-IP/rate-limit behavior, Cloudinary upload,
-and worker/recovery drills. Keep the related checklist gates open until those
-checks have their own dated evidence. The GitHub state of #143 is currently
-closed, but its documented deployment/RPO/worker acceptance remains incomplete;
-do not infer a production recovery PASS from that state.
+At the time of this 2026-10-22 snapshot, refresh/rotation and token replay after
+logout, negative CSRF cases, proxy client-IP/rate-limit behavior, Cloudinary
+upload and worker/recovery drills were still pending. Issue #143's then-current
+closed state did not establish production RTO/worker durability. Later accepted
+free-demo recovery evidence is recorded at the top of this runbook; production
+guarantees remain outside that acceptance.
 
 #### CSRF HTTP boundary checks — 2026-10-22
 

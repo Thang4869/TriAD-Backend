@@ -1,4 +1,6 @@
 import { NodeSDK } from "@opentelemetry/sdk-node";
+import type { ReadableSpan } from "@opentelemetry/sdk-trace";
+import { ExportResultCode, type ExportResult } from "@opentelemetry/core";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { tracingServiceResource } from "@core/tracing/tracing-resource";
@@ -67,6 +69,40 @@ function validateConfiguredEndpoint(): void {
   }
 }
 
+class DiagnosticOTLPTraceExporter extends OTLPTraceExporter {
+  override export(
+    spans: ReadableSpan[],
+    resultCallback: (result: ExportResult) => void,
+  ): void {
+    super.export(spans, (result) => {
+      if (result.code !== ExportResultCode.SUCCESS) {
+        const error = result.error;
+        const errorCode =
+          error && "code" in error && typeof error.code === "string"
+            ? error.code
+            : undefined;
+        const httpStatusCode =
+          error && "statusCode" in error && typeof error.statusCode === "number"
+            ? error.statusCode
+            : error && "code" in error && typeof error.code === "number"
+              ? error.code
+              : undefined;
+
+        // Never log the error message, endpoint, headers, or payload: they may
+        // contain credentials or other sensitive infrastructure information.
+        logger.error("OpenTelemetry trace export failed", {
+          spanCount: spans.length,
+          errorName: error?.name || "UnknownError",
+          ...(errorCode ? { errorCode } : {}),
+          ...(httpStatusCode ? { httpStatusCode } : {}),
+        });
+      }
+
+      resultCallback(result);
+    });
+  }
+}
+
 let sdk: NodeSDK | null = null;
 
 if (isTracingEnabled) {
@@ -79,7 +115,7 @@ if (isTracingEnabled) {
     ),
     // The exporter reads standard OTEL_EXPORTER_OTLP_* endpoint and header
     // variables. Keep credentials in the hosting secret store, never in code.
-    traceExporter: new OTLPTraceExporter(),
+    traceExporter: new DiagnosticOTLPTraceExporter(),
     instrumentations: [
       getNodeAutoInstrumentations({
         "@opentelemetry/instrumentation-fs": {
@@ -91,8 +127,11 @@ if (isTracingEnabled) {
 
   sdk.start();
 
-  // Never log the endpoint or headers: either may reveal infrastructure details.
-  logger.info("OpenTelemetry tracing started");
+  // This HTTP exporter serializes OTLP as JSON; do not imply the protocol env var switches it to Protobuf.
+  logger.info("OpenTelemetry tracing started", {
+    exporter: "otlp-http",
+    serialization: "json",
+  });
 } else {
   logger.info(
     "OpenTelemetry tracing disabled (set ENABLE_TRACING=true to enable)",

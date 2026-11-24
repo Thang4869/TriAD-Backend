@@ -93,6 +93,42 @@ describe("OpenTelemetry NodeSDK startup and shutdown (B10)", () => {
     expect(child.stderr).not.toContain(secret);
   }, 45_000);
 
+  it("logs sanitized diagnostics when the OTLP receiver rejects an export", () => {
+    const secret = "triad-otel-rejected-export-secret";
+    const child = runChild(
+      [
+        'const http = require("node:http");',
+        'const server = http.createServer((req, res) => { req.resume(); req.on("end", () => { res.writeHead(403); res.end("forbidden"); }); });',
+        'server.listen(0, "127.0.0.1", async () => {',
+        '  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = "http://127.0.0.1:" + server.address().port + "/v1/traces";',
+        '  process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS = "authorization=Bearer " + process.env.TEST_OTEL_SECRET;',
+        '  const { shutdownTracing } = require("./src/core/tracing/tracing");',
+        '  const { trace } = require("@opentelemetry/api");',
+        '  trace.getTracer("triad-otel-test").startSpan("rejected-export-test").end();',
+        '  await shutdownTracing().catch(() => process.stdout.write("OTEL_EXPORT_REJECTION_HANDLED\\n"));',
+        '  server.close(() => process.stdout.write("OTEL_REJECTED_EXPORT_TEST_COMPLETE\\n"));',
+        "});",
+      ].join(""),
+      {
+        NODE_ENV: "test",
+        ENABLE_TRACING: "true",
+        OTEL_SERVICE_NAME: "triad-ci-otel-rejection-test",
+        TEST_OTEL_SECRET: secret,
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "",
+        OTEL_EXPORTER_OTLP_TRACES_HEADERS: "",
+      },
+    );
+
+    expect(child.error).toBeUndefined();
+    expect(child.status, String(child.stderr) + String(child.stdout)).toBe(0);
+    expect(child.stdout).toContain("OpenTelemetry trace export failed");
+    expect(child.stdout).toContain('"httpStatusCode":403');
+    expect(child.stdout).toContain("OTEL_EXPORT_REJECTION_HANDLED");
+    expect(child.stdout).toContain("OTEL_REJECTED_EXPORT_TEST_COMPLETE");
+    expect(child.stdout).not.toContain(secret);
+    expect(child.stderr).not.toContain(secret);
+  }, 45_000);
+
   it("fails closed when production tracing has no explicit OTLP endpoint", () => {
     const child = runChild(
       'try { require("./src/core/tracing/tracing"); process.exitCode = 2; } catch (error) { process.stdout.write(String(error.message)); }',

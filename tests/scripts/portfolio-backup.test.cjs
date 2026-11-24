@@ -287,7 +287,9 @@ test("creates a durable IN_PROGRESS marker before a Neon restore attempt", () =>
     assert.equal(marker.sha256, metadata.sha256);
     assert.equal(marker.archiveBytes, metadata.archiveBytes);
     assert.ok(Number.isFinite(Date.parse(marker.startedAt)));
-    assert.equal(fs.statSync(markerPath).mode & 0o777, 0o600);
+    if (process.platform !== "win32") {
+      assert.equal(fs.statSync(markerPath).mode & 0o777, 0o600);
+    }
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }

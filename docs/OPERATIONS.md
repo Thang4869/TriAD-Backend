@@ -28,8 +28,14 @@ Latest repository heads and CI evidence:
 
 Issue [#141](https://github.com/Thang4869/TriAD-Backend/issues/141) remains open:
 Cloudinary upload acceptance passed on 24 Oct, while hosted OTLP receiver/span
-proof remains outstanding. Hosted tracing remains disabled
-(`ENABLE_TRACING=false`) until that proof is accepted. Dependency CI's
+proof remains outstanding. Grafana Cloud Free was selected and its stack,
+OTLP access policy, and token were provisioned on 25 Nov. The Grafana OTLP
+endpoint, protocol, service name, authorization header, and `ENABLE_TRACING=true`
+have been saved in the `triad-api-staging` Render environment. The change has
+not yet been deployed, and no receiver-visible trace has been accepted.
+Application support for standard OTLP endpoint/auth headers and local
+auth-header delivery tests is prepared. See
+[`OTEL_STAGING_ACCEPTANCE.md`](OTEL_STAGING_ACCEPTANCE.md). Dependency CI's
 high/critical gate passed in the latest backend run; this is not a claim of
 zero vulnerabilities at every severity. SMTP delivery and repeatable performance
 and mutation evidence remain separate acceptance items.

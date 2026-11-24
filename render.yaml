@@ -71,7 +71,7 @@ projects:
               - key: CLOUDINARY_API_SECRET
                 sync: false
               - key: ENABLE_TRACING
-                value: "false"
+                value: "true"
 
           - type: keyvalue
             name: triad-redis-staging

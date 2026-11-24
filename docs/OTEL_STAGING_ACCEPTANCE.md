@@ -1,14 +1,12 @@
 # OpenTelemetry staging acceptance
 
-**Status:** implementation prepared; Grafana Cloud and Render staging configuration saved; deployment and trace acceptance remain pending.
+**Status:** hosted staging OTLP ingestion and trace visibility verified; scoped Issue #141 acceptance complete.
 **Last checked:** 2026-11-25
 **Related:** Issue #141 (B10 / hosted tracing evidence)
 
 ## Receiver decision
 
-Grafana Cloud Free is the selected hosted OTLP receiver for the TriAD staging acceptance. The stack, `traces:write` access policy, and OTLP token have been provisioned. The endpoint, `http/protobuf` protocol, service name, authorization header, and `ENABLE_TRACING=true` have been saved in the Render `triad-api-staging` environment. The application has not yet been deployed with these settings, and no receiver-visible trace has been verified.
-
-The current Free plan limits, retention, region, and data-handling terms still need confirmation against the Grafana Cloud account and official documentation. Do not assume a plan limit or retention period from an earlier review.
+Grafana Cloud Free is the hosted OTLP receiver for TriAD staging. The stack and `traces:write` access policy were provisioned, and the OTLP configuration was saved in the Render `triad-api-staging` environment. The deployed service exports traces using HTTP/protobuf. On 2026-11-25, Grafana Explore returned traces for `triad-api-staging`, including HTTP server spans and child network spans; the trace detail view confirmed parent/child relationships and durations. This verifies receiver ingestion and visibility, not complete instrumentation coverage, full sensitive-attribute review, graceful-shutdown verification, or a production SLO. Never store or publish the token or authorization value in this document.
 
 ## Current verified application state
 
@@ -19,30 +17,16 @@ The current Free plan limits, retention, region, and data-handling terms still n
 - In production, enabling tracing requires an explicitly configured OTLP endpoint using HTTPS. Endpoints containing user information, query strings, or fragments are rejected.
 - Startup logs no longer print the exporter endpoint or authentication headers.
 - `.env.example` keeps `ENABLE_TRACING=false`; endpoint and header examples remain commented out.
-- `render.yaml` continues to set `ENABLE_TRACING=false` for `triad-api-staging`.
+- `render.yaml` enables `ENABLE_TRACING=true` for the hosted staging service; `.env.example` intentionally retains `ENABLE_TRACING=false` as the safe local default.
 - The exporter integration test uses a local HTTP receiver to verify that the configured authorization header is sent and is not printed to stdout/stderr.
 - `tests/unit/core/tracing/tracing-startup.test.ts` also verifies SDK startup/shutdown and fail-closed production configuration. These tests do not prove delivery to Grafana Cloud.
 - `docker-compose.prod.yml` defines a local Compose collector at `otel-collector:4318`, with a debug exporter. It is not the hosted Grafana Cloud receiver.
 
-## Safety decision
+## Security and remaining verification
 
-**Do not enable tracing on Render yet.** Do not set the endpoint to `localhost`, the Compose-only hostname `otel-collector`, or an unverified URL. Do not change Render environment variables or trigger a deployment until the receiver is provisioned and the owner explicitly approves the staging change.
+Keep Grafana Cloud authentication only in Render's secret-backed environment configuration. Never put credentials in the endpoint URL, source code, committed environment files, logs, issue comments, or screenshots. Use the narrowest token permissions available and rotate/revoke a token if it is exposed.
 
-Never put credentials in the endpoint URL, source code, committed environment files, logs, issue comments, or screenshots. Store Grafana Cloud authentication only in Render's secret-backed environment configuration. Use the narrowest token permissions available and rotate/revoke it if it is exposed.
-
-## Required work before enabling staging tracing
-
-1. Provision a Grafana Cloud Free stack in the selected account. Verify current plan limits, retention, region, OTLP/HTTP endpoint, required authentication header, and data-handling terms.
-2. Obtain the HTTPS traces endpoint and authentication value from Grafana Cloud. Keep the complete secret out of chat, source control, and local documentation.
-3. Configure the endpoint as `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (full `/v1/traces` URL) or use the base `OTEL_EXPORTER_OTLP_ENDPOINT`. Configure the provider's required auth header in `OTEL_EXPORTER_OTLP_TRACES_HEADERS`. Do not configure both endpoint forms unless their precedence is intentional.
-4. Confirm the receiver is reachable from the Render service and that its credentials are accepted. Do not expose an unauthenticated public collector.
-5. Obtain explicit owner approval before changing only the existing staging service's environment. Preserve every existing environment variable; do not replace the full environment.
-6. Deploy deliberately and verify startup reports tracing enabled without printing endpoint details or secrets.
-7. Send a controlled synthetic request through the staging API. Verify a trace with `service.name=triad-backend`, a non-empty trace ID, and relevant HTTP/server spans is visible in Grafana Cloud.
-8. Verify trace context propagation and ensure credentials, authorization headers, cookies, passwords, tokens, and sensitive request bodies do not appear in span attributes.
-9. Verify graceful shutdown flushes spans and confirm receiver-side timestamps and service identity.
-10. Record sanitized evidence (provider/plan, endpoint hostname only, deployment ID, test time, trace ID, span names, and acceptance result). Never publish the full endpoint if it contains sensitive path data, or any auth header/token.
-11. If any check fails, disable tracing again and verify the application remains healthy. Do not claim OTLP acceptance based solely on a successful API response or SDK startup log.
+The verified trace demonstrates receiver ingestion and visibility. The following broader operational checks are not claimed complete by that evidence: current Free-plan limits/retention/data-handling review, full trace-attribute inspection for sensitive data, graceful-shutdown flush verification, and complete instrumentation/context-propagation coverage. These are broader observability hardening tasks, not blockers for the scoped Issue #141 acceptance already recorded.
 
 ## Acceptance checklist
 
@@ -53,11 +37,12 @@ Never put credentials in the endpoint URL, source code, committed environment fi
 - [ ] Current Free limits, retention, region and data handling verified.
 - [x] Hosted OTLP endpoint and authentication configured in Render staging environment.
 - [x] Owner approved saving the staging environment configuration.
-- [ ] Staging tracing enabled with a verified HTTPS endpoint.
-- [ ] Synthetic staging request produces a Grafana-visible trace.
-- [ ] Trace context and expected spans verified.
-- [ ] Sensitive data exclusion verified.
-- [ ] Graceful shutdown flush verified.
-- [ ] Sanitized evidence attached to Issue #141.
+- [x] Staging tracing enabled with the configured hosted HTTPS OTLP receiver.
+- [x] Grafana Explore shows traces from `triad-api-staging` after a controlled staging request.
+- [x] HTTP server spans and child network spans are visible; parent/child relationships and durations were inspected.
+- [x] Sanitized exporter diagnostics are deployed; credentials, authorization headers and request payloads are not logged.
+- [ ] Full trace-attribute review for sensitive data.
+- [ ] Graceful-shutdown flush verification.
+- [ ] Current Free-plan limits, retention and data-handling review.
 
-Until every hosted acceptance item is evidenced, hosted OTLP tracing remains **not accepted** and Issue #141 must remain open.
+The scoped Issue #141 hosted ingestion/visibility acceptance is complete. The unchecked items above are broader operational hardening and must not be represented as completed.

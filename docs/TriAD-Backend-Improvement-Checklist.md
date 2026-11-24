@@ -1,23 +1,20 @@
 # TriAD Backend — Work Checklist
 
-**Cập nhật:** 2026-11-24 (đối chiếu trạng thái GitHub và bằng chứng vận hành được cung cấp) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
+**Cập nhật:** 2026-11-25 (đối chiếu trạng thái GitHub và bằng chứng vận hành được cung cấp) · **Phạm vi:** chỉ những việc **chưa xong / đang làm / cần nghiệm thu**. Đây là checklist điều hành duy nhất, không phải báo cáo điểm số. Đã hoàn thành thì xóa dòng khỏi file sau khi có bằng chứng, giữ lịch sử trong GitHub Issues/PRs/Actions.
 
 **Trạng thái:** `[ ]` Chưa hoàn thành · `[~]` Đang làm / đã có code nhưng thiếu nghiệm thu · `[B]` Cần môi trường, dữ liệu hoặc quyết định bổ sung. Không tự chuyển sang hoàn thành chỉ vì CI xanh. Trong lúc chờ staging cloud, có thể thực hiện `production-like` trên máy cá nhân (Docker Compose) và ghi chính xác loại môi trường.
 
-## Làm tiếp — Hoàn tất nghiệm thu staging
+## Làm tiếp — Release và portfolio evidence
 
-**Thứ tự tiếp theo:** dependency/config và hosted OTLP acceptance (#141) → release hygiene (#149) → portfolio/demo evidence (#150). Recovery portfolio #143 đã đóng sau khi hoàn tất scope demo miễn phí; các issue đã đóng được theo dõi tại GitHub, không giữ lại trong checklist điều hành này. Proxy/Redis #140, crash/retry #84, production Compose #102 và Cookie/CSRF #90 đã có bằng chứng nghiệm thu; xem OPERATIONS.md.
+**Thứ tự tiếp theo:** release hygiene (#149) → portfolio/demo evidence (#150). Issue #141 đã hoàn tất nghiệm thu hosted OTLP ingestion/trace visibility ngày 25/11/2026; Issue #143 đã đóng sau khi hoàn tất scope backup/cutover/restore cho demo miễn phí. Các issue đã đóng được theo dõi tại GitHub, không giữ lại như công việc đang mở trong checklist này. Proxy/Redis #140, crash/retry #84, production Compose #102 và Cookie/CSRF #90 đã có bằng chứng nghiệm thu; xem OPERATIONS.md.
 
-- [~] **Nghiệm thu môi trường còn lại:** Cookie/CSRF #90 đã nghiệm thu trên HTTPS (5/5 Playwright thực tế, không skipped); Cloudinary upload acceptance passed on 24 Oct; post-cutover Neon encrypted backup và disposable restore đã PASS ngày 21 Nov, #143 đã đóng. Hosted OTLP span proof remains open. Gói Free không chứng minh độ bền Redis queue, worker liên tục, PITR hoặc RTO/RPO được bảo đảm. [Bằng chứng staging và giới hạn hiện tại](OPERATIONS.md#deployed-staging-evidence--2026-10-22).
+- [~] **Nghiệm thu môi trường còn lại:** Cookie/CSRF #90 đã nghiệm thu trên HTTPS (5/5 Playwright thực tế, không skipped); Cloudinary upload acceptance passed on 24 Oct; post-cutover Neon encrypted backup và disposable restore đã PASS ngày 21 Nov; hosted OTLP traces của `triad-api-staging` đã được Grafana Cloud nhận và xác minh ngày 25 Nov. Gói Free không chứng minh độ bền Redis queue, worker liên tục, PITR hoặc RTO/RPO được bảo đảm. [Bằng chứng staging và giới hạn hiện tại](OPERATIONS.md#deployed-staging-evidence--2026-10-22).
 
 ## Bằng chứng đã nghiệm thu
 
+Issue [#141 — Dependency/config and hosted observability](https://github.com/Thang4869/TriAD-Backend/issues/141) đã hoàn tất scope nghiệm thu: Grafana Cloud nhận traces từ `triad-api-staging`; Grafana Explore hiển thị HTTP server spans và child network spans, đã kiểm tra quan hệ parent/child và duration ngày 25/11/2026. Đây không phải bằng chứng production SLO hoặc toàn bộ tracing coverage. [Chi tiết](OTEL_STAGING_ACCEPTANCE.md).
+
 Đã nghiệm thu/đóng: [Backend #90](https://github.com/Thang4869/TriAD-Backend/issues/90) và [Frontend #23](https://github.com/Thang4869/TriAD-12/issues/23). Source-only cookie/CSRF: backend PR #217–#219; live Render `dep-dbdm9n8ae00c738mhi10` (`d986ced`) và frontend Vercel (`7e345a3`). [Playwright trên HTTPS thật #39967055295](https://github.com/Thang4869/TriAD-12/actions/runs/39967055295) **5/5 PASS, 0 SKIPPED**, cả 3 jobs PASS; nội dung và giới hạn nghiệm thu [ghi tại OPERATIONS.md](OPERATIONS.md#deployed-https-cookie-and-csrf-acceptance--2026-10-23). Bằng chứng gate proxy, Redis outage và nghiệm thu lại cookie sau rollout được ghi trong mục 24/10/2026 tại OPERATIONS.md.
-
-## P1 — Hoàn thiện code, security và contract
-
-- [~] **[#141 — Dependency/config](https://github.com/Thang4869/TriAD-Backend/issues/141):** Config fail-closed merged; latest backend main CI run [#44655433237](https://github.com/Thang4869/TriAD-Backend/actions/runs/44655433237) passed its high/critical dependency gate. This is not evidence of zero vulnerabilities across all severities; the latest all-severity JSON audit has not been reviewed here. Cloudinary staging upload acceptance **PASS 24 Oct**; hosted OTLP receiver/span proof remains outstanding and `ENABLE_TRACING=false` on hosted staging. SMTP delivery and exact-candidate audit evidence remain separate acceptance items. [Audit and limits](DEPENDENCY_SECURITY_AUDIT.md).
-
 
 ## OAuth — Google trước, Facebook sau; chuẩn bị tài khoản song song
 

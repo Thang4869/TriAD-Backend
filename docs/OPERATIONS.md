@@ -26,19 +26,22 @@ Latest repository heads and CI evidence:
 - Frontend `main`: `7cd5d60` (merge PR #110, 2026-11-23).
 - Backend staging source remains `606e9b2`; do not confuse the deployed source SHA with the later repository heads. Historical CI run IDs below refer to their original SHAs, not these current heads.
 
-Issue [#141](https://github.com/Thang4869/TriAD-Backend/issues/141) remains open:
-Cloudinary upload acceptance passed on 24 Oct, while hosted OTLP receiver/span
-proof remains outstanding. Grafana Cloud Free was selected and its stack,
-OTLP access policy, and token were provisioned on 25 Nov. The Grafana OTLP
-endpoint, protocol, service name, authorization header, and `ENABLE_TRACING=true`
-have been saved in the `triad-api-staging` Render environment. The change has
-not yet been deployed, and no receiver-visible trace has been accepted.
-Application support for standard OTLP endpoint/auth headers and local
-auth-header delivery tests is prepared. See
-[`OTEL_STAGING_ACCEPTANCE.md`](OTEL_STAGING_ACCEPTANCE.md). Dependency CI's
-high/critical gate passed in the latest backend run; this is not a claim of
-zero vulnerabilities at every severity. SMTP delivery and repeatable performance
-and mutation evidence remain separate acceptance items.
+Issue [#141](https://github.com/Thang4869/TriAD-Backend/issues/141) observability
+acceptance is complete. Grafana Cloud Free receives OTLP traces from the live
+`triad-api-staging` service. The deployed configuration enables tracing and
+uses the Grafana OTLP gateway with HTTP/protobuf and authenticated export.
+Sanitized exporter diagnostics are deployed; credentials, authorization
+headers and request payloads are not logged. On 2026-11-25, Grafana Explore
+returned traces for `triad-api-staging`, including HTTP server spans and child
+network spans; the trace detail view confirmed parent/child relationships and
+durations. See [`OTEL_STAGING_ACCEPTANCE.md`](OTEL_STAGING_ACCEPTANCE.md) for
+the implementation and acceptance record. This verifies trace ingestion and
+visibility, not complete distributed tracing coverage or a production SLO.
+
+Dependency CI's high/critical gate passed in the latest recorded backend run;
+this is not a claim of zero vulnerabilities at every severity. SMTP delivery
+and repeatable performance and mutation evidence remain separate acceptance
+items.
 
 The Render Free PostgreSQL expiry warning was recorded for 20 Nov 2026. The
 provider's final state must be checked before relying on the old resource; this

@@ -391,7 +391,7 @@ Prometheus-compatible metrics are exposed through `/metrics` outside production.
 
 ### Tracing
 
-OpenTelemetry tracing is configurable and disabled in the current hosted staging configuration (ENABLE_TRACING=false). The development Compose stack includes an OTEL Collector and Jaeger for local inspection. Do not describe hosted tracing as active until a receiver, authentication, owner approval, and trace evidence have been verified; see [staging acceptance](docs/OTEL_STAGING_ACCEPTANCE.md).
+OpenTelemetry tracing is enabled in hosted staging and exports OTLP traces to Grafana Cloud. On 2026-11-25, Grafana Explore showed traces for `triad-api-staging`, including HTTP server spans and child network spans; the trace detail view confirmed parent/child relationships and durations. This verifies hosted ingestion and visibility, not complete distributed tracing coverage or a production SLO. The development Compose stack also includes a local OTEL Collector and Jaeger. See [staging acceptance](docs/OTEL_STAGING_ACCEPTANCE.md).
 
 ### Logging
 
@@ -576,4 +576,4 @@ This project is an educational engineering reference and portfolio work, **not a
 
 ## Production-readiness acceptance gates
 
-This portfolio documents implementation and CI evidence separately from environmental verification. The [Current work checklist](docs/TriAD-Backend-Improvement-Checklist.md) tracks hosted OTLP span proof, SMTP delivery, repeatable performance/mutation evidence, production-grade recovery limits, RTO/RPO/SLO measurement, and demo/interview evidence. The selected free-demo backup/cutover/post-cutover restore acceptance is complete and documented in [the recovery runbook](docs/RECOVERY_DRILL.md). Proxy/security verification has separate accepted evidence; do not list it as an open gate. No end-to-end production acceptance is claimed simply because automated CI passes.
+This portfolio documents implementation and CI evidence separately from environmental verification. The [Current work checklist](docs/TriAD-Backend-Improvement-Checklist.md) tracks release hygiene, portfolio/demo evidence, SMTP delivery, repeatable performance/mutation evidence, production-grade recovery limits, and RTO/RPO/SLO measurement. Hosted OTLP ingestion and trace visibility for staging were verified on 2026-11-25; this is not a production SLO or complete tracing-coverage claim. The selected free-demo backup/cutover/post-cutover restore acceptance is complete and documented in [the recovery runbook](docs/RECOVERY_DRILL.md). Proxy/security verification has separate accepted evidence; do not list it as an open gate. No end-to-end production acceptance is claimed simply because automated CI passes.

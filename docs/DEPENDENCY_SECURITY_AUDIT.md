@@ -86,18 +86,21 @@ remains: explicit Redis/frontend URLs, production CORS and JWT/TOTP/SMTP/Cloudin
 requirements; test defaults live only in `tests/setup-env.ts`. `API_EDGE_SECRET`
 is optional for direct/local modes, and if configured requires `TRUST_PROXY=0`.
 
-**Current status (2026-11-20):** Issue #141 remains open. Backend main CI run
+**Current status (2026-11-25):** Issue #141's scoped observability acceptance is
+complete. Grafana Cloud received traces from the deployed `triad-api-staging`
+service; Grafana Explore showed HTTP server spans and child network spans, and
+the trace detail view confirmed parent/child relationships and durations. This
+proves hosted ingestion and visibility, not complete tracing coverage or a
+production SLO. Backend main CI run
 [#44655433237](https://github.com/Thang4869/TriAD-Backend/actions/runs/44655433237)
 passed the configured high/critical dependency audit gate. This does not prove
-zero vulnerabilities across all severities, and the all-severity JSON artifact
-has not been reviewed for this update. Re-run production and full-graph audits
-on the exact candidate commit, attach both JSON reports, and inspect the full
+zero vulnerabilities across all severities; the all-severity JSON artifact has
+not been reviewed for this update. Re-run production and full-graph audits on
+the exact candidate commit, attach both JSON reports, and inspect the full
 output before making a current vulnerability-count claim. Cloudinary staging
-upload acceptance passed on 24 Oct; hosted OTLP receiver/span proof remains
-outstanding. Hosted tracing remains disabled (`ENABLE_TRACING=false`) until
-that evidence is accepted. This documentation update changes no packages,
-lockfiles, hosting configuration or deployment state and does not prove SMTP
-delivery.
+upload acceptance passed on 24 Oct. SMTP delivery remains a separate
+acceptance item. This documentation update changes no packages, lockfiles,
+hosting configuration or deployment state.
 
 ## Reproduce
 

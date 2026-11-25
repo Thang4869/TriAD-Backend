@@ -10,6 +10,7 @@ import {
   UnprocessableError,
   RateLimitError,
   DependencyUnavailableError,
+  ApplicationError,
 } from "@shared/errors/application-error";
 import { logger } from "@core/logger/winston";
 import {
@@ -132,6 +133,25 @@ describe("errorHandler", () => {
     );
   });
 
+  it("uses the fallback 500 status for an unmapped ApplicationError code", () => {
+    class UnmappedApplicationError extends ApplicationError {
+      readonly code = "APPLICATION.UNMAPPED";
+    }
+    const res = createMockResponse();
+
+    errorHandler(
+      new UnmappedApplicationError("unmapped"),
+      createMockRequest(),
+      res,
+      vi.fn(),
+    );
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "APPLICATION.UNMAPPED" }),
+    );
+  });
+
   it("trả 409 cho Prisma P2002 (unique constraint violation)", () => {
     const err = new Error("Unique constraint");
 
@@ -172,6 +192,28 @@ describe("errorHandler", () => {
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ error: "Database error" }),
+    );
+  });
+
+  it("returns 409 for a retryable transaction conflict", () => {
+    vi.mocked(mockedPersistenceErrors.classify).mockReturnValue({
+      kind: "TRANSACTION_CONFLICT",
+    });
+    const res = createMockResponse();
+
+    errorHandler(
+      new Error("serialization conflict"),
+      createMockRequest(),
+      res,
+      vi.fn(),
+    );
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "RETRYABLE_CONFLICT",
+        error: "Transaction conflict, please retry",
+      }),
     );
   });
 
@@ -298,6 +340,19 @@ describe("errorHandler", () => {
 
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ correlationId: "given-id-123" }),
+    );
+  });
+
+  it("uses the first correlation id when the header is an array", () => {
+    const res = createMockResponse();
+    const req = createMockRequest({
+      headers: { "x-request-id": ["first-id", "second-id"] },
+    });
+
+    errorHandler(new Error("boom"), req, res, vi.fn());
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: "first-id" }),
     );
   });
 

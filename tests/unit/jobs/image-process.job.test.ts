@@ -234,6 +234,43 @@ describe("image-process.job", () => {
     );
   });
 
+  it("logs the message when success-audit persistence rejects with an Error", async () => {
+    vi.mocked(storage.upload).mockResolvedValue({
+      url: "https://cdn.com/processed.jpg",
+      publicId: "products/prod-1",
+    });
+    vi.mocked(productsRepository.findById).mockResolvedValue({
+      id: "prod-1",
+      name: "Product",
+      description: null,
+      price: 100,
+      stock: 1,
+      category: "category",
+      images: [],
+      slug: "product",
+      isActive: true,
+      version: 0,
+    } as any);
+    const auditService = {
+      record: vi.fn().mockRejectedValue(new Error("audit unavailable")),
+      recordFailureBestEffort: vi.fn(),
+    };
+
+    await expect(
+      processImage(
+        {
+          data: {
+            productId: "prod-1",
+            imageBuffer: bufferBase64,
+          },
+        },
+        productsRepository,
+        storage,
+        auditService as never,
+      ),
+    ).resolves.toMatchObject({ processed: true });
+  });
+
   it("records processing failures best-effort when audit is enabled", async () => {
     const auditService = {
       record: vi.fn(),

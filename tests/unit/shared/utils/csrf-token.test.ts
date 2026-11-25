@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { sign } from "jsonwebtoken";
 import {
   generateCsrfToken,
   isCsrfTokenForSession,
@@ -47,6 +48,12 @@ describe("session-bound CSRF tokens", () => {
     );
     expect(readCsrfSessionId(credentials.refreshToken, "access")).toBeNull();
     expect(readCsrfSessionId(credentials.accessToken, "refresh")).toBeNull();
+  });
+
+  it("rejects a decoded access token with an empty session binding", () => {
+    const token = sign({ tokenType: "access", sessionId: "" }, "test-secret");
+
+    expect(readCsrfSessionId(token, "access")).toBeNull();
   });
 
   it.each([

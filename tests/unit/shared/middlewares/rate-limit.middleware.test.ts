@@ -553,6 +553,84 @@ describe("rate-limit Redis fail-closed policy", () => {
     }
   });
 
+  it("does not emit another response after rate-limit headers were already sent", () => {
+    rateLimiter({ prefix: "ratelimit:auth:" });
+    const options = vi.mocked(rateLimit).mock.calls.at(-1)?.[0];
+    const handler = options?.handler as (
+      req: Request,
+      res: Response,
+      next: NextFunction,
+      options: { statusCode: number; message: unknown },
+    ) => void;
+    const metric = vi.spyOn(rateLimitDecisionsTotal, "inc");
+    const status = vi.fn();
+    const json = vi.fn();
+    const next = vi.fn();
+
+    handler(
+      {} as Request,
+      { headersSent: true, status, json } as unknown as Response,
+      next,
+      {
+        statusCode: 429,
+        message: "limited",
+      },
+    );
+    handler(
+      {} as Request,
+      {
+        headersSent: false,
+        writableEnded: true,
+        status,
+        json,
+      } as unknown as Response,
+      next,
+      {
+        statusCode: 429,
+        message: "limited",
+      },
+    );
+
+    expect(status).not.toHaveBeenCalled();
+    expect(json).not.toHaveBeenCalled();
+    expect(metric).not.toHaveBeenCalled();
+    metric.mockRestore();
+  });
+
+  it("uses the shared missing bucket for empty identity and a missing client IP", () => {
+    const storeIndex = vi
+      .mocked(RedisStore)
+      .mock.calls.findIndex(
+        ([options]) =>
+          (options as { prefix?: string }).prefix === "ratelimit:auth:",
+      );
+    const options = vi.mocked(rateLimit).mock.calls[storeIndex]?.[0];
+    const keyGenerator = options?.keyGenerator as (req: Request) => string;
+
+    expect(
+      keyGenerator({ ip: undefined, body: { email: "   " } } as Request),
+    ).toBe("unknown:missing");
+  });
+
+  it("ignores duplicate limiter completion callbacks after the first settlement", () => {
+    vi.mocked(rateLimit).mockImplementationOnce((() =>
+      (_req: Request, _res: Response, next: NextFunction) => {
+        next();
+        next();
+      }) as never);
+    const middleware = rateLimiter();
+    const res = {
+      once: vi.fn(),
+      off: vi.fn(),
+    } as unknown as Response;
+    const next = vi.fn();
+
+    middleware({} as Request, res, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.off).toHaveBeenCalledTimes(2);
+  });
+
   it("does not allow a delayed pre-reconnect response to change a failed request", async () => {
     const sendCommand = commandBridge();
     const client = redis as typeof redis & { status: string };

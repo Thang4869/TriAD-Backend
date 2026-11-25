@@ -164,10 +164,33 @@ describe("PrismaOrdersRepository", () => {
     expect(mocks.order.count).toHaveBeenCalledWith({ where: {} });
   });
 
+  it("counts admin orders with both status and user filters", async () => {
+    mocks.order.count.mockResolvedValue(5);
+
+    await expect(
+      new PrismaOrdersRepository().countAdmin({
+        status: "PENDING" as never,
+        userId: "user-1",
+      }),
+    ).resolves.toBe(5);
+
+    expect(mocks.order.count).toHaveBeenCalledWith({
+      where: { status: "PENDING", userId: "user-1" },
+    });
+  });
+
   it("returns null when an order id does not exist", async () => {
     await expect(
       new PrismaOrdersRepository().findById("missing"),
     ).resolves.toBeNull();
+  });
+
+  it("maps an order found by id", async () => {
+    mocks.order.findUnique.mockResolvedValue(baseOrder);
+
+    await expect(
+      new PrismaOrdersRepository().findById("order-1"),
+    ).resolves.toMatchObject({ id: "order-1", orderNumber: "ORD-1" });
   });
 
   it("updates status, persists events and returns the updated order", async () => {

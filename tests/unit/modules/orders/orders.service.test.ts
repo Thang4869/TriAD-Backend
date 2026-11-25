@@ -295,6 +295,21 @@ describe("OrdersService.adminGetOrders", () => {
   });
 });
 
+describe("OrdersService cancellation transition", () => {
+  it("transitions a pending order to CANCELLED through the aggregate", async () => {
+    const repository = createRepository();
+
+    await createService(repository).updateOrderStatus(
+      "order-1",
+      OrderStatus.CANCELLED,
+    );
+
+    const [, , aggregate] = vi.mocked(repository.updateStatusWithEvents).mock
+      .calls[0];
+    expect(aggregate.status).toBe(OrderStatus.CANCELLED);
+  });
+});
+
 describe("OrdersService.updateOrderStatus", () => {
   it("chuyển PENDING → PROCESSING thông qua Order aggregate", async () => {
     const repository = createRepository();

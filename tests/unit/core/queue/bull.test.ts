@@ -402,6 +402,23 @@ describe("Bull queue infrastructure", () => {
     }
   });
 
+  it("skips clearing the metrics timer when no interval handle was created", async () => {
+    const setIntervalSpy = vi
+      .spyOn(global, "setInterval")
+      .mockReturnValue(null as unknown as NodeJS.Timeout);
+    const clearIntervalSpy = vi.spyOn(global, "clearInterval");
+    const { startQueueInfrastructure, stopQueueInfrastructure } =
+      await import("@core/queue/bull");
+
+    startQueueInfrastructure(vi.fn());
+    await stopQueueInfrastructure();
+
+    expect(setIntervalSpy).toHaveBeenCalledOnce();
+    expect(clearIntervalSpy).not.toHaveBeenCalled();
+    setIntervalSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
+  });
+
   it("allows stopQueueInfrastructure to be called when not started", async () => {
     const { stopQueueInfrastructure } = await import("@core/queue/bull");
 

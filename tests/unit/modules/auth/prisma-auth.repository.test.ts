@@ -201,6 +201,49 @@ describe("PrismaAuthRepository", () => {
     ).resolves.toEqual({ user: racedUser, created: false });
   });
 
+  it("rethrows a concurrent OAuth conflict when the competing link cannot be read", async () => {
+    const conflict = () =>
+      new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+        code: "P2002",
+        clientVersion: "test",
+        meta: { target: ["provider", "providerSubject"] },
+      });
+    mocks.tx.oAuthAccount.findUnique.mockResolvedValue(null);
+    mocks.tx.user.findUnique.mockResolvedValue(user);
+    mocks.tx.oAuthAccount.create.mockRejectedValueOnce(conflict());
+    mocks.prisma.oAuthAccount.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    mocks.prisma.user.findUnique.mockResolvedValue(user);
+    mocks.prisma.oAuthAccount.create.mockRejectedValueOnce(conflict());
+
+    await expect(
+      new PrismaAuthRepository().resolveOAuthIdentity(identity),
+    ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
+  });
+
+  it("rethrows non-Prisma errors from the concurrent OAuth retry", async () => {
+    const transactionConflict = new Prisma.PrismaClientKnownRequestError(
+      "Unique constraint failed",
+      {
+        code: "P2002",
+        clientVersion: "test",
+        meta: { target: ["provider", "providerSubject"] },
+      },
+    );
+    const retryError = new Error("OAuth persistence unavailable");
+    mocks.tx.oAuthAccount.findUnique.mockResolvedValue(null);
+    mocks.tx.user.findUnique.mockResolvedValue(user);
+    mocks.tx.oAuthAccount.create.mockRejectedValueOnce(transactionConflict);
+    mocks.prisma.oAuthAccount.findUnique.mockResolvedValue(null);
+    mocks.prisma.user.findUnique.mockResolvedValue(user);
+    mocks.prisma.oAuthAccount.create.mockRejectedValueOnce(retryError);
+
+    await expect(
+      new PrismaAuthRepository().resolveOAuthIdentity(identity),
+    ).rejects.toBe(retryError);
+  });
+
   it("rejects linking an unverified provider email to an existing account", async () => {
     mocks.tx.user.findUnique.mockResolvedValue(user);
 

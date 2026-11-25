@@ -213,6 +213,15 @@ describe("CheckoutService", () => {
     repository.findOrderWithItems = vi.fn().mockResolvedValue(mockOrder);
   }
 
+  it.each([
+    [{ code: "P2002" }, "database_error"],
+    [{ code: "UNKNOWN" }, "unknown"],
+    [new Error("application failure"), "application_error"],
+    ["non-error rejection", "unknown"],
+  ])("classifies fallback errors %j", (error, category) => {
+    expect(classifyCheckoutError(error)).toBe(category);
+  });
+
   describe("checkout quote", () => {
     beforeEach(() => {
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue({
@@ -1118,6 +1127,28 @@ describe("CheckoutService", () => {
         "checkout.transaction.retry",
         { category: "transaction_conflict" },
       );
+    });
+
+    it("continues checkout when metrics increment throws", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      mockFindOrderSuccess();
+      metrics.increment = vi.fn(() => {
+        throw new Error("metrics unavailable");
+      });
+
+      await expect(service.checkout("user-1", baseInput)).resolves.toEqual({
+        order: mockOrder,
+        idempotent: false,
+      });
+    });
+
+    it("fails when a cart product is missing from the locked product set", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      mockStockService.reserveStock = vi.fn().mockResolvedValue([]);
+
+      await expect(
+        service.checkout("user-1", baseInput),
+      ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
     it("retries transaction conflict with exponential backoff and jitter", async () => {

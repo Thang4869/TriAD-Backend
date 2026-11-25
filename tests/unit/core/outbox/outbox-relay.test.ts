@@ -14,7 +14,6 @@ import {
   outboxEventsPublished,
   outboxLagSeconds,
   outboxPublishDurationSeconds,
-  outboxRelayLeaseLosses,
   outboxRelayRetries,
 } from "@core/metrics/metrics.registry";
 
@@ -908,5 +907,36 @@ describe("OutboxRelay single-attempt completion failures", () => {
         lastError: "non-error publish failure",
       }),
     );
+  });
+});
+
+describe("OutboxRelay empty heartbeat claims", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    store = createStore();
+    handlerTracker = createHandlerTracker();
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("stops the heartbeat when the active claim set becomes empty", async () => {
+    const relay = new OutboxRelay(store, handlerTracker, createEventBus(), {
+      heartbeatIntervalMs: 10,
+    });
+    const internals = relay as unknown as {
+      startHeartbeat(ids: string[]): void;
+      activeClaimIds: Set<string>;
+      stopHeartbeat(): void;
+    };
+    const stopHeartbeat = vi.spyOn(internals, "stopHeartbeat");
+
+    internals.startHeartbeat(["event-1"]);
+    internals.activeClaimIds.clear();
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(stopHeartbeat).toHaveBeenCalledOnce();
+    relay.stop();
   });
 });

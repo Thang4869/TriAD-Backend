@@ -631,6 +631,72 @@ describe("rate-limit Redis fail-closed policy", () => {
     expect(res.off).toHaveBeenCalledTimes(2);
   });
 
+  it("fails closed when Redis throws synchronously during SCRIPT LOAD bootstrap", async () => {
+    const sendCommand = commandBridge();
+    const client = redis as typeof redis & { status: string };
+    const previousStatus = client.status;
+    const counter = vi.spyOn(rateLimitStoreFailuresTotal, "inc");
+    client.status = "connecting";
+    vi.mocked(redis.call).mockImplementationOnce(() => {
+      throw new Error("raw Redis bootstrap error");
+    });
+
+    try {
+      await expect(
+        sendCommand("SCRIPT", "LOAD", "return 1"),
+      ).rejects.toBeInstanceOf(DependencyUnavailableError);
+      expect(counter).toHaveBeenCalledWith({
+        operation: "bootstrap",
+        reason: "error",
+      });
+    } finally {
+      client.status = previousStatus;
+      counter.mockRestore();
+    }
+  });
+
+  it("fails closed when a ready Redis client throws synchronously for a request", async () => {
+    const sendCommand = commandBridge();
+    const client = redis as typeof redis & { status: string };
+    const previousStatus = client.status;
+    const counter = vi.spyOn(rateLimitStoreFailuresTotal, "inc");
+    client.status = "ready";
+    vi.mocked(redis.call).mockImplementationOnce(() => {
+      throw new Error("raw Redis request error");
+    });
+
+    try {
+      await expect(sendCommand("INCR", "sensitive-key")).rejects.toBeInstanceOf(
+        DependencyUnavailableError,
+      );
+      expect(counter).toHaveBeenCalledWith({
+        operation: "request",
+        reason: "error",
+      });
+    } finally {
+      client.status = previousStatus;
+      counter.mockRestore();
+    }
+  });
+
+  it("forwards synchronous limiter failures to Express error handling", () => {
+    const error = new Error("limiter failed synchronously");
+    vi.mocked(rateLimit).mockImplementationOnce((() => () => {
+      throw error;
+    }) as never);
+    const middleware = rateLimiter();
+    const res = {
+      once: vi.fn(),
+      off: vi.fn(),
+    } as unknown as Response;
+    const next = vi.fn();
+
+    middleware({} as Request, res, next);
+
+    expect(next).toHaveBeenCalledWith(error);
+    expect(res.off).toHaveBeenCalledTimes(2);
+  });
+
   it("does not allow a delayed pre-reconnect response to change a failed request", async () => {
     const sendCommand = commandBridge();
     const client = redis as typeof redis & { status: string };

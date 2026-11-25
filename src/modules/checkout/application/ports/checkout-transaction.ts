@@ -5,6 +5,7 @@ import type {
   DiscountRecord,
   LockedProductRow,
   SavedCheckoutOrder,
+  LockedCartSnapshot,
 } from "./checkout-models";
 
 export interface CheckoutTransaction {
@@ -28,7 +29,11 @@ export interface CheckoutTransaction {
     maxUses: number | null,
   ): Promise<boolean>;
 
+  lockCartForCheckout(userId: string): Promise<LockedCartSnapshot | null>;
+
   clearCartItems(cartId: string): Promise<void>;
+
+  deleteLockedCartItems(cartItemIds: string[]): Promise<void>;
 
   saveNewOrder(
     order: Order,

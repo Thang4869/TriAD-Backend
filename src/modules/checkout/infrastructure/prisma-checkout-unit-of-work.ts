@@ -16,6 +16,8 @@ import type {
 } from "../application/ports/checkout-transaction";
 import type {
   DiscountRecord,
+  LockedCartItem,
+  LockedCartSnapshot,
   LockedProductRow,
 } from "../application/ports/checkout-models";
 import type { SavedCheckoutOrder } from "../application/ports/checkout-models";
@@ -142,9 +144,44 @@ class PrismaCheckoutTransaction implements CheckoutTransaction {
     return result.count > 0;
   }
 
+  async lockCartForCheckout(
+    userId: string,
+  ): Promise<LockedCartSnapshot | null> {
+    const [cart] = await this.tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id
+      FROM carts
+      WHERE "userId" = ${userId}
+      FOR UPDATE
+    `;
+
+    if (!cart) {
+      return null;
+    }
+
+    const items = await this.tx.$queryRaw<LockedCartItem[]>`
+      SELECT id, "productId", quantity
+      FROM cart_items
+      WHERE "cartId" = ${cart.id}
+      ORDER BY id ASC
+      FOR UPDATE
+    `;
+
+    return { id: cart.id, items };
+  }
+
   async clearCartItems(cartId: string): Promise<void> {
     await this.tx.cartItem.deleteMany({
       where: { cartId },
+    });
+  }
+
+  async deleteLockedCartItems(cartItemIds: string[]): Promise<void> {
+    if (cartItemIds.length === 0) {
+      return;
+    }
+
+    await this.tx.cartItem.deleteMany({
+      where: { id: { in: cartItemIds } },
     });
   }
 

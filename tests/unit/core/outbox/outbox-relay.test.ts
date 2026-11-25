@@ -940,3 +940,33 @@ describe("OutboxRelay empty heartbeat claims", () => {
     relay.stop();
   });
 });
+
+describe("OutboxRelay heartbeat overlap guard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    store = createStore();
+    handlerTracker = createHandlerTracker();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("skips heartbeat ticks while a lease renewal is still in flight", async () => {
+    vi.mocked(store.renewClaims).mockReturnValue(
+      new Promise(() => undefined) as never,
+    );
+    const relay = new OutboxRelay(store, handlerTracker, createEventBus(), {
+      heartbeatIntervalMs: 10,
+    });
+    const internals = relay as unknown as {
+      startHeartbeat(ids: string[]): void;
+      stopHeartbeat(): void;
+    };
+
+    internals.startHeartbeat(["event-1"]);
+    await vi.advanceTimersByTimeAsync(35);
+
+    expect(store.renewClaims).toHaveBeenCalledOnce();
+    internals.stopHeartbeat();
+  });
+});

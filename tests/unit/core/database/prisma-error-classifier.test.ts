@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { Prisma } from "@prisma/client";
-import { PrismaErrorClassifier } from "@core/database/prisma-error-classifier";
+import {
+  describePrismaError,
+  isPrismaSerializationConflict,
+  PrismaErrorClassifier,
+} from "@core/database/prisma-error-classifier";
 
 describe("PrismaErrorClassifier", () => {
   const classifier = new PrismaErrorClassifier();
@@ -80,5 +84,50 @@ describe("PrismaErrorClassifier", () => {
 
   it("returns null for non-Prisma errors", () => {
     expect(classifier.classify(new Error("Regular error"))).toBeNull();
+  });
+
+  it("describes non-object errors as unknown", () => {
+    expect(describePrismaError(null)).toEqual({
+      category: "unknown",
+      code: "unknown",
+      model: "unknown",
+    });
+  });
+
+  it("describes structural Prisma errors with model metadata", () => {
+    expect(
+      describePrismaError({
+        code: "P2002",
+        meta: { modelName: "User" },
+      }),
+    ).toEqual({
+      category: "database_error",
+      code: "P2002",
+      model: "User",
+    });
+  });
+
+  it("uses unknown labels for non-string code and model metadata", () => {
+    expect(
+      describePrismaError({
+        code: 2002,
+        meta: { modelName: 42 },
+      }),
+    ).toEqual({
+      category: "unknown",
+      code: "unknown",
+      model: "unknown",
+    });
+  });
+
+  it.each([
+    [null, false],
+    [{ code: "P2034" }, true],
+    [{ code: "P2010", meta: { code: "40001" } }, true],
+    [{ code: "P2010", meta: { code: "42P01" } }, false],
+    [{ code: "P2010" }, false],
+    [{ code: "P2002" }, false],
+  ])("detects serialization conflicts for %j", (error, expected) => {
+    expect(isPrismaSerializationConflict(error)).toBe(expected);
   });
 });

@@ -27,6 +27,48 @@ describe("PrismaCheckoutUnitOfWork", () => {
     );
   });
 
+  it("locks the cart and its current items in stable order, then deletes only those items", async () => {
+    const queryRaw = vi
+      .fn()
+      .mockResolvedValueOnce([{ id: "cart-1" }])
+      .mockResolvedValueOnce([
+        { id: "item-1", productId: "product-1", quantity: 2 },
+      ]);
+    const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const tx = {
+      $queryRaw: queryRaw,
+      cartItem: { deleteMany },
+    } as unknown as Prisma.TransactionClient;
+
+    vi.mocked(prisma.$transaction).mockImplementationOnce((async (
+      callback: (transaction: Prisma.TransactionClient) => Promise<unknown>,
+    ) => callback(tx)) as typeof prisma.$transaction);
+
+    await new PrismaCheckoutUnitOfWork().run(async (transaction) => {
+      await expect(transaction.lockCartForCheckout("user-1")).resolves.toEqual({
+        id: "cart-1",
+        items: [{ id: "item-1", productId: "product-1", quantity: 2 }],
+      });
+      await transaction.deleteLockedCartItems(["item-1"]);
+    });
+
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    const cartSql = Array.from(
+      queryRaw.mock.calls[0][0] as TemplateStringsArray,
+    ).join("?");
+    const itemsSql = Array.from(
+      queryRaw.mock.calls[1][0] as TemplateStringsArray,
+    ).join("?");
+    expect(cartSql).toContain("FOR UPDATE");
+    expect(itemsSql.indexOf("ORDER BY id ASC")).toBeGreaterThanOrEqual(0);
+    expect(itemsSql.indexOf("FOR UPDATE")).toBeGreaterThan(
+      itemsSql.indexOf("ORDER BY id ASC"),
+    );
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["item-1"] } },
+    });
+  });
+
   it("locks checkout products in ascending id order", async () => {
     const queryRaw = vi.fn().mockResolvedValue([]);
 

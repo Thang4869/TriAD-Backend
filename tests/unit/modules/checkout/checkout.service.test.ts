@@ -110,7 +110,13 @@ function createTransaction(
 
     incrementDiscountUsage: vi.fn().mockResolvedValue(true),
 
+    lockCartForCheckout: vi.fn().mockResolvedValue({
+      id: "cart-1",
+      items: [{ id: "cart-item-1", productId: "prod-1", quantity: 2 }],
+    }),
+
     clearCartItems: vi.fn().mockResolvedValue(undefined),
+    deleteLockedCartItems: vi.fn().mockResolvedValue(undefined),
 
     saveNewOrder: vi.fn().mockResolvedValue({
       id: "order-1",
@@ -324,6 +330,10 @@ describe("CheckoutService", () => {
     await expect(
       service.checkout("user-1", { ...baseInput, expectedTotal: 30220 }),
     ).resolves.toMatchObject({ idempotent: false });
+    expect(transaction.lockCartForCheckout).toHaveBeenCalledWith("user-1");
+    expect(transaction.deleteLockedCartItems).toHaveBeenCalledWith([
+      "cart-item-1",
+    ]);
     repository.findOrderByIdempotencyKey = vi.fn().mockResolvedValue(mockOrder);
     await expect(
       service.checkout("user-1", { ...baseInput, expectedTotal: 30220 }),
@@ -504,13 +514,11 @@ describe("CheckoutService", () => {
       expect(repository.findOrderWithItems).not.toHaveBeenCalled();
     });
 
-    it("throws if cart is empty", async () => {
-      repository.findUserCartForCheckout = vi.fn().mockResolvedValue({
-        ...baseUser,
-        cart: {
-          ...baseUser.cart,
-          items: [],
-        },
+    it("throws if the locked cart is empty", async () => {
+      repository.findUserCartForCheckout = vi.fn().mockResolvedValue(baseUser);
+      vi.mocked(transaction.lockCartForCheckout).mockResolvedValue({
+        id: "cart-1",
+        items: [],
       });
 
       await expect(service.checkout("user-1", baseInput)).rejects.toThrow(
@@ -545,6 +553,10 @@ describe("CheckoutService", () => {
       };
 
       repository.findUserCartForCheckout = vi.fn().mockResolvedValue(bigCart);
+      vi.mocked(transaction.lockCartForCheckout).mockResolvedValue({
+        id: "cart-1",
+        items: [{ id: "cart-item-1", productId: "prod-1", quantity: 10 }],
+      });
 
       mockFindOrderSuccess();
 

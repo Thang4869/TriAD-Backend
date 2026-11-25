@@ -47,6 +47,17 @@ export interface UserCartForCheckout {
   cart: CheckoutCart | null;
 }
 
+export interface LockedCartItem {
+  id: string;
+  productId: string;
+  quantity: number;
+}
+
+export interface LockedCartSnapshot {
+  id: string;
+  items: LockedCartItem[];
+}
+
 export interface LockedProductRow {
   id: string;
   stock: number;

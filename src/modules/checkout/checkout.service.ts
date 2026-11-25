@@ -173,14 +173,11 @@ export class CheckoutService {
 
         const user = await this.repository.findUserCartForCheckout(userId);
 
-        if (!user || !user.cart || user.cart.items.length === 0) {
-          throw new ValidationError("Cart is empty");
+        if (!user) {
+          throw new ResourceNotFoundError("User not found");
         }
 
-        const cart = user.cart;
-
         setAttributes({
-          "checkout.item_count": cart.items.length,
           "checkout.payment_method": input.paymentMethod,
         });
 
@@ -191,6 +188,16 @@ export class CheckoutService {
           persistedOrder = await this.executeWithRetry(
             async (tx) => {
               attemptCount += 1;
+
+              const cart = await tx.lockCartForCheckout(userId);
+
+              if (!cart || cart.items.length === 0) {
+                throw new ValidationError("Cart is empty");
+              }
+
+              setAttributes({
+                "checkout.item_count": cart.items.length,
+              });
 
               const lockedProducts = await this.stockService.reserveStock(
                 tx,
@@ -249,7 +256,7 @@ export class CheckoutService {
 
               await tx.saveNewOrder(order, input.idempotencyKey);
 
-              await tx.clearCartItems(cart.id);
+              await tx.deleteLockedCartItems(cart.items.map((item) => item.id));
 
               return order;
             },

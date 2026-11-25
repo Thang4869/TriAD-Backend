@@ -226,6 +226,47 @@ describe("Config validation", () => {
     },
   );
 
+  it.each([
+    ["PORT", "abc"],
+    ["PORT", "65536"],
+    ["RATE_LIMIT_WINDOW_MS", "0"],
+    ["RATE_LIMIT_MAX", "-1"],
+    ["IDEMPOTENCY_TTL", "1.5"],
+  ] as const)(
+    "rejects invalid numeric environment variable %s=%s",
+    async (key, value) => {
+      process.env[key] = value;
+      const messages: string[] = [];
+      vi.spyOn(console, "error").mockImplementation((...parts: unknown[]) => {
+        messages.push(parts.map(String).join(" "));
+      });
+
+      await expect(import("@config")).rejects.toThrow(
+        "Invalid configuration in test environment. Check required test environment variables.",
+      );
+
+      expect(messages.join("\n")).toContain(key);
+    },
+  );
+
+  it("coerces valid numeric environment variables to numbers", async () => {
+    process.env.PORT = "8080";
+    process.env.RATE_LIMIT_WINDOW_MS = "30000";
+    process.env.RATE_LIMIT_MAX = "50";
+    process.env.IDEMPOTENCY_TTL = "3600";
+
+    const { config } = await import("@config");
+
+    expect(config.PORT).toBe(8080);
+    expect(config.RATE_LIMIT_WINDOW_MS).toBe(30000);
+    expect(config.RATE_LIMIT_MAX).toBe(50);
+    expect(config.IDEMPOTENCY_TTL).toBe(3600);
+    expect(typeof config.PORT).toBe("number");
+    expect(typeof config.RATE_LIMIT_WINDOW_MS).toBe("number");
+    expect(typeof config.RATE_LIMIT_MAX).toBe("number");
+    expect(typeof config.IDEMPOTENCY_TTL).toBe("number");
+  });
+
   it("tách CORS_ORIGIN thành mảng khi biến môi trường được cung cấp", async () => {
     process.env.CORS_ORIGIN = "http://localhost:3000,http://localhost:4000";
 

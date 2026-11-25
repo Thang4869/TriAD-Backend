@@ -93,6 +93,21 @@ describe("TwoFactorService uncovered branches", () => {
     expect(repository.updateUser).not.toHaveBeenCalled();
   });
 
+  it("enables 2FA after a valid setup code", async () => {
+    const { service, repository } = setup({
+      ...user,
+      is2FAEnabled: false,
+    });
+
+    await expect(service.verify2FA("user-1", validCode())).resolves.toEqual({
+      enabled: true,
+    });
+
+    expect(repository.updateUser).toHaveBeenCalledWith("user-1", {
+      is2FAEnabled: true,
+    });
+  });
+
   it("rejects login verification when the account no longer has 2FA enabled", async () => {
     const { service, tokenStore } = setup({ ...user, is2FAEnabled: false });
     await expect(

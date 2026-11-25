@@ -39,7 +39,6 @@ describe("CancellationRefundSaga", () => {
       orderId: "order-2",
       paymentId: "payment-2",
       step: "REFUNDED",
-      deadlineAt: Date.now() + 60_000,
     });
     const ports: CancellationRefundPorts = {
       cancelOrder: vi.fn(),

@@ -37,6 +37,17 @@ describe("production authentication origin boundary", () => {
     Object.assign(config, original);
   });
 
+  it("fails closed when production has no configured CORS origins", async () => {
+    Object.assign(config, { CORS_ORIGIN: [] });
+
+    const response = await request(app)
+      .get("/health")
+      .set("Origin", "https://frontend.example");
+
+    expect(response.status).toBe(500);
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
   it("allows the exact HTTPS origin and credentials on the JSON preflight", async () => {
     const response = await request(app)
       .options("/api/auth/login")
@@ -173,6 +184,34 @@ describe("global CSRF protection", () => {
         isProduction: previous.isProduction,
         CORS_ORIGIN: previous.corsOrigin,
       });
+    }
+  });
+});
+
+describe("production-only route registration", () => {
+  it("does not register Swagger or metrics routes in production", async () => {
+    vi.resetModules();
+    vi.doMock("@config", () => {
+      const productionConfig = {
+        ...config,
+        isDevelopment: false,
+        isProduction: true,
+        CORS_ORIGIN: ["https://frontend.example"],
+      };
+      return { config: productionConfig, default: productionConfig };
+    });
+
+    try {
+      const { default: productionApp } = await import("@/app");
+
+      const docsResponse = await request(productionApp).get("/api/docs");
+      const metricsResponse = await request(productionApp).get("/metrics");
+
+      expect(docsResponse.status).toBe(404);
+      expect(metricsResponse.status).toBe(404);
+    } finally {
+      vi.doUnmock("@config");
+      vi.resetModules();
     }
   });
 });

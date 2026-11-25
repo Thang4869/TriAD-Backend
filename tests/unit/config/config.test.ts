@@ -166,6 +166,30 @@ describe("Config validation", () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
+  it("normalizes an empty API_EDGE_SECRET to undefined", async () => {
+    process.env.API_EDGE_SECRET = "";
+
+    const { config } = await import("@config");
+
+    expect(config.API_EDGE_SECRET).toBeUndefined();
+  });
+
+  it("rejects API edge authentication when trusted proxy mode is also enabled", async () => {
+    process.env.API_EDGE_SECRET = "x".repeat(32);
+    process.env.TRUST_PROXY = "1";
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    await expect(import("@config")).rejects.toThrow(
+      "Invalid configuration in test environment",
+    );
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("TRUST_PROXY"),
+    );
+  });
+
   it("requires explicit configuration when NODE_ENV=test, without production fallbacks", async () => {
     delete process.env.JWT_ACCESS_SECRET;
     delete process.env.JWT_REFRESH_SECRET;

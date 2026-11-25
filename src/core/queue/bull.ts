@@ -122,7 +122,7 @@ export function startQueueInfrastructure(imageProcessor: Processor): void {
     void reportQueueMetrics();
   }, QUEUE_METRICS_POLL_INTERVAL_MS);
 
-  metricsTimer.unref();
+  metricsTimer?.unref?.();
 
   logger.info("BullMQ infrastructure started");
 }

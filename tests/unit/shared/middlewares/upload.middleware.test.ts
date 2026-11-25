@@ -89,6 +89,15 @@ describe("upload.middleware", () => {
     expect(cb).toHaveBeenCalledWith(null, true);
   });
 
+  it("passes through when no file was uploaded", async () => {
+    const next = vi.fn();
+
+    await validateUploadedImage({} as any, {} as any, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(sharpMetadata).not.toHaveBeenCalled();
+  });
+
   it("should accept valid image content", async () => {
     sharpMetadata.mockResolvedValue({
       format: "jpeg",

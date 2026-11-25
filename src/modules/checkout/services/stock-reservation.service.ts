@@ -147,9 +147,8 @@ export class StockReservationService {
       sourceVersions.set(item.productId, product.version + 1);
     }
 
-    if (productEvents.length > 0) {
-      await tx.persistProductEvents(productEvents, sourceVersions);
-    }
+    // A non-empty cart and successful stock updates always produce at least one event.
+    await tx.persistProductEvents(productEvents, sourceVersions);
 
     return lockedProducts;
   }

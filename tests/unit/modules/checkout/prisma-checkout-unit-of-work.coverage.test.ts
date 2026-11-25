@@ -458,6 +458,21 @@ describe("PrismaCheckoutUnitOfWork transaction adapter", () => {
     ).rejects.toBe(conflict);
   });
 
+  it("rethrows a P2002 error when its metadata target has an unsupported shape", async () => {
+    const tx = makeTransaction();
+    const conflict = new Prisma.PrismaClientKnownRequestError(
+      "Unique constraint failed",
+      { code: "P2002", clientVersion: "test", meta: { target: 42 } },
+    );
+    tx.order.create.mockRejectedValueOnce(conflict);
+
+    await expect(
+      runWithTransaction(tx, (transaction) =>
+        transaction.saveNewOrder(makeOrder(), "checkout-key"),
+      ),
+    ).rejects.toBe(conflict);
+  });
+
   it("rethrows non-unique order creation errors unchanged", async () => {
     const tx = makeTransaction();
     const error = new Error("database unavailable");

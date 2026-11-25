@@ -26,6 +26,14 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       exclude: [
         "src/**/*.d.ts",
+        // Compile-time contracts have no emitted runtime statements to exercise.
+        "src/**/*.port.ts",
+        "src/**/application/ports/*-models.ts",
+        "src/**/application/*-models.ts",
+        "src/**/application/ports/auth-user.ts",
+        "src/**/application/ports/auth-refresh-token.ts",
+        "src/**/application/ports/oauth-identity.ts",
+        "src/shared/errors/persistence-error.ts",
         "src/**/docs/**",
         "src/**/*.swagger.ts",
         "src/**/dto/index.ts",

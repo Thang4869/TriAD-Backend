@@ -8,7 +8,7 @@ const configSchema = z
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
-    PORT: z.string().default("5000").transform(Number),
+    PORT: z.coerce.number().int().min(1).max(65535).default(5000),
     DISABLE_EMAIL_WORKER: z
       .enum(["true", "false"])
       .default("false")
@@ -62,8 +62,8 @@ const configSchema = z
       z.string().min(32).max(256).optional(),
     ),
 
-    RATE_LIMIT_WINDOW_MS: z.string().default("60000").transform(Number),
-    RATE_LIMIT_MAX: z.string().default("100").transform(Number),
+    RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+    RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
 
     TOTP_ISSUER: z.string().default("TriAD"),
     TOTP_ENCRYPTION_KEY: z
@@ -75,7 +75,7 @@ const configSchema = z
         "TOTP_ENCRYPTION_KEY must encode exactly 32 bytes",
       ),
 
-    IDEMPOTENCY_TTL: z.string().default("86400").transform(Number),
+    IDEMPOTENCY_TTL: z.coerce.number().int().positive().default(86400),
 
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
     LOG_FILE_PATH: z.string().default("./logs"),

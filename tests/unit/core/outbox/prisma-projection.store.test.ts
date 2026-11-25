@@ -337,3 +337,46 @@ describe("PrismaProjectionStore", () => {
     });
   });
 });
+describe("PrismaProjectionStore missing-value coverage", () => {
+  it("uses an empty description when rebuilding product search text", async () => {
+    const store = new PrismaProjectionStore();
+    mockedPrisma.product.findUnique.mockResolvedValue({
+      id: "product-no-description",
+      name: "Item",
+      description: null,
+      price: 100,
+      stock: 5,
+      category: "test",
+      images: [],
+      slug: "item",
+      isActive: true,
+      version: 1,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    await store.upsertProduct(
+      new ProductPriceChangedEvent("product-no-description", 90, 100),
+    );
+    expect(mockedPrisma.productCatalogProjection.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ searchText: "Item  test" }),
+      }),
+    );
+  });
+
+  it("defaults dashboard gross order value to zero when no aggregate exists", async () => {
+    const store = new PrismaProjectionStore();
+    mockedPrisma.orderHistoryProjection.count.mockResolvedValue(0);
+    mockedPrisma.orderHistoryProjection.aggregate.mockResolvedValue({
+      _sum: { total: null },
+    });
+    mockedPrisma.user.count.mockResolvedValue(0);
+    mockedPrisma.productCatalogProjection.count.mockResolvedValue(0);
+    await store.refreshDashboard();
+    expect(mockedPrisma.adminDashboardProjection.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ totalGrossOrderValue: 0 }),
+        update: expect.objectContaining({ totalGrossOrderValue: 0 }),
+      }),
+    );
+  });
+});

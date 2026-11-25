@@ -222,3 +222,11 @@ describe("User.updateProfile", () => {
     expect(user.domainEvents).toHaveLength(0);
   });
 });
+
+describe("User.phone", () => {
+  it("returns null when no phone number is stored", () => {
+    const user = User.hydrate(userData({ phone: null }));
+
+    expect(user.phone).toBeNull();
+  });
+});

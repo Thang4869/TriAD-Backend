@@ -114,3 +114,65 @@ describe("TwoFactorService uncovered branches", () => {
     expect(tokenService.generateTokens).not.toHaveBeenCalled();
   });
 });
+
+describe("TwoFactorService successful and fallback paths", () => {
+  it("returns an empty otpauth URL when the authenticator omits it", async () => {
+    const generateSecret = vi
+      .spyOn(speakeasy, "generateSecret")
+      .mockReturnValue({ base32: secret } as ReturnType<
+        typeof speakeasy.generateSecret
+      >);
+    try {
+      const { service } = setup({ ...user, is2FAEnabled: false });
+      const result = await service.enable2FA("user-1");
+      expect(result).toEqual({ otpauthUrl: "", secret });
+    } finally {
+      generateSecret.mockRestore();
+    }
+  });
+
+  it("rejects setup verification when the user no longer exists", async () => {
+    const { service, repository } = setup(null);
+
+    await expect(
+      service.verify2FA("missing", validCode()),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(repository.updateUser).not.toHaveBeenCalled();
+  });
+
+  it("rejects login verification when the user has no stored TOTP secret", async () => {
+    const { service, tokenStore } = setup({ ...user, totpSecret: null });
+
+    await expect(
+      service.verifyTOTP("pre-auth", validCode()),
+    ).rejects.toBeInstanceOf(AuthenticationError);
+    expect(tokenStore.setIfAbsent).not.toHaveBeenCalled();
+  });
+
+  it("rejects login verification when the TOTP code is invalid", async () => {
+    const { service, tokenStore, tokenService } = setup(user);
+
+    await expect(
+      service.verifyTOTP("pre-auth", "000000"),
+    ).rejects.toBeInstanceOf(AuthenticationError);
+    expect(tokenStore.setIfAbsent).not.toHaveBeenCalled();
+    expect(tokenService.generateTokens).not.toHaveBeenCalled();
+  });
+
+  it("consumes a valid TOTP once and issues tokens", async () => {
+    const { service, tokenStore, tokenService } = setup(user, true);
+
+    await expect(service.verifyTOTP("pre-auth", validCode())).resolves.toEqual({
+      accessToken: "a",
+      refreshToken: "r",
+      user,
+    });
+
+    expect(tokenStore.setIfAbsent).toHaveBeenCalledWith(
+      expect.stringMatching(/^auth:2fa:totp:user-1:\d+$/),
+      "1",
+      90,
+    );
+    expect(tokenService.generateTokens).toHaveBeenCalledWith(user);
+  });
+});

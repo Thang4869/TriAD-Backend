@@ -643,3 +643,82 @@ describe("TokenService access-token claims and revocation", () => {
     ).rejects.toThrow(DependencyUnavailableError);
   });
 });
+
+describe("TokenService remaining validation and fail-closed branches", () => {
+  it.each([null, "not-an-object"])(
+    "rejects non-object access claims: %s",
+    (claims) => {
+      vi.mocked(verifyToken).mockReturnValue(claims);
+      expect(() =>
+        new TokenService(createRepo(), createTokenStore()).verifyAccessToken(
+          "ACCESS",
+        ),
+      ).toThrow(AuthenticationError);
+    },
+  );
+
+  it("accepts a non-empty access session id", () => {
+    vi.mocked(verifyToken).mockReturnValue({
+      ...validAccessClaims(),
+      sessionId: "session-1",
+    });
+    expect(
+      new TokenService(createRepo(), createTokenStore()).verifyAccessToken(
+        "ACCESS",
+      ).sessionId,
+    ).toBe("session-1");
+  });
+
+  it("rejects an empty access session id", () => {
+    vi.mocked(verifyToken).mockReturnValue({
+      ...validAccessClaims(),
+      sessionId: "",
+    });
+    expect(() =>
+      new TokenService(createRepo(), createTokenStore()).verifyAccessToken(
+        "ACCESS",
+      ),
+    ).toThrow(AuthenticationError);
+  });
+
+  it("reports unknown when the revocation store rejects with a non-Error value", async () => {
+    vi.mocked(verifyToken).mockReturnValue(validAccessClaims());
+    const store = createTokenStore();
+    store.get.mockRejectedValueOnce("redis offline");
+
+    await expect(
+      new TokenService(createRepo(), store).isAccessTokenRevoked("ACCESS"),
+    ).rejects.toBeInstanceOf(DependencyUnavailableError);
+  });
+
+  it("does not persist a revocation for an already expired access token", async () => {
+    vi.mocked(verifyToken).mockReturnValue({
+      ...validAccessClaims(),
+      exp: Math.floor(Date.now() / 1000) - 1,
+    });
+    const store = createTokenStore();
+
+    await expect(
+      new TokenService(createRepo(), store).blacklistAccessToken("EXPIRED"),
+    ).resolves.toBeUndefined();
+
+    expect(store.set).not.toHaveBeenCalled();
+  });
+
+  it("rejects a preauth nonce owned by a different user", async () => {
+    vi.mocked(verifyToken).mockReturnValue({
+      ...validAccessClaims(),
+      tokenType: "preauth",
+      aud: "triad:preauth",
+      purpose: "2fa",
+    });
+    const store = createTokenStore();
+    store.getAndDelete.mockResolvedValueOnce("another-user");
+
+    await expect(
+      new TokenService(createRepo(), store).consumeTwoFactorPreAuthToken(
+        "PREAUTH",
+      ),
+    ).rejects.toThrow("Pre-authentication token already used");
+  });
+});

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
 import { OrdersController } from "@modules/orders/orders.controller";
 import type { IOrdersService } from "@modules/orders/orders.service";
+import { OrderStatus } from "@modules/orders/domain/order-status";
+import type { AuditService } from "@modules/admin/audit/application/audit.service";
 
 function resMock() {
   const res = {} as Response;
@@ -87,5 +89,135 @@ describe("OrdersController", () => {
     );
     expect(res.status).toHaveBeenCalledWith(400);
     expect(service.updateOrderStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe("OrdersController admin success paths", () => {
+  it("uses default pagination for the authenticated user's orders", async () => {
+    const service = {
+      getOrders: vi.fn().mockResolvedValue({ orders: [] }),
+    } as unknown as IOrdersService;
+
+    await new OrdersController(service).getMyOrders(
+      reqMock(),
+      resMock(),
+      vi.fn(),
+    );
+
+    expect(service.getOrders).toHaveBeenCalledWith("u1", 1, 10);
+  });
+
+  it("allows admins to list orders with filters and parsed pagination", async () => {
+    const service = {
+      adminGetOrders: vi.fn().mockResolvedValue({ orders: [] }),
+    } as unknown as IOrdersService;
+
+    await new OrdersController(service).adminGetOrders(
+      reqMock({
+        user: { id: "admin-1", role: "ADMIN" },
+        query: {
+          status: OrderStatus.PENDING,
+          userId: "user-1",
+          page: "3",
+          limit: "5",
+        },
+      }),
+      resMock(),
+      vi.fn(),
+    );
+
+    expect(service.adminGetOrders).toHaveBeenCalledWith(
+      { status: OrderStatus.PENDING, userId: "user-1" },
+      3,
+      5,
+    );
+  });
+
+  it("uses default pagination for admin order listing", async () => {
+    const service = {
+      adminGetOrders: vi.fn().mockResolvedValue({ orders: [] }),
+    } as unknown as IOrdersService;
+
+    await new OrdersController(service).adminGetOrders(
+      reqMock({ user: { id: "admin-1", role: "ADMIN" } }),
+      resMock(),
+      vi.fn(),
+    );
+
+    expect(service.adminGetOrders).toHaveBeenCalledWith({}, 1, 10);
+  });
+
+  it("rejects a missing status before calling the update service", async () => {
+    const service = {
+      updateOrderStatus: vi.fn(),
+    } as unknown as IOrdersService;
+    const res = resMock();
+
+    await new OrdersController(service).adminUpdateStatus(
+      reqMock({
+        user: { id: "admin-1", role: "ADMIN" },
+        params: { orderId: "order-1" },
+        body: {},
+      }),
+      res,
+      vi.fn(),
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(service.updateOrderStatus).not.toHaveBeenCalled();
+  });
+
+  it("updates a valid order status without audit integration", async () => {
+    const service = {
+      updateOrderStatus: vi.fn().mockResolvedValue({ id: "order-1" }),
+    } as unknown as IOrdersService;
+    const res = resMock();
+
+    await new OrdersController(service).adminUpdateStatus(
+      reqMock({
+        user: { id: "admin-1", role: "ADMIN" },
+        params: { orderId: "order-1" },
+        body: { status: OrderStatus.SHIPPED },
+      }),
+      res,
+      vi.fn(),
+    );
+
+    expect(service.updateOrderStatus).toHaveBeenCalledWith(
+      "order-1",
+      OrderStatus.SHIPPED,
+    );
+    expect(res.json).toHaveBeenCalled();
+  });
+
+  it("records valid status updates through the audit service", async () => {
+    const service = {
+      updateOrderStatus: vi.fn().mockResolvedValue({ id: "order-1" }),
+    } as unknown as IOrdersService;
+    const recordMutation = vi.fn(
+      async (
+        _req: unknown,
+        _input: unknown,
+        operation: () => Promise<unknown>,
+      ) => operation(),
+    );
+
+    await new OrdersController(service, {
+      recordMutation,
+    } as unknown as AuditService).adminUpdateStatus(
+      reqMock({
+        user: { id: "admin-1", role: "ADMIN" },
+        params: { orderId: "order-1" },
+        body: { status: OrderStatus.SHIPPED },
+      }),
+      resMock(),
+      vi.fn(),
+    );
+
+    expect(recordMutation).toHaveBeenCalledOnce();
+    expect(service.updateOrderStatus).toHaveBeenCalledWith(
+      "order-1",
+      OrderStatus.SHIPPED,
+    );
   });
 });

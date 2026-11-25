@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { processImage } from "@/jobs/image-process.job";
 import sharp from "sharp";
 import type { IProductsRepository } from "@modules/products/application/ports/products.repository.port";
@@ -23,6 +23,12 @@ describe("image-process.job", () => {
   const storage = {
     upload: vi.fn(),
   } as unknown as IImageStorage;
+
+  beforeEach(() => {
+    vi.mocked(storage.upload).mockReset();
+    vi.mocked(productsRepository.findById).mockReset();
+    vi.mocked(productsRepository.updateWithEvents).mockReset();
+  });
 
   it("should process and upload image, update product", async () => {
     vi.mocked(storage.upload).mockResolvedValue({
@@ -133,5 +139,123 @@ describe("image-process.job", () => {
     await expect(
       processImage(job, productsRepository, storage),
     ).rejects.toThrow("No image buffer provided");
+  });
+
+  it("records successful processing with default audit context values", async () => {
+    vi.mocked(storage.upload).mockResolvedValue({
+      url: "https://cdn.com/processed.jpg",
+      publicId: "products/prod-1",
+    });
+    vi.mocked(productsRepository.findById).mockResolvedValue({
+      id: "prod-1",
+      name: "Product",
+      description: null,
+      price: 100,
+      stock: 1,
+      category: "category",
+      images: [],
+      slug: "product",
+      isActive: true,
+      version: 0,
+    } as any);
+    const auditService = {
+      record: vi.fn().mockResolvedValue(undefined),
+      recordFailureBestEffort: vi.fn(),
+    };
+
+    await expect(
+      processImage(
+        {
+          data: {
+            productId: "prod-1",
+            imageBuffer: bufferBase64,
+          },
+        },
+        productsRepository,
+        storage,
+        auditService as never,
+      ),
+    ).resolves.toMatchObject({ processed: true });
+
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRole: "UNKNOWN",
+        requestId: "image-job-prod-1",
+        outcome: "SUCCESS",
+      }),
+    );
+    expect(auditService.recordFailureBestEffort).not.toHaveBeenCalled();
+  });
+
+  it("keeps the successful image update when success-audit persistence rejects", async () => {
+    vi.mocked(storage.upload).mockResolvedValue({
+      url: "https://cdn.com/processed.jpg",
+      publicId: "products/prod-1",
+    });
+    vi.mocked(productsRepository.findById).mockResolvedValue({
+      id: "prod-1",
+      name: "Product",
+      description: null,
+      price: 100,
+      stock: 1,
+      category: "category",
+      images: [],
+      slug: "product",
+      isActive: true,
+      version: 0,
+    } as any);
+    const auditService = {
+      record: vi.fn().mockRejectedValue("audit unavailable"),
+      recordFailureBestEffort: vi.fn(),
+    };
+
+    await expect(
+      processImage(
+        {
+          data: {
+            productId: "prod-1",
+            imageBuffer: bufferBase64,
+            actorRole: "ADMIN",
+            requestId: "request-1",
+          },
+        },
+        productsRepository,
+        storage,
+        auditService as never,
+      ),
+    ).resolves.toMatchObject({ processed: true });
+
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRole: "ADMIN",
+        requestId: "request-1",
+        outcome: "SUCCESS",
+      }),
+    );
+  });
+
+  it("records processing failures best-effort when audit is enabled", async () => {
+    const auditService = {
+      record: vi.fn(),
+      recordFailureBestEffort: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await expect(
+      processImage(
+        { data: { productId: "prod-1", imageBuffer: undefined } },
+        productsRepository,
+        storage,
+        auditService as never,
+      ),
+    ).rejects.toThrow("No image buffer provided");
+
+    expect(auditService.recordFailureBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: expect.any(String),
+        targetId: "prod-1",
+        requestId: "image-job-prod-1",
+      }),
+      expect.any(Error),
+    );
   });
 });

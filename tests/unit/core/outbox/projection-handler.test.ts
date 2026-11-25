@@ -151,3 +151,47 @@ describe("ProjectionHandler", () => {
     projectionEventAgeSeconds.reset();
   });
 });
+describe("ProjectionHandler order status coverage", () => {
+  it("updates order status and refreshes the dashboard", async () => {
+    const store = {
+      upsertOrderPlaced: vi.fn().mockResolvedValue(undefined),
+      updateOrderStatus: vi.fn().mockResolvedValue(undefined),
+      upsertProduct: vi.fn().mockResolvedValue(undefined),
+      refreshDashboard: vi.fn().mockResolvedValue(undefined),
+      refreshProductRating: vi.fn().mockResolvedValue(undefined),
+    };
+    const { OrderStatusChangedEvent } =
+      await import("@shared/domain/events/order-events");
+    const event = new OrderStatusChangedEvent(
+      "order-1",
+      "PROCESSING",
+      "SHIPPED",
+      "user-1",
+    );
+    await new ProjectionHandler(store).handleOrderStatusChanged(event);
+    expect(store.updateOrderStatus).toHaveBeenCalledWith(event);
+    expect(store.refreshDashboard).toHaveBeenCalledOnce();
+  });
+
+  it("does not refresh the dashboard when the order status projection fails", async () => {
+    const store = {
+      upsertOrderPlaced: vi.fn().mockResolvedValue(undefined),
+      updateOrderStatus: vi.fn().mockRejectedValue(new Error("write failed")),
+      upsertProduct: vi.fn().mockResolvedValue(undefined),
+      refreshDashboard: vi.fn().mockResolvedValue(undefined),
+      refreshProductRating: vi.fn().mockResolvedValue(undefined),
+    };
+    const { OrderStatusChangedEvent } =
+      await import("@shared/domain/events/order-events");
+    const event = new OrderStatusChangedEvent(
+      "order-1",
+      "PROCESSING",
+      "SHIPPED",
+      "user-1",
+    );
+    await expect(
+      new ProjectionHandler(store).handleOrderStatusChanged(event),
+    ).rejects.toThrow("write failed");
+    expect(store.refreshDashboard).not.toHaveBeenCalled();
+  });
+});

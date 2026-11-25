@@ -9,19 +9,19 @@ describe("registerCoreInfrastructure", () => {
     registerCoreInfrastructure(container);
 
     const resolved = [
-      TOKENS.EventBus,
-      TOKENS.EmailQueue,
-      TOKENS.EmailService,
-      TOKENS.ImageStorage,
-      TOKENS.FeatureFlags,
-      TOKENS.PersistenceErrorClassifier,
-      TOKENS.Tracer,
-      TOKENS.Metrics,
-      TOKENS.ProjectionStore,
-      TOKENS.OutboxRelayStore,
-      TOKENS.HandlerExecutionTracker,
-      TOKENS.OutboxRelay,
-    ].map((token) => container.resolve(token));
+      container.resolve(TOKENS.EventBus),
+      container.resolve(TOKENS.EmailQueue),
+      container.resolve(TOKENS.EmailService),
+      container.resolve(TOKENS.ImageStorage),
+      container.resolve(TOKENS.FeatureFlags),
+      container.resolve(TOKENS.PersistenceErrorClassifier),
+      container.resolve(TOKENS.Tracer),
+      container.resolve(TOKENS.Metrics),
+      container.resolve(TOKENS.ProjectionStore),
+      container.resolve(TOKENS.OutboxRelayStore),
+      container.resolve(TOKENS.HandlerExecutionTracker),
+      container.resolve(TOKENS.OutboxRelay),
+    ];
 
     expect(resolved).toHaveLength(12);
     expect(resolved.every(Boolean)).toBe(true);

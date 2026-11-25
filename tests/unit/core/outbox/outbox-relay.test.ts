@@ -14,6 +14,8 @@ import {
   outboxEventsPublished,
   outboxLagSeconds,
   outboxPublishDurationSeconds,
+  outboxRelayLeaseLosses,
+  outboxRelayRetries,
 } from "@core/metrics/metrics.registry";
 
 vi.mock("@core/logger/winston", () => ({
@@ -645,5 +647,266 @@ describe("OutboxRelay.start / stop", () => {
     await stopPromise;
 
     expect(stopped).toBe(true);
+  });
+});
+
+describe("OutboxRelay lease-loss and retry edge cases", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    store = createStore();
+    handlerTracker = createHandlerTracker();
+  });
+
+  it("does not count a published event when the lease update loses ownership", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    vi.mocked(store.updateClaimed).mockResolvedValue(false);
+
+    await new OutboxRelay(store, handlerTracker, createEventBus()).pollOnce();
+
+    expect(outboxEventsPublished.inc).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "OutboxRelay lost ownership before updating event",
+      expect.objectContaining({ eventId: ROW.id }),
+    );
+  });
+
+  it("does not count a failed event when its lease update loses ownership", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    vi.mocked(store.updateClaimed).mockResolvedValue(false);
+    const publish = vi.fn().mockRejectedValue(new Error("bus down"));
+
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
+
+    expect(outboxEventsFailed.inc).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "OutboxRelay lost ownership before updating event",
+      expect.objectContaining({ eventId: ROW.id }),
+    );
+  });
+
+  it("logs and suppresses retry metric failures after a successful retry", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    vi.mocked(outboxRelayRetries.inc).mockImplementation(() => {
+      throw new Error("metrics unavailable");
+    });
+    const publish = vi
+      .fn()
+      .mockResolvedValueOnce({ success: false, failedHandlers: ["HandlerA"] })
+      .mockResolvedValueOnce({ success: true, failedHandlers: [] });
+
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
+
+    expect(publish).toHaveBeenCalledTimes(2);
+    expect(store.updateClaimed).toHaveBeenCalledWith(
+      ROW.id,
+      expect.any(String),
+      expect.objectContaining({ publishedAt: expect.any(Date) }),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Outbox relay metrics increment failed",
+      { metric: "outbox_relay_retries" },
+    );
+  });
+
+  it("skips a claimed row when its heartbeat has already removed the claim", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    const publish = vi.fn();
+    const relay = new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    );
+    const internals = relay as unknown as {
+      startHeartbeat: (ids: string[]) => void;
+      activeClaimIds: Set<string>;
+    };
+    vi.spyOn(internals, "startHeartbeat").mockImplementation(() => {
+      internals.activeClaimIds.clear();
+    });
+
+    await relay.pollOnce();
+
+    expect(publish).not.toHaveBeenCalled();
+    expect(store.updateClaimed).not.toHaveBeenCalled();
+  });
+
+  it("stops heartbeating after all active claims are lost", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    vi.mocked(store.renewClaims).mockResolvedValue([]);
+    let releasePublish!: () => void;
+    const publishGate = new Promise<void>((resolve) => {
+      releasePublish = resolve;
+    });
+    const publish = vi.fn(() =>
+      publishGate.then(() => ({ success: true, failedHandlers: [] })),
+    );
+    const relay = new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+      { heartbeatIntervalMs: 10 },
+    );
+
+    const polling = relay.pollOnce();
+    await new Promise((resolve) => setTimeout(resolve, 35));
+
+    expect(store.renewClaims).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "OutboxRelay lost ownership during heartbeat",
+      expect.objectContaining({ claimed: 1, renewed: 0 }),
+    );
+
+    releasePublish();
+    await polling;
+  });
+
+  it("does not start a second heartbeat renewal while the first is in flight", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    let releaseRenewal!: (ids: string[]) => void;
+    const renewalGate = new Promise<string[]>((resolve) => {
+      releaseRenewal = resolve;
+    });
+    vi.mocked(store.renewClaims).mockReturnValue(renewalGate as never);
+
+    let releasePublish!: () => void;
+    const publishGate = new Promise<void>((resolve) => {
+      releasePublish = resolve;
+    });
+    const publish = vi.fn(() =>
+      publishGate.then(() => ({ success: true, failedHandlers: [] })),
+    );
+    const relay = new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+      { heartbeatIntervalMs: 10 },
+    );
+
+    const polling = relay.pollOnce();
+    await new Promise((resolve) => setTimeout(resolve, 35));
+
+    expect(store.renewClaims).toHaveBeenCalledTimes(1);
+
+    releaseRenewal([ROW.id]);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    releasePublish();
+    await polling;
+  });
+
+  it("logs heartbeat failures and resets the in-flight guard", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    vi.mocked(store.renewClaims).mockRejectedValue(new Error("redis down"));
+
+    let releasePublish!: () => void;
+    const publishGate = new Promise<void>((resolve) => {
+      releasePublish = resolve;
+    });
+    const publish = vi.fn(() =>
+      publishGate.then(() => ({ success: true, failedHandlers: [] })),
+    );
+    const relay = new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+      { heartbeatIntervalMs: 10 },
+    );
+
+    const polling = relay.pollOnce();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "OutboxRelay heartbeat failed",
+      expect.objectContaining({ error: expect.any(Error) }),
+    );
+
+    releasePublish();
+    await polling;
+  });
+});
+
+describe("OutboxRelay scheduled poll overlap guard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    store = createStore();
+    handlerTracker = createHandlerTracker();
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("skips scheduled ticks while a previous poll is still in flight", async () => {
+    let releaseClaim!: (rows: unknown[]) => void;
+    vi.mocked(store.claimBatch).mockReturnValue(
+      new Promise((resolve) => {
+        releaseClaim = resolve;
+      }) as never,
+    );
+    const relay = new OutboxRelay(store, handlerTracker, createEventBus());
+
+    relay.start();
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(store.claimBatch).toHaveBeenCalledOnce();
+
+    releaseClaim([]);
+    await vi.advanceTimersByTimeAsync(0);
+    await relay.stop();
+  });
+});
+
+describe("OutboxRelay single-attempt completion failures", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    store = createStore();
+    handlerTracker = createHandlerTracker();
+  });
+
+  it("records a completion failure without counting a publish retry", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    vi.mocked(store.updateClaimed)
+      .mockRejectedValueOnce(new Error("completion write failed"))
+      .mockResolvedValueOnce(true);
+    const publish = vi
+      .fn()
+      .mockResolvedValue({ success: true, failedHandlers: [] });
+
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
+
+    expect(publish).toHaveBeenCalledOnce();
+    expect(store.updateClaimed).toHaveBeenCalledTimes(2);
+    expect(outboxRelayRetries.inc).not.toHaveBeenCalled();
+  });
+
+  it("stringifies a non-Error publish failure in the retry record", async () => {
+    vi.mocked(store.claimBatch).mockResolvedValue([ROW] as never);
+    const publish = vi.fn().mockRejectedValue("non-error publish failure");
+
+    await new OutboxRelay(
+      store,
+      handlerTracker,
+      createEventBus(publish),
+    ).pollOnce();
+
+    expect(store.updateClaimed).toHaveBeenCalledWith(
+      ROW.id,
+      expect.any(String),
+      expect.objectContaining({
+        attempts: { increment: 1 },
+        lastError: "non-error publish failure",
+      }),
+    );
   });
 });

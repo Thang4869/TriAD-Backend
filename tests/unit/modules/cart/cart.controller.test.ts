@@ -99,3 +99,58 @@ describe("CartController", () => {
     });
   });
 });
+
+describe("CartController successful mutations", () => {
+  it("adds an item when product and positive quantity are valid", async () => {
+    const service = {
+      addItem: vi.fn().mockResolvedValue({ productId: "p1", quantity: 2 }),
+    } as unknown as ICartService;
+    const res = resMock();
+
+    await new CartController(service).addItem(
+      reqMock({ body: { productId: "p1", quantity: 2 } }),
+      res,
+      vi.fn(),
+    );
+
+    expect(service.addItem).toHaveBeenCalledWith("u1", "p1", 2);
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it("rejects a negative update quantity", async () => {
+    const service = { updateItem: vi.fn() } as unknown as ICartService;
+    const next = vi.fn();
+
+    await new CartController(service).updateItem(
+      reqMock({
+        params: { productId: "p1" },
+        body: { quantity: -1 },
+      }),
+      resMock(),
+      next,
+    );
+
+    expect(service.updateItem).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "quantity is required and must be >= 0",
+      }),
+    );
+  });
+
+  it("removes an item from the authenticated user's cart", async () => {
+    const service = {
+      removeItem: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ICartService;
+    const res = resMock();
+
+    await new CartController(service).removeItem(
+      reqMock({ params: { productId: "p1" } }),
+      res,
+      vi.fn(),
+    );
+
+    expect(service.removeItem).toHaveBeenCalledWith("u1", "p1");
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: null });
+  });
+});

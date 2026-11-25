@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   checkoutTransactionConflicts: { inc: vi.fn() },
   checkoutTransactionRetries: { inc: vi.fn() },
   sagaCompensations: { inc: vi.fn() },
+  checkoutTransactionDurationSeconds: { observe: vi.fn() },
+  checkoutTransactionAttempts: { observe: vi.fn() },
+  checkoutStageDurationSeconds: { observe: vi.fn() },
 }));
 
 vi.mock("@core/metrics/metrics.registry", () => mocks);
@@ -98,5 +101,54 @@ describe("PrometheusMetricsAdapter", () => {
     );
 
     expect(mocks.sagaCompensations.inc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["orders.placed", mocks.ordersPlaced],
+    ["stock.reservation.succeeded", mocks.stockReservationSucceeded],
+    ["stock.reservation.failed", mocks.stockReservationFailed],
+    ["checkout.saga.succeeded", mocks.checkoutSucceeded],
+    ["checkout.saga.failed", mocks.checkoutFailed],
+  ] as const)("increments %s", (metric, counter) => {
+    new PrometheusMetricsAdapter().increment(metric);
+
+    expect(counter.inc).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["checkout.transaction.duration", { outcome: "committed" }, 125, 0.125],
+    ["checkout.transaction.attempts", { outcome: "retried" }, 3, 3],
+    ["checkout.stage.duration", { stage: "reserve-stock" }, 250, 0.25],
+  ] as const)(
+    "observes %s with normalized value and labels",
+    (metric, labels, value, expected) => {
+      const adapter = new PrometheusMetricsAdapter();
+
+      adapter.observe(metric, value, labels);
+
+      const histogram =
+        metric === "checkout.transaction.duration"
+          ? mocks.checkoutTransactionDurationSeconds
+          : metric === "checkout.transaction.attempts"
+            ? mocks.checkoutTransactionAttempts
+            : mocks.checkoutStageDurationSeconds;
+
+      expect(histogram.observe).toHaveBeenCalledWith(labels, expected);
+    },
+  );
+
+  it.each([
+    ["checkout.transaction.duration", mocks.checkoutTransactionDurationSeconds],
+    ["checkout.transaction.attempts", mocks.checkoutTransactionAttempts],
+    ["checkout.stage.duration", mocks.checkoutStageDurationSeconds],
+  ] as const)("uses fallback labels for %s", (metric, histogram) => {
+    new PrometheusMetricsAdapter().observe(metric, 0);
+
+    expect(histogram.observe).toHaveBeenCalledWith(
+      metric === "checkout.stage.duration"
+        ? { stage: "unknown" }
+        : { outcome: "unknown" },
+      0,
+    );
   });
 });

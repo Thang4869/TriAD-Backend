@@ -98,3 +98,86 @@ describe("CheckoutSaga", () => {
     expect((await store.load("saga-timeout"))?.step).toBe("COMPENSATED");
   });
 });
+
+describe("CheckoutSaga payment and compensation recovery", () => {
+  it("skips payment authorization for cash-on-delivery checkouts", async () => {
+    const actionPorts = ports();
+    const state = await new CheckoutSaga(
+      actionPorts,
+      new InMemorySagaStateStore<CheckoutSagaState>(),
+      noopTracer,
+      noopMetrics,
+    ).execute({ ...input, paymentMethod: "COD" });
+
+    expect(state.step).toBe("COMPLETED");
+    expect(actionPorts.authorizePayment).not.toHaveBeenCalled();
+    expect(actionPorts.confirmOrder).toHaveBeenCalledWith("order-1");
+  });
+
+  it("resumes a saga with an already authorized payment without charging again", async () => {
+    const actionPorts = ports();
+    const store = new InMemorySagaStateStore<CheckoutSagaState>();
+    await store.save(input.sagaId, {
+      sagaId: input.sagaId,
+      step: "PAYMENT_AUTHORIZED",
+      reservationId: "reservation-1",
+      orderId: "order-1",
+      paymentId: "payment-existing",
+    });
+
+    const state = await new CheckoutSaga(
+      actionPorts,
+      store,
+      noopTracer,
+      noopMetrics,
+    ).execute(input);
+
+    expect(state.step).toBe("COMPLETED");
+    expect(actionPorts.reserveStock).not.toHaveBeenCalled();
+    expect(actionPorts.placeOrder).not.toHaveBeenCalled();
+    expect(actionPorts.authorizePayment).not.toHaveBeenCalled();
+    expect(actionPorts.confirmOrder).toHaveBeenCalledWith("order-1");
+  });
+
+  it("refunds payment, cancels order and releases stock using fallback deadlines", async () => {
+    const actionPorts = ports();
+    const store = new InMemorySagaStateStore<CheckoutSagaState>();
+    const saga = new CheckoutSaga(actionPorts, store, noopTracer, noopMetrics);
+    const compensate = (
+      saga as unknown as {
+        compensate: (state: CheckoutSagaState) => Promise<void>;
+      }
+    ).compensate.bind(saga);
+
+    await compensate({
+      sagaId: "saga-compensate",
+      step: "PAYMENT_AUTHORIZED",
+      paymentId: "payment-1",
+      orderId: "order-1",
+      reservationId: "reservation-1",
+    });
+
+    expect(actionPorts.refundPayment).toHaveBeenCalledWith("payment-1");
+    expect(actionPorts.cancelOrder).toHaveBeenCalledWith("order-1");
+    expect(actionPorts.releaseStock).toHaveBeenCalledWith("reservation-1");
+    expect((await store.load("saga-compensate"))?.step).toBe("COMPENSATED");
+  });
+
+  it("persists compensation state when no forward step completed", async () => {
+    const actionPorts = ports();
+    const store = new InMemorySagaStateStore<CheckoutSagaState>();
+    const saga = new CheckoutSaga(actionPorts, store, noopTracer, noopMetrics);
+    const compensate = (
+      saga as unknown as {
+        compensate: (state: CheckoutSagaState) => Promise<void>;
+      }
+    ).compensate.bind(saga);
+
+    await compensate({ sagaId: "saga-empty", step: "STARTED" });
+
+    expect(actionPorts.refundPayment).not.toHaveBeenCalled();
+    expect(actionPorts.cancelOrder).not.toHaveBeenCalled();
+    expect(actionPorts.releaseStock).not.toHaveBeenCalled();
+    expect((await store.load("saga-empty"))?.step).toBe("COMPENSATED");
+  });
+});

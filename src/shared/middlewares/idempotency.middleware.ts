@@ -140,7 +140,8 @@ export const idempotencyMiddleware = (
       leaseTimer.unref();
       res.once?.("close", () => clearInterval(leaseTimer));
       res.once?.("finish", () => clearInterval(leaseTimer));
-      req.body.idempotencyKey = idempotencyKey;
+      body.idempotencyKey = idempotencyKey;
+      req.body = body;
 
       const originalJson = res.json.bind(res);
 

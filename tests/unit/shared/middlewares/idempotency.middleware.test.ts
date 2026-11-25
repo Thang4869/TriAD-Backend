@@ -3,6 +3,7 @@ import { idempotencyMiddleware } from "@shared/middlewares/idempotency.middlewar
 import { Request, Response, NextFunction } from "express";
 import redis from "@core/redis/client";
 import {
+  ConflictError,
   UnprocessableError,
   ValidationError,
   DependencyUnavailableError,
@@ -403,5 +404,124 @@ describe("idempotencyMiddleware", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("rejects a cached request that is still in progress", async () => {
+    const requestHash = crypto.createHash("sha256").update("{}").digest("hex");
+    vi.mocked(redis.get).mockResolvedValueOnce(
+      JSON.stringify({ state: "IN_PROGRESS", requestHash }),
+    );
+    req.headers = { "idempotency-key": "still-running" };
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.any(ConflictError));
+  });
+
+  it("rejects a completed cache record without an HTTP status", async () => {
+    const requestHash = crypto.createHash("sha256").update("{}").digest("hex");
+    vi.mocked(redis.get).mockResolvedValueOnce(
+      JSON.stringify({ state: "COMPLETED", requestHash, data: {} }),
+    );
+    req.headers = { "idempotency-key": "missing-status" };
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.any(ConflictError));
+  });
+
+  it("rejects malformed cached JSON", async () => {
+    vi.mocked(redis.get).mockResolvedValueOnce("{invalid-json");
+    req.headers = { "idempotency-key": "malformed-cache" };
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.any(ConflictError));
+  });
+
+  it("returns conflict when the NX claim loses and no concurrent record is visible", async () => {
+    req.headers = { "idempotency-key": "claim-race-empty" };
+    vi.mocked(redis.get)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    vi.mocked(redis.set).mockResolvedValueOnce(null);
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(redis.get).toHaveBeenCalledTimes(2);
+    expect(next).toHaveBeenCalledWith(expect.any(ConflictError));
+  });
+
+  it("replays or rejects the record created by the concurrent claim owner", async () => {
+    const requestHash = crypto.createHash("sha256").update("{}").digest("hex");
+    req.headers = { "idempotency-key": "claim-race-visible" };
+    vi.mocked(redis.get)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(
+        JSON.stringify({ state: "IN_PROGRESS", requestHash }),
+      );
+    vi.mocked(redis.set).mockResolvedValueOnce(null);
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.any(ConflictError));
+  });
+
+  it("treats a Redis operation that exceeds the bounded timeout as unavailable", async () => {
+    req.headers = { "idempotency-key": "redis-timeout" };
+    vi.mocked(redis.get).mockReturnValueOnce(
+      new Promise(() => undefined) as never,
+    );
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.any(DependencyUnavailableError));
+  });
+
+  it("logs and stops the lease timer when renewal fails", async () => {
+    vi.useFakeTimers();
+    try {
+      req.headers = { "idempotency-key": "lease-renewal-failure" };
+      vi.mocked(redis.eval).mockRejectedValueOnce(new Error("renewal failed"));
+
+      await idempotencyMiddleware()(req as Request, res as Response, next);
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.stringContaining('redis.call("EXPIRE"'),
+        1,
+        expect.any(String),
+        expect.any(String),
+        "60",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("registers close and finish handlers to stop the lease timer", async () => {
+    const listeners: Record<string, () => void> = {};
+    res.once = vi.fn((event, listener) => {
+      listeners[String(event)] = listener as () => void;
+      return res as Response;
+    }) as never;
+    req.headers = { "idempotency-key": "response-lifecycle" };
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(res.once).toHaveBeenCalledWith("close", expect.any(Function));
+    expect(res.once).toHaveBeenCalledWith("finish", expect.any(Function));
+    listeners.close();
+    listeners.finish();
+  });
+
+  it("treats a null request body as an empty object", async () => {
+    req.body = null;
+    req.headers = { "idempotency-key": "null-body" };
+
+    await idempotencyMiddleware()(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(req.body).toEqual({ idempotencyKey: "null-body" });
   });
 });

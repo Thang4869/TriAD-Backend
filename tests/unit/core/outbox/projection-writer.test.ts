@@ -206,3 +206,208 @@ describe("projection source version validation", () => {
     },
   );
 });
+
+describe("projection writer conflict recovery", () => {
+  const uniqueConflict = () =>
+    new Prisma.PrismaClientKnownRequestError("duplicate projection", {
+      code: "P2002",
+      clientVersion: "5.22.0",
+    });
+
+  const orderData = (sourceVersion: number | undefined) =>
+    ({
+      orderId: "order-1",
+      sourceVersion,
+    }) as Prisma.OrderHistoryProjectionUncheckedCreateInput;
+
+  it("updates an order projection when the conditional update wins", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const create = vi.fn();
+    const db = {
+      orderHistoryProjection: { updateMany, create, findUnique: vi.fn() },
+    };
+
+    await writeOrderHistoryProjection(db as never, orderData(2));
+
+    expect(updateMany).toHaveBeenCalledOnce();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("retries an order projection update after a concurrent create wins", async () => {
+    const updateMany = vi
+      .fn()
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+    const create = vi.fn().mockRejectedValue(uniqueConflict());
+    const findUnique = vi.fn();
+    const db = {
+      orderHistoryProjection: { updateMany, create, findUnique },
+    };
+
+    await writeOrderHistoryProjection(db as never, orderData(2));
+
+    expect(updateMany).toHaveBeenCalledTimes(2);
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rethrows non-unique order projection write failures", async () => {
+    const failure = new Error("database unavailable");
+    const db = {
+      orderHistoryProjection: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockRejectedValue(failure),
+        findUnique: vi.fn(),
+      },
+    };
+
+    await expect(
+      writeOrderHistoryProjection(db as never, orderData(2)),
+    ).rejects.toBe(failure);
+  });
+
+  it("rethrows a product conflict when no newer projection exists", async () => {
+    const conflict = uniqueConflict();
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const db = {
+      productCatalogProjection: {
+        updateMany,
+        create: vi.fn().mockRejectedValue(conflict),
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
+    };
+
+    await expect(
+      writeProductCatalogProjection(db as never, productData(2, "stale")),
+    ).rejects.toBe(conflict);
+
+    expect(updateMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("rethrows an order conflict when the existing projection is older", async () => {
+    const conflict = uniqueConflict();
+    const db = {
+      orderHistoryProjection: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockRejectedValue(conflict),
+        findUnique: vi.fn().mockResolvedValue({ sourceVersion: 1 }),
+      },
+    };
+
+    await expect(
+      writeOrderHistoryProjection(db as never, orderData(2)),
+    ).rejects.toBe(conflict);
+  });
+
+  it("rethrows non-unique product projection write failures", async () => {
+    const failure = new Error("database unavailable");
+    const db = {
+      productCatalogProjection: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockRejectedValue(failure),
+        findUnique: vi.fn(),
+      },
+    };
+
+    await expect(
+      writeProductCatalogProjection(db as never, productData(2, "new")),
+    ).rejects.toBe(failure);
+  });
+
+  it("rejects missing order source versions before database writes", async () => {
+    const updateMany = vi.fn();
+    const create = vi.fn();
+    const db = {
+      orderHistoryProjection: { updateMany, create, findUnique: vi.fn() },
+    };
+
+    await expect(
+      writeOrderHistoryProjection(db as never, orderData(undefined)),
+    ).rejects.toThrow("Versioned projection snapshot is required");
+
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing product source versions before database writes", async () => {
+    const updateMany = vi.fn();
+    const create = vi.fn();
+    const db = {
+      productCatalogProjection: { updateMany, create, findUnique: vi.fn() },
+    };
+
+    await expect(
+      writeProductCatalogProjection(
+        db as never,
+        productData(undefined as never, "missing-version"),
+      ),
+    ).rejects.toThrow("Versioned projection snapshot is required");
+
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("projection writer successful race paths", () => {
+  const orderData = (sourceVersion: number) =>
+    ({
+      orderId: "order-1",
+      sourceVersion,
+    }) as Prisma.OrderHistoryProjectionUncheckedCreateInput;
+
+  it("keeps an equal or newer order projection after a duplicate create", async () => {
+    const db = {
+      orderHistoryProjection: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError("duplicate", {
+            code: "P2002",
+            clientVersion: "5.22.0",
+          }),
+        ),
+        findUnique: vi.fn().mockResolvedValue({ sourceVersion: 2 }),
+      },
+    };
+
+    await expect(
+      writeOrderHistoryProjection(db as never, orderData(2)),
+    ).resolves.toBeUndefined();
+  });
+
+  it("returns when a conditional product update already applied the newer snapshot", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const create = vi.fn();
+    const db = {
+      productCatalogProjection: { updateMany, create, findUnique: vi.fn() },
+    };
+
+    await writeProductCatalogProjection(db as never, productData(3, "newer"));
+
+    expect(updateMany).toHaveBeenCalledOnce();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("returns when retrying the product update wins a concurrent insert", async () => {
+    const updateMany = vi
+      .fn()
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+    const db = {
+      productCatalogProjection: {
+        updateMany,
+        create: vi.fn().mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError("duplicate", {
+            code: "P2002",
+            clientVersion: "5.22.0",
+          }),
+        ),
+        findUnique: vi.fn(),
+      },
+    };
+
+    await expect(
+      writeProductCatalogProjection(db as never, productData(3, "newer")),
+    ).resolves.toBeUndefined();
+
+    expect(updateMany).toHaveBeenCalledTimes(2);
+  });
+});

@@ -44,37 +44,24 @@ export class CartService implements ICartService {
       throw new ValidationError("Quantity must be a positive safe integer");
     }
 
-    const product = await this.repository.findProductStockInfo(productId);
-    if (!product) {
-      throw new ResourceNotFoundError("Product not found");
-    }
-    if (product.stock < quantity) {
-      throw new ValidationError(
-        `Not enough stock. Available: ${product.stock}`,
-      );
-    }
+    const result = await this.repository.addItemAtomically(
+      userId,
+      productId,
+      quantity,
+    );
 
-    const cart = await this.getOrCreateCart(userId);
-
-    const existingItem = await this.repository.findCartItem(cart.id, productId);
-
-    if (existingItem) {
-      const newQuantity = existingItem.quantity + quantity;
-      if (!Number.isSafeInteger(newQuantity)) {
-        throw new ValidationError("Cart quantity exceeds safe integer range");
-      }
-      if (newQuantity > product.stock) {
+    switch (result.status) {
+      case "added":
+        return result.item;
+      case "product_not_found":
+        throw new ResourceNotFoundError("Product not found");
+      case "insufficient_stock":
         throw new ValidationError(
-          `Cannot add more than ${product.stock} items`,
+          `Not enough stock. Available: ${result.available}`,
         );
-      }
-      return this.repository.updateCartItemQuantity(
-        existingItem.id,
-        newQuantity,
-      );
+      case "quantity_overflow":
+        throw new ValidationError("Cart quantity exceeds safe integer range");
     }
-
-    return this.repository.createCartItem(cart.id, productId, quantity);
   }
 
   async updateItem(
@@ -132,11 +119,5 @@ export class CartService implements ICartService {
 
     const count = await this.repository.deleteCartItemsByCartId(cart.id);
     return { count };
-  }
-
-  private async getOrCreateCart(userId: string) {
-    const cart = await this.repository.findCartByUserId(userId);
-    if (cart) return cart;
-    return this.repository.createCart(userId);
   }
 }

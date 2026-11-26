@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+﻿import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CartService } from "@modules/cart/cart.service";
+import type { CartItemWithProduct } from "@modules/cart/application/ports/cart-models";
 import type { ICartRepository } from "@modules/cart/application/ports/cart.repository.port";
 import {
   ValidationError,
@@ -15,6 +16,9 @@ function createFakeRepository(
     findCartByUserId: vi.fn().mockResolvedValue(null),
     createCart: vi.fn(),
     findProductStockInfo: vi.fn().mockResolvedValue(null),
+    addItemAtomically: vi
+      .fn()
+      .mockResolvedValue({ status: "product_not_found" }),
     findCartItem: vi.fn().mockResolvedValue(null),
     createCartItem: vi.fn(),
     updateCartItemQuantity: vi.fn(),
@@ -28,106 +32,58 @@ describe("CartService", () => {
   beforeEach(() => vi.clearAllMocks());
 
   describe("addItem", () => {
-    it("ném ValidationError khi quantity <= 0", async () => {
+    it("rejects invalid quantity before repository access", async () => {
       const repository = createFakeRepository();
-      const service = new CartService(repository);
-
       await expect(
-        service.addItem("user-1", "product-1", 0),
+        new CartService(repository).addItem("u", "p", 0),
       ).rejects.toBeInstanceOf(ValidationError);
-      expect(repository.findProductStockInfo).not.toHaveBeenCalled();
+      expect(repository.addItemAtomically).not.toHaveBeenCalled();
     });
 
-    it("ném ResourceNotFoundError khi product không tồn tại", async () => {
+    it("returns the item from the atomic repository operation", async () => {
+      const item = { id: "ci1", quantity: 5 } as unknown as CartItemWithProduct;
       const repository = createFakeRepository({
-        findProductStockInfo: vi.fn().mockResolvedValue(null),
+        addItemAtomically: vi.fn().mockResolvedValue({ status: "added", item }),
       });
-      const service = new CartService(repository);
-
       await expect(
-        service.addItem("user-1", "product-x", 1),
+        new CartService(repository).addItem("u", "p", 3),
+      ).resolves.toBe(item);
+      expect(repository.addItemAtomically).toHaveBeenCalledWith("u", "p", 3);
+    });
+
+    it("maps missing products to ResourceNotFoundError", async () => {
+      const repository = createFakeRepository({
+        addItemAtomically: vi
+          .fn()
+          .mockResolvedValue({ status: "product_not_found" }),
+      });
+      await expect(
+        new CartService(repository).addItem("u", "p", 1),
       ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
-    it("ném ValidationError khi quantity yêu cầu vượt tồn kho hiện có", async () => {
-      const repository = createFakeRepository({
-        findProductStockInfo: vi
+    it("maps stock and safe-integer failures to ValidationError", async () => {
+      const stockRepository = createFakeRepository({
+        addItemAtomically: vi
           .fn()
-          .mockResolvedValue({ id: "product-1", stock: 3, name: "P" }),
+          .mockResolvedValue({ status: "insufficient_stock", available: 2 }),
       });
-      const service = new CartService(repository);
-
       await expect(
-        service.addItem("user-1", "product-1", 5),
-      ).rejects.toBeInstanceOf(ValidationError);
-    });
-
-    it("cộng dồn quantity nếu sản phẩm đã có sẵn trong giỏ, không tạo item trùng", async () => {
-      const repository = createFakeRepository({
-        findProductStockInfo: vi
+        new CartService(stockRepository).addItem("u", "p", 3),
+      ).rejects.toThrow("Available: 2");
+      const overflowRepository = createFakeRepository({
+        addItemAtomically: vi
           .fn()
-          .mockResolvedValue({ id: "product-1", stock: 10, name: "P" }),
-        findCartByUserId: vi
-          .fn()
-          .mockResolvedValue({ id: "cart-1", userId: "user-1" }),
-        findCartItem: vi.fn().mockResolvedValue({ id: "ci1", quantity: 2 }),
-        updateCartItemQuantity: vi
-          .fn()
-          .mockResolvedValue({ id: "ci1", quantity: 5 }),
+          .mockResolvedValue({ status: "quantity_overflow" }),
       });
-      const service = new CartService(repository);
-
-      await service.addItem("user-1", "product-1", 3);
-
-      expect(repository.updateCartItemQuantity).toHaveBeenCalledWith("ci1", 5);
-      expect(repository.createCartItem).not.toHaveBeenCalled();
-    });
-
-    it("ném ValidationError khi tổng quantity sau khi cộng dồn vượt tồn kho", async () => {
-      const repository = createFakeRepository({
-        findProductStockInfo: vi
-          .fn()
-          .mockResolvedValue({ id: "product-1", stock: 5, name: "P" }),
-        findCartByUserId: vi
-          .fn()
-          .mockResolvedValue({ id: "cart-1", userId: "user-1" }),
-        findCartItem: vi.fn().mockResolvedValue({ id: "ci1", quantity: 3 }),
-      });
-      const service = new CartService(repository);
-
       await expect(
-        service.addItem("user-1", "product-1", 4),
-      ).rejects.toBeInstanceOf(ValidationError);
-      expect(repository.updateCartItemQuantity).not.toHaveBeenCalled();
-    });
-
-    it("tạo cart mới nếu user chưa có cart, rồi mới tạo cart item", async () => {
-      const repository = createFakeRepository({
-        findProductStockInfo: vi
-          .fn()
-          .mockResolvedValue({ id: "product-1", stock: 10, name: "P" }),
-        findCartByUserId: vi.fn().mockResolvedValue(null),
-        createCart: vi
-          .fn()
-          .mockResolvedValue({ id: "cart-new", userId: "user-1" }),
-        findCartItem: vi.fn().mockResolvedValue(null),
-        createCartItem: vi.fn().mockResolvedValue({ id: "ci-new" }),
-      });
-      const service = new CartService(repository);
-
-      await service.addItem("user-1", "product-1", 2);
-
-      expect(repository.createCart).toHaveBeenCalledWith("user-1");
-      expect(repository.createCartItem).toHaveBeenCalledWith(
-        "cart-new",
-        "product-1",
-        2,
-      );
+        new CartService(overflowRepository).addItem("u", "p", 1),
+      ).rejects.toThrow("safe integer");
     });
   });
 
   describe("updateItem", () => {
-    it("ném ValidationError khi quantity âm", async () => {
+    it("nĂ©m ValidationError khi quantity Ă¢m", async () => {
       const repository = createFakeRepository();
       const service = new CartService(repository);
 
@@ -136,7 +92,7 @@ describe("CartService", () => {
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
-    it("ném ResourceNotFoundError khi cart không tồn tại", async () => {
+    it("nĂ©m ResourceNotFoundError khi cart khĂ´ng tá»“n táº¡i", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue(null),
       });
@@ -147,7 +103,7 @@ describe("CartService", () => {
       ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
-    it("ném ResourceNotFoundError khi item không có trong giỏ", async () => {
+    it("nĂ©m ResourceNotFoundError khi item khĂ´ng cĂ³ trong giá»", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi
           .fn()
@@ -160,7 +116,7 @@ describe("CartService", () => {
       ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
-    it("xoá item khi quantity = 0 thay vì gọi update", async () => {
+    it("xoĂ¡ item khi quantity = 0 thay vĂ¬ gá»i update", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue({
           id: "cart-1",
@@ -176,7 +132,7 @@ describe("CartService", () => {
       expect(result).toBeNull();
     });
 
-    it("ném ValidationError khi quantity mới vượt tồn kho", async () => {
+    it("nĂ©m ValidationError khi quantity má»›i vÆ°á»£t tá»“n kho", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue({
           id: "cart-1",
@@ -193,13 +149,13 @@ describe("CartService", () => {
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
-    it("ném ValidationError với Available: 0 khi sản phẩm không còn tồn tại", async () => {
+    it("nĂ©m ValidationError vá»›i Available: 0 khi sáº£n pháº©m khĂ´ng cĂ²n tá»“n táº¡i", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue({
           id: "cart-1",
           items: [{ id: "ci1", productId: "product-1" }],
         }),
-        // findProductStockInfo mặc định trả về null trong createFakeRepository
+        // findProductStockInfo máº·c Ä‘á»‹nh tráº£ vá» null trong createFakeRepository
       });
       const service = new CartService(repository);
 
@@ -209,7 +165,7 @@ describe("CartService", () => {
       expect(repository.updateCartItemQuantity).not.toHaveBeenCalled();
     });
 
-    it("cập nhật thành công quantity mới khi còn đủ tồn kho", async () => {
+    it("cáº­p nháº­t thĂ nh cĂ´ng quantity má»›i khi cĂ²n Ä‘á»§ tá»“n kho", async () => {
       const updatedItem = { id: "ci1", productId: "product-1", quantity: 5 };
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue({
@@ -231,7 +187,7 @@ describe("CartService", () => {
   });
 
   describe("removeItem", () => {
-    it("ném ResourceNotFoundError khi cart không tồn tại", async () => {
+    it("nĂ©m ResourceNotFoundError khi cart khĂ´ng tá»“n táº¡i", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue(null),
       });
@@ -242,7 +198,7 @@ describe("CartService", () => {
       ).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
-    it("ném ResourceNotFoundError khi item không có trong giỏ", async () => {
+    it("nĂ©m ResourceNotFoundError khi item khĂ´ng cĂ³ trong giá»", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi
           .fn()
@@ -256,7 +212,7 @@ describe("CartService", () => {
       expect(repository.deleteCartItem).not.toHaveBeenCalled();
     });
 
-    it("xoá đúng item khỏi giỏ theo productId", async () => {
+    it("xoĂ¡ Ä‘Ăºng item khá»i giá» theo productId", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue({
           id: "cart-1",
@@ -272,7 +228,7 @@ describe("CartService", () => {
   });
 
   describe("clearCart", () => {
-    it("ném ResourceNotFoundError khi cart không tồn tại", async () => {
+    it("nĂ©m ResourceNotFoundError khi cart khĂ´ng tá»“n táº¡i", async () => {
       const repository = createFakeRepository({
         findCartByUserId: vi.fn().mockResolvedValue(null),
       });
@@ -283,7 +239,7 @@ describe("CartService", () => {
       );
     });
 
-    it("trả về số lượng item đã xoá", async () => {
+    it("tráº£ vá» sá»‘ lÆ°á»£ng item Ä‘Ă£ xoĂ¡", async () => {
       const repository = createFakeRepository({
         findCartByUserId: vi
           .fn()
@@ -299,7 +255,7 @@ describe("CartService", () => {
   });
 
   describe("getCart", () => {
-    it("trả về cart hiện có nếu đã tồn tại, không tạo mới", async () => {
+    it("tráº£ vá» cart hiá»‡n cĂ³ náº¿u Ä‘Ă£ tá»“n táº¡i, khĂ´ng táº¡o má»›i", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi
           .fn()
@@ -312,7 +268,7 @@ describe("CartService", () => {
       expect(repository.createCartWithItems).not.toHaveBeenCalled();
     });
 
-    it("tự động tạo cart mới nếu user chưa có (auto-provisioning)", async () => {
+    it("tá»± Ä‘á»™ng táº¡o cart má»›i náº¿u user chÆ°a cĂ³ (auto-provisioning)", async () => {
       const repository = createFakeRepository({
         findCartWithItems: vi.fn().mockResolvedValue(null),
         createCartWithItems: vi
@@ -359,19 +315,15 @@ describe("CartService safe integer quantity boundaries", () => {
     },
   );
 
-  it("blocks merged quantity overflow before repository update", async () => {
+  it("delegates merged quantity overflow validation to the atomic repository", async () => {
     const repository = createFakeRepository({
-      findProductStockInfo: vi
+      addItemAtomically: vi
         .fn()
-        .mockResolvedValue({ id: "p", stock: Number.MAX_SAFE_INTEGER }),
-      findCartByUserId: vi.fn().mockResolvedValue({ id: "c", userId: "u" }),
-      findCartItem: vi
-        .fn()
-        .mockResolvedValue({ id: "ci", quantity: Number.MAX_SAFE_INTEGER }),
+        .mockResolvedValue({ status: "quantity_overflow" }),
     });
     await expect(
       new CartService(repository).addItem("u", "p", 1),
     ).rejects.toBeInstanceOf(ValidationError);
-    expect(repository.updateCartItemQuantity).not.toHaveBeenCalled();
+    expect(repository.addItemAtomically).toHaveBeenCalledWith("u", "p", 1);
   });
 });

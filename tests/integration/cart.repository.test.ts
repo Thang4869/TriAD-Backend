@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import prisma from "@core/database/prisma";
 import { PrismaCartRepository } from "@modules/cart/infrastructure/repositories/prisma-cart.repository";
+import { CartService } from "@modules/cart/cart.service";
 
 describe("PrismaCartRepository (integration)", () => {
   const repository = new PrismaCartRepository();
@@ -108,5 +109,37 @@ describe("PrismaCartRepository (integration)", () => {
     expect(result).not.toBeNull();
     expect(result?.items).toHaveLength(1);
     expect(result?.items[0].product).toHaveProperty("name", "Cart Product");
+  });
+
+  it("serializes concurrent additions when the cart item already exists", async () => {
+    const cart = await repository.createCart(userId);
+    await repository.createCartItem(cart.id, productId, 1);
+    const service = new CartService(repository);
+
+    await Promise.all([
+      service.addItem(userId, productId, 1),
+      service.addItem(userId, productId, 1),
+    ]);
+
+    const persisted = await prisma.cartItem.findUniqueOrThrow({
+      where: { cartId_productId: { cartId: cart.id, productId } },
+    });
+    expect(persisted.quantity).toBe(3);
+  });
+
+  it("creates exactly one cart item for concurrent first additions", async () => {
+    const service = new CartService(repository);
+
+    await Promise.all([
+      service.addItem(userId, productId, 1),
+      service.addItem(userId, productId, 1),
+    ]);
+
+    const cart = await prisma.cart.findUniqueOrThrow({ where: { userId } });
+    const items = await prisma.cartItem.findMany({
+      where: { cartId: cart.id, productId },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].quantity).toBe(2);
   });
 });

@@ -55,7 +55,7 @@ export class TwoFactorService {
       user.totpSecret,
       config.TOTP_ENCRYPTION_KEY,
     );
-    if (!this.verifyTotpToken(totpSecret, token)) {
+    if (this.getTotpDelta(totpSecret, token) === null) {
       throw new ValidationError("Invalid TOTP token");
     }
 
@@ -82,12 +82,14 @@ export class TwoFactorService {
       user.totpSecret,
       config.TOTP_ENCRYPTION_KEY,
     );
-    if (!this.verifyTotpToken(totpSecret, token)) {
+    const currentTime = Date.now() / 1000;
+    const delta = this.getTotpDelta(totpSecret, token, currentTime);
+    if (delta === null) {
       throw new AuthenticationError("Invalid TOTP token");
     }
 
-    const timestep = Math.floor(Date.now() / 30_000);
-    const replayKey = `auth:2fa:totp:${userId}:${timestep}`;
+    const matchedTimeStep = Math.floor(currentTime / 30) + delta;
+    const replayKey = `auth:2fa:totp:${userId}:${matchedTimeStep}`;
     const accepted = await this.tokenStore.setIfAbsent(replayKey, "1", 90);
 
     if (!accepted) {
@@ -97,12 +99,19 @@ export class TwoFactorService {
     return this.tokenService.generateTokens(user);
   }
 
-  private verifyTotpToken(secret: string, token: string): boolean {
-    return speakeasy.totp.verify({
+  private getTotpDelta(
+    secret: string,
+    token: string,
+    time = Date.now() / 1000,
+  ): number | null {
+    const verification = speakeasy.totp.verifyDelta({
       secret,
       encoding: "base32",
       token,
+      time,
       window: 1,
     });
+
+    return verification?.delta ?? null;
   }
 }

@@ -128,6 +128,32 @@ describe("TwoFactorService uncovered branches", () => {
     );
     expect(tokenService.generateTokens).not.toHaveBeenCalled();
   });
+
+  it("keys a previous-window TOTP by its matched timestep", async () => {
+    const currentTime = Math.floor(Date.now() / 30_000) * 30_000 + 1_000;
+    const currentTimeStep = Math.floor(currentTime / 30_000);
+    const matchedTimeStep = currentTimeStep - 1;
+    const token = speakeasy.totp({
+      secret,
+      encoding: "base32",
+      time: matchedTimeStep * 30,
+    });
+    const { service, tokenStore } = setup(user, true);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(currentTime);
+    try {
+      await service.verifyTOTP("pre-auth", token);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(tokenStore.setIfAbsent).toHaveBeenCalledWith(
+      `auth:2fa:totp:user-1:${matchedTimeStep}`,
+      "1",
+      90,
+    );
+  });
 });
 
 describe("TwoFactorService successful and fallback paths", () => {
